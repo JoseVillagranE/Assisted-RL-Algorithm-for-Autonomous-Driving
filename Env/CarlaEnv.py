@@ -5,7 +5,7 @@ import glob
 import sys
 import pathlib
 try:
-    sys.path.append(glob.glob('../../carla/dist/carla-*%d.%d-%s.egg' % (
+    sys.path.append(glob.glob('../../../carla/dist/carla-*%d.%d-%s.egg' % (
         sys.version_info.major,
         sys.version_info.minor,
         'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
@@ -26,7 +26,6 @@ from wrapper import *
 import signal
 from collections import deque
 from agents.navigation.controller import VehiclePIDController
-
 from agents.navigation.global_route_planner_dao import GlobalRoutePlannerDAO
 from agents.navigation.global_route_planner import GlobalRoutePlanner
 
@@ -70,64 +69,46 @@ class CarlaEnv(gym.Env):
 
     metadata = {"render.modes": ["human", "rgb_array", "rgb_array_no_hud", "state_pixels"]}
 
-    def __init__(self, synchronous = False, action_smoothing = 0.9, view_res=(640, 480), obs_res=(240, 240), fps=30):
+    def __init__(self, config):
 
         self.carla_process = None
-        sub_dir = pathlib.Path(__file__).parent.absolute().parent.absolute().parent.absolute().parent.absolute()
-        print(sub_dir)
-        carla_path = os.path.join(sub_dir, "CarlaUE4.sh")
+        carla_path = os.path.join(config.carla_dir, "CarlaUE4.sh")
         launch_command = [carla_path]
-        launch_command += ["Town02"]
+        launch_command += [confg.simulation.map]
         if synchronous: launch_command += ["-benchmark"]
-        launch_command += ["-fps=%i" % fps]
+        launch_command += ["-fps=%i" % config.simulation.fps]
         self.carla_process = subprocess.Popen(launch_command, stdout=subprocess.DEVNULL)
         print("Waiting for CARLA to initialize..")
-        time.sleep(20)
+        time.sleep(config.simulation.sleep)
 
         pygame.init()
         pygame.font.init()
-        width, height = view_res
-        if obs_res is None:
-            out_width, out_height = width, height
-        else:
-            out_width, out_height = obs_res
 
-
-        self.display = pygame.display.set_mode((width, height), pygame.HWSURFACE | pygame.DOUBLEBUF)
+        self.display = pygame.display.set_mode(config.simulation.view_res, pygame.HWSURFACE | pygame.DOUBLEBUF)
         self.clock = pygame.time.Clock()
-        self.synchronous = synchronous
-        self.fps = self.average_fps = fps
+        self.synchronous = config.synchronous_mode
+        self.fps = self.average_fps = config.simulation.fps
         self.speed = 20.0
 
         # setup gym env
-        self.seed()
+        self.seed(config.seed)
         self.action_space = gym.spaces.Box(np.array([-1, 0]), np.array([1, 1]), dtype=np.float32) # steer, thottle
         self.observation_space = gym.spaces.Box(low=0.0, high=1.0, shape=(*obs_res, 3), dtype=np.float32)
-        self.action_smoothing = action_smoothing
+        self.action_smoothing = config.simulatoin.action_smoothing
         self.world = None
         self._dt = 1.0 / 20.0
         self._target_speed = 20.0  # Km/h
         self._sampling_radius = self._target_speed * 1 / 3.6  # 1 seconds horizon
         self._min_distance = self._sampling_radius * 0.9
-        args_lateral_dict = {
-            'K_P': 1.95,
-            'K_D': 0.2,
-            'K_I': 0.07,
-            'dt': self._dt}
-        args_longitudinal_dict = {
-            'K_P': 1.0,
-            'K_D': 0,
-            'K_I': 0.05,
-            'dt': self._dt}
 
         self.terminal_state = False
-        self.goal_location = carla.Location(0, 0, 0)
-        self.margin_to_goal = 1.0
-        self.safe_distance = 6.0
+        self.goal_location = carla.Location(config.agent.goal.x, config.agent.y, config.agent.z)
+        self.margin_to_goal = config.agent.margin_to_goal
+        self.safe_distance = config.agent.safe_distance
 
         try:
-            self.client = carla.Client("localhost", 2000)
-            self.client.set_timeout(4.0)
+            self.client = carla.Client(config.simulation.host, config.simulation.port)
+            self.client.set_timeout(config.simulation.timeout)
 
             # create the World
             self.world = World(self.client)
@@ -140,21 +121,47 @@ class CarlaEnv(gym.Env):
                 self.world.apply_settings(settings)
 
             # Initial location
-            first_location = carla.Location(x=100, y=63, z=1.0)
-            self.initial_transform_veh1 = carla.Transform(first_location, carla.Rotation(yaw=0))
-            # Create a vehicle
-            self.vehicle = Vehicle(self.world, transform=self.initial_transform_veh1)
-            # Create a exo-vehicle
-            first_location_exo_veh = carla.Location(x=221, y=57, z=1.0)
-            self.initial_transform_veh2 = carla.Transform(first_location_exo_veh, carla.Rotation(yaw=180))
-            self.vehicle_2 = Vehicle(self.world, transform=self.initial_transform_veh2, vehicle_type="vehicle.tesla.cybertruck")
+            initial_location = carla.Location(x=config.agent.initial_position.x,
+                                            y=config.agent.initial_position.y,
+                                            z=config.agent.initial_position.z)
 
-            self.vehicle_2_controller = VehiclePIDController(self.vehicle_2,
-                                                            args_lateral=args_lateral_dict,
-                                                            args_longitudinal=args_longitudinal_dict)
+            self.initial_transform = carla.Transform(initial_location,
+                                                        carla.Rotation(yaw=config.agent.initial_position.yaw))
+            # Create a agent vehicle
+            self.agent = Vehicle(self.world,
+                                transform=self.initial_transform,
+                                vehicle_type=config.agent.vehicle_type)
 
-            end_location = carla.Location(x=117, y=129, z=1.0)
-            self.waypoint = self.world.get_map().get_waypoint(end_location)
+            if config.exo_agents.vehicle.spawn:
+                # Create a exo-vehicle
+                exo_veh_initial_location = carla.Location(x=config.exo_agents.vehicle.initial_position.x,
+                                                        y=config.exo_agents.vehicle.initial_position.y,
+                                                        z=config.exo_agents.vehicle.initial_position.z)
+
+                self.exo_veh_initial_transform = carla.Transform(first_location_exo_veh,
+                                            carla.Rotation(yaw=config.exo_agents.initial_position.yaw))
+                self.exo_vehicle = Vehicle(self.world, transform=self.exo_veh_initial_transform,
+                                            vehicle_type=config.exo_agents.vehicle.vehicle_type)
+
+                if config.exo_agents.vehicle.controller == "PID":
+                    args_lateral_dict = {
+                        'K_P': config.exo_agents.vehicle.PID.lateral_Kp,
+                        'K_D': config.exo_agents.vehicle.PID.lateral_Kd,
+                        'K_I': config.exo_agents.vehicle.PID.lateral_Ki,
+                        'dt': self._dt}
+                    args_longitudinal_dict = {
+                        'K_P': config.exo_agents.vehicle.PID.longitudinal_Kp,
+                        'K_D': config.exo_agents.vehicle.PID.longitudinal_Kd,
+                        'K_I': config.exo_agents.vehicle.PID.longitudinal_Ki,
+                        'dt': self._dt}
+                    self.exo_vehicle_controller = VehiclePIDController(self.exo_vehicle,
+                                                                args_lateral=args_lateral_dict,
+                                                                args_longitudinal=args_longitudinal_dict)
+
+                    end_location = carla.Location(x=config.exo_agents.vehicle.end_position.x,
+                                                y=config.exo_agents.vehicle.end_position.y,
+                                                z=config.exo_agents.vehicle.end_position.z)
+                    self.waypoint = self.world.get_map().get_waypoint(end_location)
 
             exo_initial_location = carla.Location(x=215, y=57, z=1.0)
             exo_end_location = carla.Location(x=64, y=54, z=1.0)
@@ -163,18 +170,14 @@ class CarlaEnv(gym.Env):
             exo_list_wp_ropt = trace_route(self.world, exo_initial_waypoint, exo_end_waypoint, sampling_resolution=1.0)
             exo_waypoints = [ exo_list_wp_ropt[i][0] for i in range(len(exo_list_wp_ropt))]
 
-            # ped_initial_location = carla.Location(x=191, y=70, z=1.0)
-            # ped_end_location = carla.Location(x=150, y=70, z=1.0)
-            # ped_initial_waypoint = map.get_waypoint(ped_initial_location, project_to_road=False)
-            # ped_end_waypoint = map.get_waypoint(ped_end_location, project_to_road=False)
-            # ped_list_wp_ropt = trace_route(world, ped_initial_waypoint, ped_end_waypoint, sampling_resolution=1.0)
-            delta = 5
-            ped_waypoints = [carla.Location(x=191-i, y=71.5, z=1.0) for i in range(100)]
-            self.ped_waypoints_queue = deque(ped_waypoints)
 
-            # Create a pedestrian
-            self.initial_transform_ped = carla.Transform(self.ped_waypoints_queue.popleft(), carla.Rotation(yaw=0))
-            self.pedestrian = Pedestrian(self.world, transform=self.initial_transform_ped)
+            for config.exo_agents.pedestrian.spawn:
+                ped_waypoints = [carla.Location(x=191-i, y=71.5, z=1.0) for i in range(100)]
+                self.ped_waypoints_queue = deque(ped_waypoints)
+
+                # Create a pedestrian
+                self.initial_transform_ped = carla.Transform(self.ped_waypoints_queue.popleft(), carla.Rotation(yaw=0))
+                self.pedestrian = Pedestrian(self.world, transform=self.initial_transform_ped)
 
             self._buffer_size = 5
             self.exo_waypoints_queue = deque(exo_waypoints)
@@ -343,7 +346,8 @@ class CarlaEnv(gym.Env):
         # print(self.world.exo_actor_list)
         for exo_agent in self.world.exo_actor_list:
 
-            distance = self.vehicle.get_carla_actor().get_transform().location.distance(exo_agent.get_carla_actor().get_transform().location)
+            distance = self.vehicle.get_carla_actor().get_transform().location.distance(
+                        exo_agent.get_carla_actor().get_transform().location)
 
             # print(f"Distance : {distance} || Exo-Agent: {exo_agent.type_of_agent}\n")
             if distance < self.safe_distance:
@@ -355,12 +359,6 @@ class CarlaEnv(gym.Env):
             return True
 
         return False
-
-
-
-
-
-
 
     def _get_observation_image(self):
         while self.observation_buffer is None:
