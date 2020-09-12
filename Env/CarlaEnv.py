@@ -4,11 +4,9 @@ import time
 import glob
 import sys
 import pathlib
+from config.config import config
 try:
-    sys.path.append(glob.glob('../../../carla/dist/carla-*%d.%d-%s.egg' % (
-        sys.version_info.major,
-        sys.version_info.minor,
-        'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0])
+    sys.path.append(config.carla_egg)
 except IndexError:
     pass
 
@@ -26,24 +24,6 @@ from wrapper import *
 import signal
 from collections import deque
 from agents.navigation.controller import VehiclePIDController
-from agents.navigation.global_route_planner_dao import GlobalRoutePlannerDAO
-from agents.navigation.global_route_planner import GlobalRoutePlanner
-
-def trace_route(world, start_waypoint, end_waypoint, sampling_resolution=1.0):
-    """
-    This method sets up a global router and returns the
-    optimal route from start_waypoint to end_waypoint.
-
-        :param start_waypoint: initial position
-        :param end_waypoint: final position
-    """
-    dao = GlobalRoutePlannerDAO(world.get_map(), sampling_resolution=sampling_resolution)
-    grp = GlobalRoutePlanner(dao)
-    grp.setup()
-
-    # Obtain route plan
-    route = grp.trace_route(start_waypoint.transform.location,end_waypoint.transform.location)
-    return route
 
 
 class KeyboardControl(object):
@@ -112,7 +92,6 @@ class CarlaEnv(gym.Env):
 
             # create the World
             self.world = World(self.client)
-            map = self.world.get_map()
             self.controller = KeyboardControl()
 
             if self.synchronous:
@@ -137,10 +116,18 @@ class CarlaEnv(gym.Env):
                 exo_veh_initial_location = carla.Location(x=config.exo_agents.vehicle.initial_position.x,
                                                         y=config.exo_agents.vehicle.initial_position.y,
                                                         z=config.exo_agents.vehicle.initial_position.z)
+                if config.exo_agents.vehicle.end_position.x:
+                    exo_veh_end_location = carla.Location(x=config.exo_agents.vehicle.end_position.x,
+                                                y=config.exo_agents.vehicle.end_position.y,
+                                                z=config.exo_agents.vehicle.end_position.z)
+                else:
+                    exo_veh_end_location = None
 
                 self.exo_veh_initial_transform = carla.Transform(first_location_exo_veh,
                                             carla.Rotation(yaw=config.exo_agents.initial_position.yaw))
+
                 self.exo_vehicle = Vehicle(self.world, transform=self.exo_veh_initial_transform,
+                                            end_location=exo_veh_end_location,
                                             vehicle_type=config.exo_agents.vehicle.vehicle_type)
 
                 if config.exo_agents.vehicle.controller == "PID":
@@ -158,45 +145,37 @@ class CarlaEnv(gym.Env):
                                                                 args_lateral=args_lateral_dict,
                                                                 args_longitudinal=args_longitudinal_dict)
 
-                    end_location = carla.Location(x=config.exo_agents.vehicle.end_position.x,
-                                                y=config.exo_agents.vehicle.end_position.y,
-                                                z=config.exo_agents.vehicle.end_position.z)
-                    self.waypoint = self.world.get_map().get_waypoint(end_location)
-
-            exo_initial_location = carla.Location(x=215, y=57, z=1.0)
-            exo_end_location = carla.Location(x=64, y=54, z=1.0)
-            exo_initial_waypoint = map.get_waypoint(exo_initial_location)
-            exo_end_waypoint = map.get_waypoint(exo_end_location)
-            exo_list_wp_ropt = trace_route(self.world, exo_initial_waypoint, exo_end_waypoint, sampling_resolution=1.0)
-            exo_waypoints = [ exo_list_wp_ropt[i][0] for i in range(len(exo_list_wp_ropt))]
 
 
-            for config.exo_agents.pedestrian.spawn:
-                ped_waypoints = [carla.Location(x=191-i, y=71.5, z=1.0) for i in range(100)]
-                self.ped_waypoints_queue = deque(ped_waypoints)
-
+            if config.exo_agents.pedestrian.spawn:
                 # Create a pedestrian
-                self.initial_transform_ped = carla.Transform(self.ped_waypoints_queue.popleft(), carla.Rotation(yaw=0))
+                ped_initial_location = carla.Location(x=self.exo_agents.pedestrian.initial_position.x,
+                                                        y=self.exo_agents.pedestrian.initial_position.y,
+                                                        z=self.exo_agents.pedestrian.initial_position.z)
+                self.initial_transform_ped = carla.Transform(ped_initial_location,
+                                            carla.Rotation(yaw=self.exo_agents.pedestrian.initial_location.yaw))
                 self.pedestrian = Pedestrian(self.world, transform=self.initial_transform_ped)
 
-            self._buffer_size = 5
-            self.exo_waypoints_queue = deque(exo_waypoints)
-            self._waypoint_buffer = deque(maxlen=self._buffer_size)
+            # Setup sensor for agent
+            if config.agent.sensor.dashboard_camera:
+                self.dashcam = Camera(self.world, config.agent.sensor.dashboard_camera.width,
+                                    config.agent.sensor.dashboard_camera.height,
+                                    transform= camera_transforms["dashboard"],
+                                        attach_to=self.agent, on_recv_image = lambda e: self._set_observation_image(e),
+                                        sensor_tick=0.0 if config.synchronous_mode else 1.0/self.fps)
 
-            self.dashcam = Camera(self.world, out_width, out_height, transform= camera_transforms["dashboard"],
-                                    attach_to=self.vehicle, on_recv_image = lambda e: self._set_observation_image(e),
-                                    sensor_tick=0.0 if self.synchronous else 1.0/self.fps)
 
-            self.camera = Camera(self.world, width, height, transform = camera_transforms["spectator"],
-                                        attach_to=self.vehicle, on_recv_image = lambda e: self._set_viewer_image(e),
-                                        sensor_tick=0.0 if self.synchronous else 1.0/self.fps)
+            if config.agent.sensor.spectator_camera:
+                self.camera = Camera(self.world, width, height, transform = camera_transforms["spectator"],
+                                            attach_to=self.agent, on_recv_image = lambda e: self._set_viewer_image(e),
+                                            sensor_tick=0.0 if config.synchronous_mode else 1.0/self.fps)
 
         except Exception as e:
             self.close()
             raise e
 
 
-        self.world.get_exo_agents(self.vehicle.get_carla_actor().id)
+        self.world.get_exo_agents(self.agent.get_carla_actor().id)
         # Reset env to set initial state
         self.reset()
 
