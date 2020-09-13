@@ -68,7 +68,7 @@ config.train.resize_img = None
 # Agent Defaults (Single agent)
 config.agent = edict()
 config.agent.vehicle_type = "vehicle.tesla.model3"
-config.agent.safe_distance = 6.0
+config.agent.safe_distance = 3.0
 config.agent.margin_to_goal = 1.0
 
 config.agent.initial_position = edict()
@@ -83,18 +83,16 @@ config.agent.goal.y = 0.0
 config.agent.goal.z = 0.0
 
 config.agent.sensor = edict()
-config.agent.sensor.spectator_camera= False
+config.agent.sensor.spectator_camera = True
 
 
-config.agent.sensor.dashboard_camera = edict()
-config.agent.sensor.dashboard_camera.width = 200
-config.agent.sensor.dashboard_camera.height = 200
+config.agent.sensor.dashboard_camera = True
 
 
 # ExoAgent Defaults
 config.exo_agents = edict()
 config.exo_agents.pedestrian = edict()
-config.exo_agents.pedestrian.spawn = False
+config.exo_agents.pedestrian.spawn = True
 
 config.exo_agents.pedestrian.initial_position = edict()
 config.exo_agents.pedestrian.initial_position.x = 191
@@ -103,9 +101,9 @@ config.exo_agents.pedestrian.initial_position.z = 1.0
 config.exo_agents.pedestrian.initial_position.yaw = 0
 
 config.exo_agents.vehicle = edict()
-config.exo_agents.vehicle.spawn = False
+config.exo_agents.vehicle.spawn = True
 config.exo_agents.vehicle.vehicle_type = "vehicle.tesla.cybertruck"
-
+config.exo_agents.vehicle.target_speed = 20.0 # Km/h
 config.exo_agents.vehicle.controller = "PID" # How control the exo vehicle ?
 
 config.exo_agents.vehicle.PID = edict()

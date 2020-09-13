@@ -7,9 +7,11 @@ import numpy as np
 import weakref
 import pygame
 from utils.utils import read_wp_from_file
-
+from config.config import config
+from collections import deque
+import sys
 try:
-    sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))) + '/carla')
+    sys.path.append(str(config.carla_dir) + '/PythonAPI/carla')
 except IndexError:
     pass
 
@@ -33,9 +35,7 @@ class CarlaActorBase(object):
         self.no_ped = True
         self.no_veh = False
 
-        self.global_route_planner = GlobalRoutePlanner()
-
-    def trace_route(world, start_waypoint, end_waypoint, sampling_resolution=1.0):
+    def trace_route(self, start_waypoint, end_waypoint, sampling_resolution=1.0):
         """
         This method sets up a global router and returns the
         optimal route from start_waypoint to end_waypoint.
@@ -43,7 +43,7 @@ class CarlaActorBase(object):
             :param start_waypoint: initial position
             :param end_waypoint: final position
         """
-        dao = GlobalRoutePlannerDAO(world.get_map(), sampling_resolution=sampling_resolution)
+        dao = GlobalRoutePlannerDAO(self.world.get_map(), sampling_resolution=sampling_resolution)
         grp = GlobalRoutePlanner(dao)
         grp.setup()
 
@@ -144,7 +144,7 @@ class Camera(CarlaActorBase):
 class Vehicle(CarlaActorBase):
     def __init__(self, world, transform=carla.Transform(),
                  on_collision_fn=None, on_invasion_fn=None,
-                 end_location=None, buffer_size=5
+                 end_location=None, buffer_size=5, target_speed = 20.0,
                  vehicle_type="vehicle.tesla.model3"):
         # Setup vehicle blueprint
         vehicle_bp = world.get_blueprint_library().find(vehicle_type)
@@ -155,20 +155,26 @@ class Vehicle(CarlaActorBase):
             pass
 
         # Create vehicle actor
-        actor = world.spawn_actor(vehicle_bp, transform)
-        print("Spawned actor \"{}\"".format(actor.type_id))
+        self.actor = world.spawn_actor(vehicle_bp, transform)
+        print("Spawned actor \"{}\"".format(self.actor.type_id))
 
         self.type_of_agent = "vehicle"
-        super().__init__(world, actor)
+        self.autopilot_mode = False
+        self.buffer_size = buffer_size
+        super().__init__(world, self.actor)
 
         self.map = world.get_map()
 
         # Route of the agent
-        self.start_location = transform.location
-        self.end_location = end_location if end_location else np.random.choice(world.map.get_spawn_points(), 2, replace=False)
+        self.initial_location = transform.location
+        self.end_location = end_location if end_location else np.random.choice(world.map.get_spawn_points(), 2, replace=False)[0]
 
         self.waypoint_buffer = deque(maxlen=buffer_size)
         self.waypoints_queue = None
+
+        self.target_speed = target_speed # Km/h
+        self.sampling_radius = self.target_speed * 1 / 3.6  # 1 seconds horizon
+        self.min_distance = self.sampling_radius * 0.9 # TODO: Try to understand this equation
 
         # Maintain vehicle control
         self.control = carla.VehicleControl()
@@ -180,9 +186,13 @@ class Vehicle(CarlaActorBase):
 
     def set_automatic_wp(self):
 
+        """
+        Set a waypoint list from initial and end location. The final list is a list of a carla.Location object
+        """
+
         initial_wp = self.map.get_waypoint(self.initial_location)
         end_wp = self.map.get_waypoint(self.end_location)
-        wp_list = self.trace_route(self.world, exo_initial_waypoint, exo_end_waypoint, sampling_resolution=1.0)
+        wp_list = self.trace_route(initial_wp, end_wp)
         wp_list = [ wp_list[i][0] for i in range(len(wp_list))]
         self.waypoints_queue = deque(wp_list)
 
@@ -190,6 +200,34 @@ class Vehicle(CarlaActorBase):
     def read_wp(self, file):
         wp_list = read_wp_from_file(file)
         self.waypoints_queue = deque(wp_list)
+
+    def get_next_wp(self):
+
+        # Clean the waypoint buffer
+        max_index = -1
+
+        for i, waypoint in enumerate(self.waypoint_buffer):
+            if waypoint.transform.location.distance(self.actor.get_transform().location) < self.min_distance:
+                max_index = i
+        if max_index >= 0:
+            for i in range(max_index + 1):
+                self.waypoint_buffer.popleft()
+
+        if not self.waypoint_buffer:
+            for i in range(self.buffer_size):
+                if self.waypoints_queue:
+                    self.waypoint_buffer.append(
+                        self.waypoints_queue.popleft())
+                else:
+                    break
+
+        if self.waypoint_buffer:
+            return self.waypoint_buffer[0]
+        else:
+            # The established route end, so we set autopilot
+            self.actor.set_autopilot(True)
+            self.autopilot_mode = True
+            return 1 # dont care
 
 
     def tick(self):
@@ -205,6 +243,10 @@ class Vehicle(CarlaActorBase):
     def get_closest_waypoint(self):
         return self.world.map.get_waypoint(self.get_transform().location, project_to_road=True)
 
+    def is_autopilot_mode(self):
+        # TODO implement the option of set back to waypoints drive
+        return self.set_autopilot
+
 class Pedestrian(CarlaActorBase):
 
     def __init__(self, world, transform=carla.Transform(), max_speed = 1.0):
@@ -213,10 +255,10 @@ class Pedestrian(CarlaActorBase):
         self.map = world.get_map()
         self.max_speed = max_speed
         pedestrian_bp = random.choice(world.get_blueprint_library().filter("walker.pedestrian.*"))
-        actor = world.spawn_actor(pedestrian_bp, transform)
-        print("Spawned actor \"{}\"".format(actor.type_id))
+        self.actor = world.spawn_actor(pedestrian_bp, transform)
+        print("Spawned actor \"{}\"".format(self.actor.type_id))
 
-        self.actor_base = super().__init__(world, actor)
+        self.actor_base = super().__init__(world, self.actor)
 
         self.initial_location = transform.location
         self.end_location = None
@@ -233,21 +275,33 @@ class Pedestrian(CarlaActorBase):
         # Start the controller
         self.actor_controller.start()
 
-    def set_automatic_wp(self): # Puede que no sirva en el caso de un peaton 
-        initial_wp = self.map.get_waypoint(self.initial_location)
-        end_wp = self.map.get_waypoint(self.end_location)
-        wp_list = self.trace_route(self.world, exo_initial_waypoint, exo_end_waypoint, sampling_resolution=1.0)
-        wp_list = [ wp_list[i][0] for i in range(len(wp_list))]
-        self.waypoints_queue = deque(wp_list)
+    def set_automatic_wp(self):
+        pass
+
 
     def read_wp(self, file):
+
+        """
+        Set waypoints queue w/ a waypoint list (carla.Location)
+        """
+
         wp_list = read_wp_from_file(file)
         self.waypoints_queue = deque(wp_list)
+
+    def get_next_wp(self):
+
+        if self.waypoints_queue:
+            return self.waypoints_queue.popleft()
+        else: # Loop walker (change at some point)
+            # The established route end, so we have to create a new on
+            self.end_location = self.initial_location
+            self.initial_location = self.actor.get_location()
+            return self.end_location
 
 
     def tick(self):
         self.actor_controller.set_max_speed(self.max_speed)
-        self.actor_controller.go_to_location(self.go_to_location)
+        self.actor_controller.go_to_location(self.get_next_wp())
 
     def set_end_location(self, end_location):
         self.end_location = end_location
