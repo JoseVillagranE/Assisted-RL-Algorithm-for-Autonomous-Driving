@@ -8,6 +8,9 @@ import pprint
 import torch
 
 from config.config import config
+from utils.logger import init_logger
+from Env.CarlaEnv import CarlaEnv
+from models.init_model import init_model
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train a self-driving car")
@@ -38,6 +41,59 @@ def train():
 
     pprint.pprint(config)
 
+    # Setup the logger
+    logger = init_logger(save_path, config.run_id)
+    logger.info(f"training config: {pprint.pformat(config)}")
+
+    print("Creating Environment")
+    env = CarlaEnv()
+
+    if isinstance(config.seed, int):
+        env.seed(config.seed)
+
+    best_eval_rew = -float("inf")
+    num_actions = env.action_space[0]
+
+    print("Creating model")
+    model = init_model(config.model.type)
+
+    for episode in config.train.episodes:
+
+        state, terminal_state, total_reward = env.reset(), False, 0
+
+        while not terminal_state:
+
+            states, taken_actions, values, rewards, dones = [], [], [], [], []
+
+            for _ in config.train.steps:
+
+                action = model.predict(state)
+                new_state, reward, terminal_state, info = env.step(action)
+
+                if info["closed"] == True:
+                    exit(0)
+
+                env.render()
+                total_reward += reward
+
+                # Store state, action and reward
+                states.append(state)            # [:, *input_shape]
+                taken_actions.append(action)    # [:, num_actions]
+                rewards.append(reward)
+                dones.append(terminal_state)
+                state = new_state
+
+            if terminal_state:
+                break
+
+
+
+
+
+
+
+
+
 
 def main():
 
@@ -48,6 +104,12 @@ def main():
 
     update_config(args.cfg)
     check_config(config)
+
+    # check some condition and variables
+    assert config.train.episodes > 0, "episodes should be more than zero"
+    assert config.train.steps > 0, "Steps should be more than zero"
+
+    train()
 
 
 if __name__ == "__main__":

@@ -20,5 +20,5 @@ exo_agents:
     spawn: False
 
 model:
-  type: "DDPG"
+  type: "DummyModel"
   id: 0
