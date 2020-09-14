@@ -31,8 +31,8 @@ config.run_type = None
 config.run_id = None
 
 # Model Defaults
-config.model = edict()
-config.model.root_dir = os.path.join(root_dir, 'models')
+config.model_logs = edict()
+config.model_logs.root_dir = os.path.join(root_dir, 'models_logs')
 
 # ---------------------- Simulation ----------------------------------------------
 
@@ -55,15 +55,14 @@ config.simulation.port = 2000
 
 # Train Defaults
 config.train = edict()
-config.train.loss = None
 config.train.checkpoint_every = 0
 config.train.batch_size = 256
 config.train.episodes = 1e6
+config.train.steps = 500
 config.train.optimizer = 'Adam'
 config.train.lr = 1e-3
 config.train.tau = 1e-2
 config.train.gamma = 0.99
-config.train.resize_img = None
 
 # Agent Defaults (Single agent)
 config.agent = edict()
@@ -84,8 +83,6 @@ config.agent.goal.z = 0.0
 
 config.agent.sensor = edict()
 config.agent.sensor.spectator_camera = True
-
-
 config.agent.sensor.dashboard_camera = True
 
 
@@ -126,6 +123,11 @@ config.exo_agents.vehicle.end_position = edict()
 config.exo_agents.vehicle.end_position.x = 64
 config.exo_agents.vehicle.end_position.y = 54
 config.exo_agents.vehicle.end_position.z = 1.0
+
+# Models Defaults
+config.model = edict()
+config.model.type = "DDPG"
+config.model.id = 0
 
 
 # Visualisation Defaults

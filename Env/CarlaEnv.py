@@ -11,7 +11,7 @@ except IndexError:
     pass
 
 try:
-    sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) + '/carla')
+    sys.path.append(str(config.carla_dir) + '/PythonAPI/carla')
 except IndexError:
     pass
 
