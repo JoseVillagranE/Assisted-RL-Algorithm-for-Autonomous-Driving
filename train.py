@@ -7,7 +7,7 @@ import pprint
 
 import torch
 
-from config.config import config
+from config.config import config, update_config, check_config
 from utils.logger import init_logger
 from Env.CarlaEnv import CarlaEnv
 from models.init_model import init_model
@@ -25,7 +25,7 @@ def train():
 
 
     if isinstance(config.seed, int):
-        np.random(config.seed)
+        np.random.seed(config.seed)
         random.seed(config.seed)
         torch.manual_seed(config.seed)
         torch.cuda.manual_seed(config.seed)
@@ -52,12 +52,12 @@ def train():
         env.seed(config.seed)
 
     best_eval_rew = -float("inf")
-    num_actions = env.action_space[0]
+    num_actions = env.action_space.shape[0]
 
     print("Creating model")
-    model = init_model(config.model.type)
+    model = init_model(config.model.type, num_actions)
 
-    for episode in config.train.episodes:
+    for episode in range(config.train.episodes):
 
         state, terminal_state, total_reward = env.reset(), False, 0
 
@@ -65,7 +65,7 @@ def train():
 
             states, taken_actions, values, rewards, dones = [], [], [], [], []
 
-            for _ in config.train.steps:
+            for _ in range(config.train.steps):
 
                 action = model.predict(state)
                 new_state, reward, terminal_state, info = env.step(action)
@@ -97,6 +97,9 @@ def train():
 
 def main():
 
+    from utils.debug import set_working_dir
+
+    set_working_dir()
 
     args = parse_args()
 

@@ -4,7 +4,7 @@ seed: 1
 
 train:
   checkpoint_every: 0
-  episodes: 1e5
+  episodes: 10
   steps: 200
 
 agent:
@@ -21,4 +21,4 @@ exo_agents:
 
 model:
   type: "DummyModel"
-  id: 0
+  id: '0'

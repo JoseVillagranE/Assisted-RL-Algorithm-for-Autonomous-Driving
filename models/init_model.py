@@ -1,4 +1,4 @@
-from DummyModel import DummyModel
+from .DummyModel import DummyModel
 
 
 def init_model(model_name, action_space):

@@ -20,7 +20,7 @@ import gym
 import pygame
 from pygame.locals import *
 from gym.utils import seeding
-from wrapper import *
+from .wrapper import *
 import signal
 from collections import deque
 from agents.navigation.controller import VehiclePIDController
@@ -229,8 +229,10 @@ class CarlaEnv(gym.Env):
                     self.world.tick()
 
         # Get most recent observation and viewer image
-        self.observation = self._get_observation_image()
-        self.viewer_image = self._get_viewer_image()
+        if config.agent.sensor.dashboard_camera:
+            self.observation = self._get_observation_image()
+        if config.agent.sensor.spectator_camera:
+            self.viewer_image = self._get_viewer_image()
 
         # Get vehicle transform
         transform = self.agent.get_transform() # Return the actor's transform (location and rotation) the client recieved during last tick
@@ -289,14 +291,17 @@ class CarlaEnv(gym.Env):
 
     def render(self, mode="human"):
 
-        self.display.blit(pygame.surfarray.make_surface(self.viewer_image.swapaxes(0,1)), (0, 0)) # Draw the image on the surface
+        view_h, view_w = 10, 0
+        if config.agent.sensor.spectator_camera:
+            view_h, view_w = self.viewer_image.shape[:2]
+            self.display.blit(pygame.surfarray.make_surface(self.viewer_image.swapaxes(0,1)), (0, 0)) # Draw the image on the surface
 
-        # Superimpose current observation into top-right corner
-        obs_h, obs_w = self.observation.shape[:2]
-        view_h, view_w = self.viewer_image.shape[:2]
 
-        pos = (view_w - obs_w - 10, 10)
-        self.display.blit(pygame.surfarray.make_surface(self.observation.swapaxes(0,1)), pos)
+        if config.agent.sensor.dashboard_camera:
+            pos = (view_w - obs_w - 10, 10)
+            # Superimpose current observation into top-right corner
+            obs_h, obs_w = self.observation.shape[:2]
+            self.display.blit(pygame.surfarray.make_surface(self.observation.swapaxes(0,1)), pos)
 
 
         # Render to screen
