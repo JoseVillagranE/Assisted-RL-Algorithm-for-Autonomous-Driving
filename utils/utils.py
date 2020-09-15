@@ -10,6 +10,46 @@ except IndexError:
 import carla
 import numpy as np
 
+# https://github.com/bitsauce/Carla-ppo
+def print_transform(transform):
+
+    print(f"Location: (x: {transform.location.x:.2f}, y: {transforma.location.y:.2f}, z: {transform.location.z:.2f}) " +
+            f"Rotation: (pitch: {transform.rotation.pitch:.2f}, yaw: {transform.rotation.yaw:.2f}, roll: {transform.rotation.roll:.2f})")
+
+
+def get_actor_display_name(actor, truncate=250):
+    name = " ".join(actor.type_id.replace("_", ".").tittle().split(".")[1:])
+    return (name[:truncate-1] + u"\u2026") if len(name) > truncate else name
+
+def angle_diff(v0, v1):
+    """
+    Calculates the signed angle difference (-pi, pi] between 2D vector v0 and v1
+    """
+    angle = np.arctan2(v1[1], v1[0]) - np.arctan(v0[1], v0[0])
+    if angle > np.pi: angle -= 2*np.pi
+    elif angle <= -np.pi: angle += 2*np.pi
+    return angle
+
+def distance_to_line(A, B, p):
+    num = np.linalg.norm(np.cross(B-A, A-p))
+    den = np.linalg.norm(B-A)
+    if np.isclose(den, 0):
+        return np.linalg(p-A)
+    return num/den
+
+def vector(v):
+    """
+    Turn carla Location/Vector3D/Rotation to np.array
+    """
+    if isinstance(v, carla.Location) or isinstance(v, carla.Vector3D):
+        return np.array([v.x, v.y, v.z])
+    elif isinstance(v, carla.Rotation):
+        return np.array([v.pitch, v.yaw, v.roll])
+
+
+
+
+
 
 
 def read_wp_from_file(file):
