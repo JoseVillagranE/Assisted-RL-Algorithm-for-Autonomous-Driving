@@ -77,9 +77,9 @@ config.agent.initial_position.z = 1.0
 config.agent.initial_position.yaw = 0
 
 config.agent.goal = edict()
-config.agent.goal.x = 0.0
-config.agent.goal.y = 0.0
-config.agent.goal.z = 0.0
+config.agent.goal.x = 95
+config.agent.goal.y = 64
+config.agent.goal.z = 1.0
 
 config.agent.sensor = edict()
 config.agent.sensor.spectator_camera = True
@@ -128,6 +128,10 @@ config.exo_agents.vehicle.end_position.z = 1.0
 config.model = edict()
 config.model.type = "DDPG"
 config.model.id = 0
+
+# Reward fn Defaults
+config.reward_fn = edict()
+config.reward_fn.type = "add"
 
 
 # Visualisation Defaults

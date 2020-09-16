@@ -45,7 +45,7 @@ def create_reward_fn(reward_fn):
         return reward
     return func
 
-reward_function = {}
+reward_functions = {}
 
 # (Learn to drive in a Day)
 def reward_kendall(env):
@@ -64,10 +64,22 @@ def reward_speed_centering_angle_add(env):
     wp_fwd = vector(env.current_waypoint.transform.rotation.get_forward_vector())
     angle = angle_diff(fwd, wp_fwd)
 
-    speed_kmh = 3.6*env.vehicle.get_speed()
+    speed_kmh = 3.6*env.agent.get_speed()
     if speed_kmh < min_speed:                     # When speed is in [0, min_speed] range
         speed_reward = speed_kmh / min_speed      # Linearly interpolate [0, 1] over [0, min_speed]
-    elif speed_kmh > target_speed:                # 
+    elif speed_kmh > target_speed:                #
         speed_reward = 1.0 - (speed_kmh - target_speed) / (max_speed - target_speed)
     else:
         speed_reward = 1.0
+
+    # Interpolated from 1 when centered to 0 when 3m from center
+    centering_factor = max(1.0 - env.distance_from_center / max_distance, 0.0)
+
+    # Interpolated from 1 when aligned w/ the road to 0 when +/- 20 degrees of road
+    angle_factor = max(1.0 - abs(angle / np.deg2rad(20)), 0.0)
+
+    # Final reward
+    reward = speed_reward + centering_factor + angle_factor
+    return reward
+
+reward_functions["reward_speed_centering_angle_add"] = create_reward_fn(reward_speed_centering_angle_add)

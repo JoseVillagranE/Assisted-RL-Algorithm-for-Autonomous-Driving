@@ -24,6 +24,7 @@ from .wrapper import *
 import signal
 from collections import deque
 from agents.navigation.controller import VehiclePIDController
+from utils.utils import vector, distance_to_lane
 
 
 class KeyboardControl(object):
@@ -49,7 +50,12 @@ class CarlaEnv(gym.Env):
 
     metadata = {"render.modes": ["human", "rgb_array", "rgb_array_no_hud", "state_pixels"]}
 
-    def __init__(self):
+    def __init__(self, reward_fn=None):
+
+
+        """
+        reward_fn (function): Custom reward function is called every step. If none, no reward function is used
+        """
 
         self.carla_process = None
         carla_path = os.path.join(config.carla_dir, "CarlaUE4.sh")
@@ -85,6 +91,14 @@ class CarlaEnv(gym.Env):
 
         self.is_exo_vehicle = config.exo_agents.vehicle.spawn
         self.is_pedestrian = config.exo_agents.pedestrian.spawn
+
+        self.reward_fn = (lambda x: 0) if not callable(reward_fn) else reward_fn
+
+        # Init metrics
+        self.total_reward = 0.0
+        self.previous_location = self.vehicle.get_transform().location
+        self.distance_traveled = 0.0
+        self.center_lane_deviation = 0.0
 
         try:
             self.client = carla.Client(config.simulation.host, config.simulation.port)
@@ -236,6 +250,10 @@ class CarlaEnv(gym.Env):
 
         # Get vehicle transform
         transform = self.agent.get_transform() # Return the actor's transform (location and rotation) the client recieved during last tick
+
+        # Calculated deviation from center of the lane
+        self.distance_from_center = distance_to_line(vector(self.current))
+
 
 
         # Terminal state for distance to exo-agents or objective

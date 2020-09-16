@@ -169,8 +169,12 @@ class Vehicle(CarlaActorBase):
         self.initial_location = transform.location
         self.end_location = end_location if end_location else np.random.choice(world.map.get_spawn_points(), 2, replace=False)[0]
 
+        self.initial_wp = None
+        self.end_wp = None
+
         self.waypoint_buffer = deque(maxlen=buffer_size)
         self.waypoints_queue = None
+        self.route_wp = None
 
         self.target_speed = target_speed # Km/h
         self.sampling_radius = self.target_speed * 1 / 3.6  # 1 seconds horizon
@@ -187,19 +191,22 @@ class Vehicle(CarlaActorBase):
     def set_automatic_wp(self):
 
         """
-        Set a waypoint list from initial and end location. The final list is a list of a carla.Location object
+        Set a waypoint list from initial and end location. The final list is a list of a carla.Waypoint object
         """
 
-        initial_wp = self.map.get_waypoint(self.initial_location)
-        end_wp = self.map.get_waypoint(self.end_location)
+        self.initial_wp = self.map.get_waypoint(self.initial_location)
+        self.end_wp = self.map.get_waypoint(self.end_location)
         wp_list = self.trace_route(initial_wp, end_wp)
-        wp_list = [ wp_list[i][0] for i in range(len(wp_list))]
-        self.waypoints_queue = deque(wp_list)
+        self.route_wp = [ wp_list[i][0] for i in range(len(wp_list))] # carla.waypoint
+        self.waypoints_queue = deque(self.route_wp)
+
 
 
     def read_wp(self, file):
         wp_list = read_wp_from_file(file)
-        self.waypoints_queue = deque(wp_list)
+        self.initial_wp = self.map.get_waypoint(wp_list[0])
+        self.end_wp = self.map.get_waypoint(wp_list[-1])
+        self.waypoints_queue = deque(wp_list) # translate from location to waypoint
 
     def get_next_wp(self):
 
