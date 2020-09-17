@@ -1,0 +1,24 @@
+run_type: 'Test_2'
+run_id: 'Test_2'
+seed: 1
+
+train:
+  checkpoint_every: 0
+  episodes: 10
+  steps: 200
+
+agent:
+  sensor:
+    dashboard_camera: False
+
+
+exo_agents:
+  pedestrian:
+    spawn: False
+
+  vehicle:
+    spawn: False
+
+model:
+  type: "manual_model"
+  id: '0'

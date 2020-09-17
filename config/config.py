@@ -132,7 +132,7 @@ config.model.id = 0
 # Reward fn Defaults
 config.reward_fn = edict()
 config.reward_fn.type = "add"
-config.reward_fn.min_speed = 0.0
+config.reward_fn.min_speed = 1.0
 config.reward_fn.max_speed = 70.0
 config.reward_fn.max_distance = 3.0
 
