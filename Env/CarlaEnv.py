@@ -85,6 +85,7 @@ class CarlaEnv(gym.Env):
         self._dt = 1.0 / 20.0
 
         self.terminal_state = False
+        self.extra_info = [] # List of extra info shown of the HUD
         self.goal_location = carla.Location(config.agent.goal.x, config.agent.goal.y, config.agent.goal.z)
         self.margin_to_goal = config.agent.margin_to_goal
         self.safe_distance = config.agent.safe_distance
@@ -96,10 +97,13 @@ class CarlaEnv(gym.Env):
 
         # Init metrics
         self.total_reward = 0.0
-        self.previous_location = self.vehicle.get_transform().location
         self.distance_traveled = 0.0
         self.center_lane_deviation = 0.0
 
+        # Flags of safety
+        self.collision_pedestrian = False
+        self.collision_vehicle = False
+        self.final_goal = False
         try:
             self.client = carla.Client(config.simulation.host, config.simulation.port)
             self.client.set_timeout(config.simulation.timeout)
@@ -248,12 +252,20 @@ class CarlaEnv(gym.Env):
         if config.agent.sensor.spectator_camera:
             self.viewer_image = self._get_viewer_image()
 
-        # Get vehicle transform
-        transform = self.agent.get_transform() # Return the actor's transform (location and rotation) the client recieved during last tick
+        # Current location
+        transform = self.agent.get_transform()
 
-        # Calculated deviation from center of the lane
-        self.distance_from_center = distance_to_line(vector(self.current))
+        # Closest wp related to current location
+        self.current_wp = self.agent.get_closest_waypoint()
 
+        next_wp = self.current_wp.next(3)[0]
+
+        self.distance_from_center = distance_to_lane(vector(self.current_wp.transform.location),
+                                                vector(next_wp.transform.location),
+                                                vector(transform.location))
+
+        self.last_reward = self.reward_fn(self)
+        self.total_reward += self.last_reward
 
 
         # Terminal state for distance to exo-agents or objective
@@ -304,6 +316,10 @@ class CarlaEnv(gym.Env):
         self.closed = False         # Set to True when ESC is pressed
         self.observation = self.observation_buffer = None
         self.viewer_image = self.viewer_image_buffer = None
+        self.total_reward = 0
+        self.collision_pedestrian = False
+        self.collision_vehicle = False
+        self.final_goal = False
 
         return self.step(None)[0]
 
@@ -342,10 +358,15 @@ class CarlaEnv(gym.Env):
             # print(f"Distance : {distance} || Exo-Agent: {exo_agent.type_of_agent}\n")
             if distance < self.safe_distance:
                 print(f"Crash w/ {exo_agent.type_of_agent}")
+                if exo_agent.type_of_agent == "pedestrian":
+                    self.collision_pedestrian = True
+                elif exo_agent.type_of_agent == "vehicle":
+                    self.collision_vehicle = True
                 return True
 
         distance_to_goal = self.agent.get_carla_actor().get_transform().location.distance(self.goal_location)
         if distance_to_goal < self.margin_to_goal:
+            self.final_goal = True
             return True
 
         return False
@@ -369,6 +390,26 @@ class CarlaEnv(gym.Env):
 
     def _set_viewer_image(self, image):
         self.viewer_image_buffer = image
+
+
+    def _draw_path(self, life_time=60.0, skip=0):
+        """
+        Draw a connected path from start of route to end
+        """
+        for actor in self.world.actor_list:
+            for i in range(0, len(actor.route_wp), skip+1):
+                w0 = self.route_wp[i]
+                w1 = self.route_wp[i+1]
+                self.world.debug.draw_line(
+                w0.transform.location,
+                w1.transform.location,
+                thickness=0.1, color=carla.Color(255, 0, 0),
+                life_time=life_time) # Fix the color specified
+
+
+
+
+
 
 
 

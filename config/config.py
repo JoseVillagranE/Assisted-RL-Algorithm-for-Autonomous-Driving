@@ -132,6 +132,16 @@ config.model.id = 0
 # Reward fn Defaults
 config.reward_fn = edict()
 config.reward_fn.type = "add"
+config.reward_fn.min_speed = 0.0
+config.reward_fn.max_speed = 70.0
+config.reward_fn.max_distance = 3.0
+
+config.reward_fn.weight_collision_pedestrian = 15
+config.reward_fn.weight_collision_vehicle = 10
+config.reward_fn.weight_final_goal = 8
+config.reward_fn.weight_speed_limit = 1
+config.reward_fn.weight_route_al = 1
+config.reward_fn.weight_centralization = 1
 
 
 # Visualisation Defaults

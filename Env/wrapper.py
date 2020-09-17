@@ -163,8 +163,6 @@ class Vehicle(CarlaActorBase):
         self.buffer_size = buffer_size
         super().__init__(world, self.actor)
 
-        self.map = world.get_map()
-
         # Route of the agent
         self.initial_location = transform.location
         self.end_location = end_location if end_location else np.random.choice(world.map.get_spawn_points(), 2, replace=False)[0]
@@ -204,9 +202,9 @@ class Vehicle(CarlaActorBase):
 
     def read_wp(self, file):
         wp_list = read_wp_from_file(file)
-        self.initial_wp = self.map.get_waypoint(wp_list[0])
-        self.end_wp = self.map.get_waypoint(wp_list[-1])
-        self.waypoints_queue = deque(wp_list) # translate from location to waypoint
+        self.initial_wp = self.world.map.get_waypoint(wp_list[0])
+        self.end_wp = self.world.map.get_waypoint(wp_list[-1])
+        self.waypoints_queue = deque(wp_list) # translate from location to waypoint !!!!!!!!!
 
     def get_next_wp(self):
 
@@ -258,8 +256,6 @@ class Pedestrian(CarlaActorBase):
 
     def __init__(self, world, transform=carla.Transform(), max_speed = 1.0):
 
-        self.world = world
-        self.map = world.get_map()
         self.max_speed = max_speed
         pedestrian_bp = random.choice(world.get_blueprint_library().filter("walker.pedestrian.*"))
         self.actor = world.spawn_actor(pedestrian_bp, transform)

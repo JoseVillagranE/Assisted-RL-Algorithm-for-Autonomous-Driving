@@ -25,12 +25,12 @@ def angle_diff(v0, v1):
     """
     Calculates the signed angle difference (-pi, pi] between 2D vector v0 and v1
     """
-    angle = np.arctan2(v1[1], v1[0]) - np.arctan(v0[1], v0[0])
+    angle = np.arctan2(v1[1], v1[0]) - np.arctan2(v0[1], v0[0])
     if angle > np.pi: angle -= 2*np.pi
     elif angle <= -np.pi: angle += 2*np.pi
     return angle
 
-def distance_to_line(A, B, p):
+def distance_to_lane(A, B, p):
     num = np.linalg.norm(np.cross(B-A, A-p))
     den = np.linalg.norm(B-A)
     if np.isclose(den, 0):

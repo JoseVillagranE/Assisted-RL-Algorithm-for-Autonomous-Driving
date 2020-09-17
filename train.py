@@ -11,7 +11,7 @@ from config.config import config, update_config, check_config
 from utils.logger import init_logger
 from Env.CarlaEnv import CarlaEnv
 from models.init_model import init_model
-from .rewards_fns import reward_functions
+from rewards_fns import reward_functions
 
 
 def parse_args():
@@ -48,13 +48,14 @@ def train():
     logger.info(f"training config: {pprint.pformat(config)}")
 
     # Set which reward function you will use
+    reward_fn = None
     if config.reward_fn.type == "add":
         reward_fn = "reward_speed_centering_angle_add"
     else:
         reward_fn = "reward_speed_centering_angle_mul"
 
     print("Creating Environment")
-    env = CarlaEnv(reward_fn=reward_funcions[reward_fn])
+    env = CarlaEnv(reward_fn=reward_functions[reward_fn])
 
     if isinstance(config.seed, int):
         env.seed(config.seed)
