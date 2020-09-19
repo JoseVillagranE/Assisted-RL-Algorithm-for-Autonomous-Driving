@@ -68,7 +68,7 @@ config.train.gamma = 0.99
 config.agent = edict()
 config.agent.vehicle_type = "vehicle.tesla.model3"
 config.agent.safe_distance = 3.0
-config.agent.margin_to_goal = 1.0
+config.agent.margin_to_goal = 3.0
 
 config.agent.initial_position = edict()
 config.agent.initial_position.x = 100
@@ -77,7 +77,7 @@ config.agent.initial_position.z = 1.0
 config.agent.initial_position.yaw = 0
 
 config.agent.goal = edict()
-config.agent.goal.x = 95
+config.agent.goal.x = 215
 config.agent.goal.y = 64
 config.agent.goal.z = 1.0
 
@@ -132,7 +132,7 @@ config.model.id = 0
 # Reward fn Defaults
 config.reward_fn = edict()
 config.reward_fn.type = "add"
-config.reward_fn.min_speed = 1.0
+config.reward_fn.min_speed = 25.0
 config.reward_fn.max_speed = 70.0
 config.reward_fn.max_distance = 3.0
 
@@ -148,6 +148,7 @@ config.reward_fn.weight_centralization = 1
 config.vis = edict()
 config.vis.every = 0
 config.vis.render = False
+config.vis.live_plotting = False
 
 
 def update_config(config_file):

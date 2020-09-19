@@ -203,6 +203,10 @@ class CarlaEnv(gym.Env):
         # Reset env to set initial state
         self.reset()
 
+        self.world.debug.draw_point(carla.Location(config.agent.goal.x,
+                                    config.agent.goal.y, config.agent.goal.z),
+                                    color=carla.Color(0, 0, 255))
+
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
@@ -258,20 +262,21 @@ class CarlaEnv(gym.Env):
         # Closest wp related to current location
         self.current_wp = self.agent.get_closest_waypoint()
 
-        next_wp = self.current_wp.next(3)[0]
+        next_wp = self.current_wp.next(3)[0] # "FIX!!"
 
         self.distance_from_center = distance_to_lane(vector(self.current_wp.transform.location),
                                                 vector(next_wp.transform.location),
                                                 vector(transform.location))
 
+        self.terminal_state = self.check_for_terminal_state()
         self.last_reward = self.reward_fn(self)
         self.total_reward += self.last_reward
 
 
         # Terminal state for distance to exo-agents or objective
 
-        if self.check_for_terminal_state():
-            self.terminal_state = True
+        # if self.check_for_terminal_state():
+        #     self.terminal_state = True
 
 
         pygame.event.pump()
@@ -279,7 +284,6 @@ class CarlaEnv(gym.Env):
             self.close()
             self.terminal_state = True
 
-        self.last_reward = 0
         return self.viewer_image, self.last_reward, self.terminal_state, {"closed": self.closed}
 
     def reset(self, is_training=False):

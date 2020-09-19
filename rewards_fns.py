@@ -35,13 +35,16 @@ def create_reward_fn(reward_fn):
             env.terminal_state = True
             terminal_reason = "Too fast"
 
-        reward = 0
-        if not env.terminal_state:
-            reward += reward_fn(env)
+        reward = reward_fn(env)
 
-        else:
-            low_speed_timer = 0.0
-            reward -= 10
+        if env.terminal_state:
+            terminal_reason = ""
+            if env.final_goal:
+                terminal_reason = "goal!"
+            elif env.collision_vehicle:
+                terminal_reason = "Collision w/ exo-vehicle"
+            elif env.collision_pedestrian:
+                terminal_reason = "Collision w/ pedestrian"
             env.extra_info.extend([terminal_reason, ""])
         return reward
     return func
@@ -82,7 +85,6 @@ def reward_speed_centering_angle_add(env):
         collision_pedestrian = -1
     if env.collision_vehicle:
         collision_vehicle = -1
-
     if env.final_goal:
         final_goal = 1
 

@@ -78,6 +78,7 @@ def train():
 
                 action = model.predict(state)
                 new_state, reward, terminal_state, info = env.step(action)
+                print(reward)
 
                 if info["closed"] == True:
                     exit(0)
@@ -92,8 +93,8 @@ def train():
                 dones.append(terminal_state)
                 state = new_state
 
-            if terminal_state:
-                break
+                if terminal_state:
+                    break
 
 
 
