@@ -2,8 +2,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-from ExperienceReplayMemory import SequentialDequeMemory
-from AlexNet import alexnet
+from .ExperienceReplayMemory import SequentialDequeMemory
+from .AlexNet import alexnet
+import gym
 
 class NormalizedEnv(gym.ActionWrapper):
 
@@ -73,7 +74,7 @@ class DDPG:
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
         self.critic_criterion = nn.MSELoss()
 
-    def get_action(self, state):
+    def predict(self, state):
 
         state = Variable(torch.from_numpy(state).float().unsqueeze(0))
         action = self.actor(state)

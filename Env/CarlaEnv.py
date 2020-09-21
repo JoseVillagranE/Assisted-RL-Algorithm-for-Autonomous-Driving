@@ -50,7 +50,7 @@ class CarlaEnv(gym.Env):
 
     metadata = {"render.modes": ["human", "rgb_array", "rgb_array_no_hud", "state_pixels"]}
 
-    def __init__(self, reward_fn=None):
+    def __init__(self, reward_fn=None, encode_state_fn=None):
 
 
         """
@@ -104,6 +104,9 @@ class CarlaEnv(gym.Env):
         self.collision_pedestrian = False
         self.collision_vehicle = False
         self.final_goal = False
+
+        # functions for encode state
+        self.encode_state_fn = (lambda x: x) if not callable(encode_state_fn) else encode_state_fn
         try:
             self.client = carla.Client(config.simulation.host, config.simulation.port)
             self.client.set_timeout(config.simulation.timeout)
@@ -201,7 +204,7 @@ class CarlaEnv(gym.Env):
 
         self.world.get_exo_agents(self.agent.get_carla_actor().id)
         # Reset env to set initial state
-        self.reset()
+        # self.reset()
 
         self.world.debug.draw_point(carla.Location(config.agent.goal.x,
                                     config.agent.goal.y, config.agent.goal.z),
@@ -256,6 +259,8 @@ class CarlaEnv(gym.Env):
         if config.agent.sensor.spectator_camera:
             self.viewer_image = self._get_viewer_image()
 
+        encode_state = self.encode_state_fn(self)
+
         # Current location
         transform = self.agent.get_transform()
 
@@ -284,7 +289,7 @@ class CarlaEnv(gym.Env):
             self.close()
             self.terminal_state = True
 
-        return self.viewer_image, self.last_reward, self.terminal_state, {"closed": self.closed}
+        return encode_state, self.last_reward, self.terminal_state, {"closed": self.closed}
 
     def reset(self, is_training=False):
 
@@ -336,9 +341,9 @@ class CarlaEnv(gym.Env):
 
 
         if config.agent.sensor.dashboard_camera:
-            pos = (view_w - obs_w - 10, 10)
             # Superimpose current observation into top-right corner
             obs_h, obs_w = self.observation.shape[:2]
+            pos = (view_w - obs_w - 10, 10)
             self.display.blit(pygame.surfarray.make_surface(self.observation.swapaxes(0,1)), pos)
 
 

@@ -12,7 +12,8 @@ from utils.logger import init_logger
 from Env.CarlaEnv import CarlaEnv
 from models.init_model import init_model
 from rewards_fns import reward_functions
-
+from utils.preprocess import create_encode_state_fn
+from models.
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train a self-driving car")
@@ -54,8 +55,12 @@ def train():
     else:
         reward_fn = "reward_speed_centering_angle_mul"
 
+    # Create state encoding fn
+    encode_state_fn = create_encode_state_fn()
+
     print("Creating Environment")
-    env = CarlaEnv(reward_fn=reward_functions[reward_fn])
+    env = CarlaEnv(reward_fn=reward_functions[reward_fn],
+                    encode_state_fn=encode_state_fn)
 
     if isinstance(config.seed, int):
         env.seed(config.seed)
@@ -66,35 +71,37 @@ def train():
     print("Creating model")
     model = init_model(config.model.type, num_actions)
 
+    # Stats
+    rewards = []
+    avg_rewards = []
+
     for episode in range(config.train.episodes):
 
-        state, terminal_state, total_reward = env.reset(), False, 0
+        state, terminal_state, episode_reward = env.reset(), False, 0
 
         while not terminal_state:
 
-            states, taken_actions, values, rewards, dones = [], [], [], [], []
+            action = model.predict(state)
+            new_state, reward, terminal_state, info = env.step(action)
+            if info["closed"] == True:
+                exit(0)
+            model.replay_memory.add_to_memory((state, action, reward, next_state, terminal_state))
+            if agent.replay_memory.get_memory_size() > config.train.batch_size:
+                model.update()
 
-            for _ in range(config.train.steps):
+            episode_reward += reward
+            state = new_state
 
-                action = model.predict(state)
-                new_state, reward, terminal_state, info = env.step(action)
-                print(reward)
-
-                if info["closed"] == True:
-                    exit(0)
-
+            if config.vis.render:
                 env.render()
-                total_reward += reward
 
-                # Store state, action and reward
-                states.append(state)            # [:, *input_shape]
-                taken_actions.append(action)    # [:, num_actions]
-                rewards.append(reward)
-                dones.append(terminal_state)
-                state = new_state
+            if terminal_state:
+                print(f"episode: {episode}, reward: {np.round(episode_reward, decimals=2)}, avg_reward: {np.mean(rewards[-10:])}")
+                break
+        rewards.append(episode_reward)
+        avg_rewards.append(np.mean(rewards[-10:]))
 
-                if terminal_state:
-                    break
+
 
 
 
