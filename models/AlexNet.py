@@ -10,7 +10,12 @@ model_urls = {
 class AlexNet(nn.Module):
 
     def __init__(self, pretrained, num_classes=1000):
-        super(AlexNet, self).__init__()
+        super().__init__()
+        kernels_size = [11, 3, 5, 3, 3, 3, 3, 3]
+        stride = [4, 2, 1, 2, 1, 1, 1, 2]
+        padding = [2, 0, 2, 0, 1, 1, 1, 0]
+        dilation = [1, 1, 1, 1, 1, 1, 1, 1]
+        out_channel = 256
         self.features = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=11, stride=4, padding=2),
             nn.ReLU(inplace=True),
@@ -59,3 +64,11 @@ def alexnet(pretrained=False, progress=True, **kwargs):
                                               progress=progress)
         model.load_state_dict(state_dict)
     return model
+
+
+if __name__ == "__main__":
+
+    model = alexnet(False)
+    kernels_size = model.kernel_size
+    # for name, param in model.named_parameters():
+    #     print(name, param.data)

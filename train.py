@@ -13,7 +13,6 @@ from Env.CarlaEnv import CarlaEnv
 from models.init_model import init_model
 from rewards_fns import reward_functions
 from utils.preprocess import create_encode_state_fn
-from models.
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train a self-driving car")
@@ -82,20 +81,23 @@ def train():
         while not terminal_state:
 
             action = model.predict(state)
-            new_state, reward, terminal_state, info = env.step(action)
+            next_state, reward, terminal_state, info = env.step(action)
             if info["closed"] == True:
                 exit(0)
-            model.replay_memory.add_to_memory((state, action, reward, next_state, terminal_state))
-            if agent.replay_memory.get_memory_size() > config.train.batch_size:
-                model.update()
+
+            if config.model.type=="DDPG":
+                model.replay_memory.add_to_memory((state, action, reward, next_state, terminal_state))
+                if model.replay_memory.get_memory_size() > config.train.batch_size:
+                    model.update()
 
             episode_reward += reward
-            state = new_state
+            state = next_state
 
             if config.vis.render:
                 env.render()
 
             if terminal_state:
+                print(f"terminal reason: {info}")
                 print(f"episode: {episode}, reward: {np.round(episode_reward, decimals=2)}, avg_reward: {np.mean(rewards[-10:])}")
                 break
         rewards.append(episode_reward)

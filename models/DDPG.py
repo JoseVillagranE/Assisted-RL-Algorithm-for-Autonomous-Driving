@@ -3,8 +3,17 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 from .ExperienceReplayMemory import SequentialDequeMemory
-from .AlexNet import alexnet
+from .AlexNet import alexnet, AlexNet
 import gym
+
+
+def conv2d_size_out(size, kernels_size, strides, paddings, dilations):
+    out = 0
+    for kernel_size, stride, padding, dilation in zip(kernels_size, strides, paddings, dilations):
+        out = (size + 2*padding - dilation*(kernel_size - 1) - 1)//stride + 1
+    return out
+
+
 
 class NormalizedEnv(gym.ActionWrapper):
 
@@ -18,46 +27,71 @@ class NormalizedEnv(gym.ActionWrapper):
         act_b = (self.action_space.high + self.action_space.low)/ 2.
         return act_k_inv*(action - act_b)
 
-
 class Actor(nn.Module):
 
-    def __init__(self, action_space, pretrained=False):
+    def __init__(self, action_space, h_image_in, w_image_in, pretrained=False):
 
+        super().__init__()
         self.action_space = action_space
 
         self.alexnet_model = alexnet(pretrained) # feature extractor
-        self.linear = nn.Linear(1024, 128)
+
+        convh =  conv2d_size_out(h_image_in,
+                                self.alexnet_model.kernels_size,
+                                self.alexnet_model.strides,
+                                self.alexnet_model.paddings,
+                                self.alexnet_model.dilations,
+                                )
+        convw =  conv2d_size_out(w_image_in,
+                                self.alexnet_model.kernels_size,
+                                self.alexnet_model.strides,
+                                self.alexnet_model.paddings,
+                                self.alexnet_model.dilations,
+                                )
+
+        linear_outp_size = convh*convw*self.alexnet_model.out_channel
+        self.linear = nn.Linear(linear_outp_size, 128)
         self.final_layer = nn.Linear(128, action_space)
 
     def forward(self, state):
-        pass
+        x = self.alexnet_model(state)
+        x = self.linear(x)
+        x = self.final_layer(x)
+        return x
 
 class Critic(nn.Module):
 
-    def __init__(self, action_space):
+    def __init__(self, action_space, pretrained=False):
+        super().__init__()
         self.action_space = action_space
+        self.alexnet_model = alexnet(pretrained) # feature extractor
+        self.linear = nn.Linear(9216 + action_space, 1)
 
-    def forward(self, state):
-        pass
+    def forward(self, state, action):
+        x = torch.cat([state, action], 1)
+        x = self.alexnet_model(x)
+        x = self.linear(x)
+        return x
+
+
 
 class DDPG:
 
-    def __init__(self, env, hidden_size=256, actor_lr = 1e-4, critic_lr=1e-3, batch_size=64, gamma=0.99,
-                tau=1e-2, max_memory_size=50000):
+    def __init__(self, action_space, h_image_in, w_image_in, actor_lr = 1e-3, critic_lr=1e-3,
+                batch_size=10, gamma=0.99,  tau=1e-2, max_memory_size=50000):
 
-        self.num_states = env.observation_space.shape[0]
-        self.num_actions = env.action_space.shape[0]
+        self.num_actions = action_space
         self.gamma = gamma
         self.tau = tau
         self.max_memory_size = max_memory_size
         self.batch_size = batch_size
 
         # Networks
-        self.actor = Actor(self.num_states, hidden_size, self.num_actions)
-        self.actor_target = Actor(self.num_states, hidden_size, self.num_actions)
+        self.actor = Actor(self.num_actions, h_image_in, w_image_in)
+        self.actor_target = Actor(self.num_actions, w_image_in)
 
-        self.critic = Critic(self.num_states + self.num_actions, hidden_size, self.num_actions)
-        self.critic_target = Critic(self.num_states + self.num_actions, hidden_size, self.num_actions)
+        self.critic = Critic(self.num_actions, h_image_in, w_image_in)
+        self.critic_target = Critic(self.num_actions, h_image_in, w_image_in)
 
         # Copy weights
         for target_param, param in zip(self.actor_target.parameters(), self.actor.parameters()):
@@ -76,9 +110,10 @@ class DDPG:
 
     def predict(self, state):
 
-        state = Variable(torch.from_numpy(state).float().unsqueeze(0))
+        state = Variable(state.float().unsqueeze(0))
         action = self.actor(state)
-        action = action.detach().numpy()[0, 0]
+        print(action)
+        action = action.detach().numpy()[0]
         return action
 
     def update(self):

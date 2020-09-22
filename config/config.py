@@ -82,8 +82,8 @@ config.agent.goal.y = 64
 config.agent.goal.z = 1.0
 
 config.agent.sensor = edict()
-config.agent.sensor.spectator_camera = True
-config.agent.sensor.dashboard_camera = True
+config.agent.sensor.spectator_camera = False
+config.agent.sensor.dashboard_camera = False
 
 
 # ExoAgent Defaults
@@ -138,6 +138,7 @@ config.reward_fn.max_distance = 3.0
 
 config.reward_fn.weight_collision_pedestrian = 15
 config.reward_fn.weight_collision_vehicle = 10
+config.reward_fn.weight_collision_other = 7
 config.reward_fn.weight_final_goal = 8
 config.reward_fn.weight_speed_limit = 1
 config.reward_fn.weight_route_al = 1

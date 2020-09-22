@@ -24,7 +24,7 @@ from .wrapper import *
 import signal
 from collections import deque
 from agents.navigation.controller import VehiclePIDController
-from utils.utils import vector, distance_to_lane
+from utils.utils import vector, distance_to_lane, get_actor_display_name
 
 
 class KeyboardControl(object):
@@ -70,7 +70,10 @@ class CarlaEnv(gym.Env):
         pygame.init()
         pygame.font.init()
 
-        self.display = pygame.display.set_mode(config.simulation.view_res, pygame.HWSURFACE | pygame.DOUBLEBUF)
+        if config.agent.sensor.spectator_camera:
+            self.display = pygame.display.set_mode(config.simulation.view_res, pygame.HWSURFACE | pygame.DOUBLEBUF)
+        elif config.agent.sensor.dashboard_camera:
+            self.display = pygame.display.set_mode(config.simulation.obs_res, pygame.HWSURFACE | pygame.DOUBLEBUF)
         self.clock = pygame.time.Clock()
         self.synchronous = config.synchronous_mode
         self.fps = self.average_fps = config.simulation.fps
@@ -103,6 +106,13 @@ class CarlaEnv(gym.Env):
         # Flags of safety
         self.collision_pedestrian = False
         self.collision_vehicle = False
+        self.collision_other = False
+        self.collision_other_objects = ["Building",
+                                        "Fence",
+                                        "Pole",
+                                        "Vegetation",
+                                        "Wall",
+                                        "Traffic sign"]
         self.final_goal = False
 
         # functions for encode state
@@ -130,7 +140,8 @@ class CarlaEnv(gym.Env):
             # Create a agent vehicle
             self.agent = Vehicle(self.world,
                                 transform=self.initial_transform,
-                                vehicle_type=config.agent.vehicle_type)
+                                vehicle_type=config.agent.vehicle_type,
+                                on_collision_fn=lambda e: self._on_collision(e))
 
             self.exo_veh_initial_transform = None
             if self.is_exo_vehicle:
@@ -328,6 +339,7 @@ class CarlaEnv(gym.Env):
         self.total_reward = 0
         self.collision_pedestrian = False
         self.collision_vehicle = False
+        self.collision_other = False
         self.final_goal = False
 
         return self.step(None)[0]
@@ -366,12 +378,15 @@ class CarlaEnv(gym.Env):
 
             # print(f"Distance : {distance} || Exo-Agent: {exo_agent.type_of_agent}\n")
             if distance < self.safe_distance:
-                print(f"Crash w/ {exo_agent.type_of_agent}")
+                print(f"Collision w/ {exo_agent.type_of_agent}")
                 if exo_agent.type_of_agent == "pedestrian":
                     self.collision_pedestrian = True
                 elif exo_agent.type_of_agent == "vehicle":
                     self.collision_vehicle = True
                 return True
+
+        if self.collision_other:
+            return True
 
         distance_to_goal = self.agent.get_carla_actor().get_transform().location.distance(self.goal_location)
         if distance_to_goal < self.margin_to_goal:
@@ -393,6 +408,12 @@ class CarlaEnv(gym.Env):
         image = self.viewer_image_buffer.copy()
         self.viewer_image_buffer = None
         return image
+
+    def _on_collision(self, event):
+        name = get_actor_display_name(event.other_actor)
+        print(f"Collision w/ {name}")
+        if name in self.collision_other_objects:
+            self.collision_other = True
 
     def _set_observation_image(self, image):
         self.observation_buffer = image

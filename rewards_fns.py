@@ -23,13 +23,13 @@ def create_reward_fn(reward_fn):
         low_speed_timer += 1.0/env.fps
         speed = env.agent.get_speed()
         speed_kmh = speed*3.6
-        # if low_speed_timer > 5.0 and speed < 1.0/3.6: # No admite freno
-        #     env.terminal_state = True
-        #     terminal_reason = "Vehicle Stopped"
-
-        if env.distance_from_center > config.reward_fn.max_distance:
+        if low_speed_timer == 5.0 and speed == 0.0: # No admite freno
             env.terminal_state = True
-            terminal_reason = "Off-Track"
+            terminal_reason = "Vehicle Stopped"
+
+        # if env.distance_from_center > config.reward_fn.max_distance:
+        #     env.terminal_state = True
+        #     terminal_reason = "Off-Track"
 
         if config.reward_fn.max_speed > 0 and speed_kmh > config.reward_fn.max_speed:
             env.terminal_state = True
@@ -80,6 +80,7 @@ def reward_speed_centering_angle_add(env):
 
     collision_pedestrian = 0
     collision_vehicle = 0
+    collision_other = 0
     final_goal = 0
     if env.collision_pedestrian:
         collision_pedestrian = -1
@@ -87,6 +88,8 @@ def reward_speed_centering_angle_add(env):
         collision_vehicle = -1
     if env.final_goal:
         final_goal = 1
+    if env.collision_other:
+        collision_other = -1
 
     # Final reward
     reward = speed_reward * config.reward_fn.weight_speed_limit + \
@@ -94,6 +97,7 @@ def reward_speed_centering_angle_add(env):
             angle_factor * config.reward_fn.weight_route_al + \
             collision_vehicle * config.reward_fn.weight_collision_vehicle + \
             collision_pedestrian * config.reward_fn.weight_collision_pedestrian + \
+            collision_other * config.reward_fn.weight_collision_other + \
             final_goal * config.reward_fn.weight_final_goal
 
     return reward
