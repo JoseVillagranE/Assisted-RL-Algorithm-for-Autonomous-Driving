@@ -28,10 +28,10 @@ class NormalizedEnv(gym.ActionWrapper):
 
 class Actor(nn.Module):
 
-    def __init__(self, action_space, h_image_in, w_image_in, pretrained=False):
+    def __init__(self, num_actions, h_image_in, w_image_in, pretrained=False):
 
         super().__init__()
-        self.action_space = action_space
+        self.num_actions= num_actions
 
         self.alexnet_model = alexnet(pretrained) # feature extractor
 
@@ -50,19 +50,12 @@ class Actor(nn.Module):
 
         linear_outp_size = convh*convw*self.alexnet_model.out_channel
         self.linear = nn.Linear(linear_outp_size, 128)
-        self.final_layer = nn.Linear(128, action_space)
+        self.final_layer = nn.Linear(128, num_actions)
 
     def forward(self, state):
         x = self.alexnet_model(state)
-        x = self.linear(x)
-        x = self.final_layer(x)
-
-        l = torch.tensor([-1.0, 0.0])
-        u = torch.tensor([1.0, 1.0])
-
-        x = torch.max(torch.min(x, u), l)
-
-
+        x = nn.functional.relu(self.linear(x))
+        x = nn.functional.tanh(self.final_layer(x))
         return x
 
 class Critic(nn.Module):
@@ -102,7 +95,9 @@ class DDPG:
     def __init__(self, action_space, h_image_in, w_image_in, actor_lr = 1e-3, critic_lr=1e-3,
                 batch_size=10, gamma=0.99,  tau=1e-2, max_memory_size=50000):
 
-        self.num_actions = action_space
+        self.num_actions = action_space.shape[0]
+        self.action_min, self.action_max = action_space.low, action_space.high
+
         self.gamma = gamma
         self.tau = tau
         self.max_memory_size = max_memory_size
@@ -135,6 +130,7 @@ class DDPG:
         state = Variable(state.float().unsqueeze(0))
         action = self.actor(state)
         action = action.detach().numpy()[0]
+        action = self.action_min + ((action + 1)/2)*(self.action_max - self.action_min)
         return action
 
     def update(self):

@@ -68,10 +68,10 @@ def train():
         env.seed(config.seed)
 
     best_eval_rew = -float("inf")
-    num_actions = env.action_space.shape[0]
+    action_space = env.action_space
 
     print("Creating model")
-    model = init_model(config.model.type, num_actions, config.preprocess.CenterCrop,
+    model = init_model(config.model.type, action_space, config.preprocess.CenterCrop,
                                                         config.preprocess.CenterCrop)
 
     # Stats
