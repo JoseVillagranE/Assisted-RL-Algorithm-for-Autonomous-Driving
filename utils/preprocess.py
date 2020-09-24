@@ -9,17 +9,17 @@ def preprocess_frame(frame):
     frame = frame.astype(np.float32)/255.0
     return frame
 
-def create_encode_state_fn():
+def create_encode_state_fn(Resize, CenterCrop, mean, std):
 
     def encode_state(env):
         # frame = preprocess_frame(env.observation) # np.ndarray
         frame = Image.fromarray(env.observation)
 
         preprocess = transforms.Compose([ ## Only transform PIL Image
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
+        transforms.Resize(Resize),
+        transforms.CenterCrop(CenterCrop),
         transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        transforms.Normalize(mean=mean, std=std),
         ])
 
         # trf = Compose([

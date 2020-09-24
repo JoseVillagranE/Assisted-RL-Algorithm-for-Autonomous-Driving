@@ -11,11 +11,14 @@ class AlexNet(nn.Module):
 
     def __init__(self, pretrained, num_classes=1000):
         super().__init__()
-        kernels_size = [11, 3, 5, 3, 3, 3, 3, 3]
-        stride = [4, 2, 1, 2, 1, 1, 1, 2]
-        padding = [2, 0, 2, 0, 1, 1, 1, 0]
-        dilation = [1, 1, 1, 1, 1, 1, 1, 1]
-        out_channel = 256
+        self.kernels_size = [11, 3, 5, 3, 3, 3, 3, 3]
+        self.strides = [4, 2, 1, 2, 1, 1, 1, 2]
+        self.paddings = [2, 0, 2, 0, 1, 1, 1, 0]
+        self.dilations = [1, 1, 1, 1, 1, 1, 1, 1]
+        self.out_channel = 256
+
+        # H and W must be at least 224 of size
+
         self.features = nn.Sequential(
             nn.Conv2d(3, 64, kernel_size=11, stride=4, padding=2),
             nn.ReLU(inplace=True),
@@ -47,7 +50,7 @@ class AlexNet(nn.Module):
 
     def forward(self, x):
         x = self.features(x)
-        x = self.avgpool(x)
+        #x = self.avgpool(x)
         x = torch.flatten(x, 1)
         return x
 

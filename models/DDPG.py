@@ -8,10 +8,9 @@ import gym
 
 
 def conv2d_size_out(size, kernels_size, strides, paddings, dilations):
-    out = 0
     for kernel_size, stride, padding, dilation in zip(kernels_size, strides, paddings, dilations):
-        out = (size + 2*padding - dilation*(kernel_size - 1) - 1)//stride + 1
-    return out
+        size = (size + 2*padding - dilation*(kernel_size - 1) - 1)//stride + 1
+    return size
 
 
 
@@ -57,19 +56,42 @@ class Actor(nn.Module):
         x = self.alexnet_model(state)
         x = self.linear(x)
         x = self.final_layer(x)
+
+        l = torch.tensor([-1.0, 0.0])
+        u = torch.tensor([1.0, 1.0])
+
+        x = torch.max(torch.min(x, u), l)
+
+
         return x
 
 class Critic(nn.Module):
 
-    def __init__(self, action_space, pretrained=False):
+    def __init__(self, action_space,  h_image_in, w_image_in, pretrained=False):
         super().__init__()
         self.action_space = action_space
         self.alexnet_model = alexnet(pretrained) # feature extractor
-        self.linear = nn.Linear(9216 + action_space, 1)
+
+        convh =  conv2d_size_out(h_image_in,
+                                self.alexnet_model.kernels_size,
+                                self.alexnet_model.strides,
+                                self.alexnet_model.paddings,
+                                self.alexnet_model.dilations,
+                                )
+        convw =  conv2d_size_out(w_image_in,
+                                self.alexnet_model.kernels_size,
+                                self.alexnet_model.strides,
+                                self.alexnet_model.paddings,
+                                self.alexnet_model.dilations,
+                                )
+
+        linear_outp_size = convh*convw*self.alexnet_model.out_channel
+
+        self.linear = nn.Linear(linear_outp_size + action_space, 1)
 
     def forward(self, state, action):
-        x = torch.cat([state, action], 1)
-        x = self.alexnet_model(x)
+        x = self.alexnet_model(state)
+        x = torch.cat([x, action], 1)
         x = self.linear(x)
         return x
 
@@ -88,7 +110,7 @@ class DDPG:
 
         # Networks
         self.actor = Actor(self.num_actions, h_image_in, w_image_in)
-        self.actor_target = Actor(self.num_actions, w_image_in)
+        self.actor_target = Actor(self.num_actions, h_image_in, w_image_in)
 
         self.critic = Critic(self.num_actions, h_image_in, w_image_in)
         self.critic_target = Critic(self.num_actions, h_image_in, w_image_in)
@@ -112,18 +134,17 @@ class DDPG:
 
         state = Variable(state.float().unsqueeze(0))
         action = self.actor(state)
-        print(action)
         action = action.detach().numpy()[0]
         return action
 
     def update(self):
         states, actions, rewards, next_states, done = self.replay_memory.get_random_batch_for_replay(self.batch_size)
-        states, actions = torch.FloatTensor(states), torch.FloatTensor(actions)
-        rewards, next_states = torch.FloatTensor(rewards), torch.FloatTensor(next_states)
-
+        states = torch.cat(states, dim=0)
+        actions = torch.FloatTensor(actions)
+        rewards = torch.FloatTensor(rewards)
+        next_states = torch.cat(next_states, dim=0)
         if actions.dim() < 2:
             actions = actions.unsqueeze(1)
-
         Qvals = self.critic(states, actions)
         next_actions = self.actor_target(next_states)
         next_Q = self.critic_target(next_states, next_actions.detach())
@@ -146,3 +167,18 @@ class DDPG:
 
         for target_param, param in zip(self.critic_target.parameters(), self.critic.parameters()):
             target_param.data.copy_(param.data*self.tau + target_param.data*(1.0 - self.tau))
+
+
+if __name__ == "__main__":
+
+    from functools import reduce
+    x = torch.randn(3,16,16)
+    states = [x, x, x]
+    action = torch.FloatTensor([1, 1.3])
+    actions = [action, action, action]
+
+    new_tensor = torch.cat(states, dim=0)
+    new_tensor = torch.cat([new_tensor, action], )
+    # new_tensor = reduce(lambda x,y: torch.cat(x), states)
+    # new_tensor = reduce(lambda x,y: torch.cat((x,y)), states + actions)
+    print(new_tensor)

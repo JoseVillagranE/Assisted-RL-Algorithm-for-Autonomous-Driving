@@ -56,7 +56,7 @@ config.simulation.port = 2000
 # Train Defaults
 config.train = edict()
 config.train.checkpoint_every = 0
-config.train.batch_size = 256
+config.train.batch_size = 16
 config.train.episodes = 1e6
 config.train.steps = 500
 config.train.optimizer = 'Adam'
@@ -128,6 +128,15 @@ config.exo_agents.vehicle.end_position.z = 1.0
 config.model = edict()
 config.model.type = "DDPG"
 config.model.id = 0
+
+
+# Preprocess Defaults
+config.preprocess = edict()
+config.preprocess.Resize = 256
+config.preprocess.CenterCrop = 224
+config.preprocess.mean = [0.485, 0.456, 0.406]
+config.preprocess.std = [0.229, 0.224, 0.225]
+
 
 # Reward fn Defaults
 config.reward_fn = edict()

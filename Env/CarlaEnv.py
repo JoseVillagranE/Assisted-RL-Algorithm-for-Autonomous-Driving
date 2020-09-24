@@ -241,7 +241,6 @@ class CarlaEnv(gym.Env):
 
         if action is not None:
             steer, throttle = [float(a) for a in action]
-
             self.agent.control.steer = self.agent.control.steer*self.action_smoothing + steer *(1.0 - self.action_smoothing)
             self.agent.control.throttle = self.agent.control.throttle*self.action_smoothing + throttle *(1.0 - self.action_smoothing)
 

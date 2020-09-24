@@ -55,7 +55,10 @@ def train():
         reward_fn = "reward_speed_centering_angle_mul"
 
     # Create state encoding fn
-    encode_state_fn = create_encode_state_fn()
+    encode_state_fn = create_encode_state_fn(config.preprocess.Resize,
+                                            config.preprocess.CenterCrop,
+                                            config.preprocess.mean,
+                                            config.preprocess.std)
 
     print("Creating Environment")
     env = CarlaEnv(reward_fn=reward_functions[reward_fn],
@@ -68,7 +71,8 @@ def train():
     num_actions = env.action_space.shape[0]
 
     print("Creating model")
-    model = init_model(config.model.type, num_actions)
+    model = init_model(config.model.type, num_actions, config.preprocess.CenterCrop,
+                                                        config.preprocess.CenterCrop)
 
     # Stats
     rewards = []
@@ -81,12 +85,13 @@ def train():
         while not terminal_state:
 
             action = model.predict(state)
+            print(action)
             next_state, reward, terminal_state, info = env.step(action)
             if info["closed"] == True:
                 exit(0)
 
             if config.model.type=="DDPG":
-                model.replay_memory.add_to_memory((state, action, reward, next_state, terminal_state))
+                model.replay_memory.add_to_memory((state.unsqueeze(0), action, reward, next_state.unsqueeze(0), terminal_state))
                 if model.replay_memory.get_memory_size() > config.train.batch_size:
                     model.update()
 
@@ -102,17 +107,6 @@ def train():
                 break
         rewards.append(episode_reward)
         avg_rewards.append(np.mean(rewards[-10:]))
-
-
-
-
-
-
-
-
-
-
-
 
 def main():
 
