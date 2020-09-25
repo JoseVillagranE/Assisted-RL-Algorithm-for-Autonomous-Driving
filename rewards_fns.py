@@ -23,7 +23,8 @@ def create_reward_fn(reward_fn):
         low_speed_timer += 1.0/env.fps
         speed = env.agent.get_speed()
         speed_kmh = speed*3.6
-        if low_speed_timer == 5.0 and speed == 0.0: # No admite freno
+        print(f"speed: {speed_kmh}")
+        if low_speed_timer > 1.0 and speed_kmh < 1e-3: # No admite freno
             env.terminal_state = True
             terminal_reason = "Vehicle Stopped"
 
@@ -38,6 +39,7 @@ def create_reward_fn(reward_fn):
         reward = reward_fn(env)
 
         if env.terminal_state:
+            low_speed_timer = 0.0
             terminal_reason = ""
             if env.final_goal:
                 terminal_reason = "goal!"
