@@ -54,8 +54,8 @@ class Actor(nn.Module):
 
     def forward(self, state):
         x = self.alexnet_model(state)
-        x = nn.functional.relu(self.linear(x))
-        x = nn.functional.tanh(self.final_layer(x))
+        x = torch.relu(self.linear(x))
+        x = torch.tanh(self.final_layer(x))
         return x
 
 class Critic(nn.Module):

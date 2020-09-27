@@ -46,6 +46,9 @@ def create_reward_fn(reward_fn):
                 terminal_reason = "Collision w/ exo-vehicle"
             elif env.collision_pedestrian:
                 terminal_reason = "Collision w/ pedestrian"
+            elif env.collision_other:
+                terminal_reason = "Collision w/ other"
+
 
             if len(terminal_reason) > 0:
                 env.extra_info.append(terminal_reason)

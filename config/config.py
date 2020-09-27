@@ -48,7 +48,7 @@ config.simulation.view_res = (640, 480)
 config.simulation.obs_res = (240, 240)
 config.simulation.fps = 10
 config.simulation.host = "localhost"
-config.simulation.port = 2000
+config.simulation.port = 2000 # Default of world-port CARLA
 
 
 
@@ -149,7 +149,7 @@ config.reward_fn.weight_collision_pedestrian = 15
 config.reward_fn.weight_collision_vehicle = 10
 config.reward_fn.weight_collision_other = 7
 config.reward_fn.weight_final_goal = 8
-config.reward_fn.weight_speed_limit = 1
+config.reward_fn.weight_speed_limit = 5
 config.reward_fn.weight_route_al = 1
 config.reward_fn.weight_centralization = 1
 
