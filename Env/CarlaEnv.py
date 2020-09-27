@@ -58,22 +58,25 @@ class CarlaEnv(gym.Env):
         """
 
         self.carla_process = None
-        carla_path = os.path.join(config.carla_dir, "CarlaUE4.sh")
-        launch_command = [carla_path]
-        launch_command += [config.simulation.map]
-        if config.synchronous_mode: launch_command += ["-benchmark"]
-        launch_command += ["-fps=%i" % config.simulation.fps]
-        self.carla_process = subprocess.Popen(launch_command, stdout=subprocess.DEVNULL)
-        print("Waiting for CARLA to initialize..")
-        time.sleep(config.simulation.sleep)
+        # carla_path = os.path.join(config.carla_dir, "CarlaUE4.sh")
+        # launch_command = [carla_path]
+        # launch_command += [config.simulation.map]
+        # if config.synchronous_mode: launch_command += ["-benchmark"]
+        # launch_command += ["-fps=%i" % config.simulation.fps]
+        # self.carla_process = subprocess.Popen(launch_command, stdout=subprocess.DEVNULL)
+        # print("Waiting for CARLA to initialize..")
+        # time.sleep(config.simulation.sleep)
 
         pygame.init()
         pygame.font.init()
 
-        if config.agent.sensor.spectator_camera:
-            self.display = pygame.display.set_mode(config.simulation.view_res, pygame.HWSURFACE | pygame.DOUBLEBUF)
-        elif config.agent.sensor.dashboard_camera:
-            self.display = pygame.display.set_mode(config.simulation.obs_res, pygame.HWSURFACE | pygame.DOUBLEBUF)
+        if config.vis.render:
+
+            if config.agent.sensor.spectator_camera:
+                self.display = pygame.display.set_mode(config.simulation.view_res, pygame.HWSURFACE | pygame.DOUBLEBUF)
+            elif config.agent.sensor.dashboard_camera:
+                self.display = pygame.display.set_mode(config.simulation.obs_res, pygame.HWSURFACE | pygame.DOUBLEBUF)
+
         self.clock = pygame.time.Clock()
         self.synchronous = config.synchronous_mode
         self.fps = self.average_fps = config.simulation.fps
@@ -410,7 +413,6 @@ class CarlaEnv(gym.Env):
 
     def _on_collision(self, event):
         name = get_actor_display_name(event.other_actor)
-        print(f"Collision w/ {name}")
         if name in self.collision_other_objects:
             self.collision_other = True
 

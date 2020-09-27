@@ -23,7 +23,7 @@ def create_reward_fn(reward_fn):
         low_speed_timer += 1.0/env.fps
         speed = env.agent.get_speed()
         speed_kmh = speed*3.6
-        print(f"speed: {speed_kmh}")
+        terminal_reason = ""
         if low_speed_timer > 1.0 and speed_kmh < 1e-3: # No admite freno
             env.terminal_state = True
             terminal_reason = "Vehicle Stopped"
@@ -40,14 +40,15 @@ def create_reward_fn(reward_fn):
 
         if env.terminal_state:
             low_speed_timer = 0.0
-            terminal_reason = ""
             if env.final_goal:
                 terminal_reason = "goal!"
             elif env.collision_vehicle:
                 terminal_reason = "Collision w/ exo-vehicle"
             elif env.collision_pedestrian:
                 terminal_reason = "Collision w/ pedestrian"
-            env.extra_info.extend([terminal_reason, ""])
+
+            if len(terminal_reason) > 0:
+                env.extra_info.append(terminal_reason)
         return reward
     return func
 

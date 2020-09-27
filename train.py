@@ -3,8 +3,8 @@ import numpy as np
 import random
 import argparse
 import pprint
-
-
+import signal
+import sys
 import torch
 
 from config.config import config, update_config, check_config
@@ -13,6 +13,10 @@ from Env.CarlaEnv import CarlaEnv
 from models.init_model import init_model
 from rewards_fns import reward_functions
 from utils.preprocess import create_encode_state_fn
+
+def signal_handler(sig, frame):
+    print('You pressed Ctrl+C!')
+    sys.exit(0)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Train a self-driving car")
@@ -78,35 +82,45 @@ def train():
     rewards = []
     avg_rewards = []
 
-    for episode in range(config.train.episodes):
+    try:
+        for episode in range(config.train.episodes):
 
-        state, terminal_state, episode_reward = env.reset(), False, 0
+            state, terminal_state, episode_reward = env.reset(), False, 0
 
-        while not terminal_state:
+            while not terminal_state:
 
-            action = model.predict(state)
-            print(action)
-            next_state, reward, terminal_state, info = env.step(action)
-            if info["closed"] == True:
-                exit(0)
+                if env.controller.parse_events():
+                    return
+                action = model.predict(state)
+                print(action)
 
-            if config.model.type=="DDPG":
-                model.replay_memory.add_to_memory((state.unsqueeze(0), action, reward, next_state.unsqueeze(0), terminal_state))
-                if model.replay_memory.get_memory_size() > config.train.batch_size:
-                    model.update()
+                next_state, reward, terminal_state, info = env.step(action)
+                if info["closed"] == True:
+                    exit(0)
 
-            episode_reward += reward
-            state = next_state
+                if config.model.type=="DDPG":
+                    model.replay_memory.add_to_memory((state.unsqueeze(0), action, reward, next_state.unsqueeze(0), terminal_state))
+                    if model.replay_memory.get_memory_size() > config.train.batch_size:
+                        model.update()
 
-            if config.vis.render:
-                env.render()
+                episode_reward += reward
+                state = next_state
 
-            if terminal_state:
-                print(f"terminal reason: {info}")
-                print(f"episode: {episode}, reward: {np.round(episode_reward, decimals=2)}, avg_reward: {np.mean(rewards[-10:])}")
-                break
-        rewards.append(episode_reward)
-        avg_rewards.append(np.mean(rewards[-10:]))
+                if config.vis.render:
+                    env.render()
+
+                if terminal_state:
+                    if len(env.extra_info) > 0:
+                        print(f"terminal reason: {env.extra_info[-1]}") # print the most recent terminal reason
+                    print(f"episode: {episode}, reward: {np.round(episode_reward, decimals=2)}, avg_reward: {np.mean(rewards[-10:])}")
+                    break
+            rewards.append(episode_reward)
+            avg_rewards.append(np.mean(rewards[-10:]))
+
+    except KeyboardInterrupt:
+        pass
+    finally:
+        env.close()
 
 def main():
 
@@ -125,9 +139,14 @@ def main():
     assert config.train.episodes > 0, "episodes should be more than zero"
     assert config.train.steps > 0, "Steps should be more than zero"
 
-    train()
+    try:
+        train()
+    except KeyboardInterrupt:
+        print('\nCancelled by user. Bye!')
 
 
 if __name__ == "__main__":
 
+    signal.signal(signal.SIGINT, signal_handler)
     main()
+    # signal.pause()

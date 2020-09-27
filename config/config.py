@@ -46,7 +46,7 @@ config.simulation.timeout = 4.0
 config.simulation.action_smoothing = 0.8
 config.simulation.view_res = (640, 480)
 config.simulation.obs_res = (240, 240)
-config.simulation.fps = 30
+config.simulation.fps = 10
 config.simulation.host = "localhost"
 config.simulation.port = 2000
 
@@ -141,8 +141,8 @@ config.preprocess.std = [0.229, 0.224, 0.225]
 # Reward fn Defaults
 config.reward_fn = edict()
 config.reward_fn.type = "add"
-config.reward_fn.min_speed = 25.0
-config.reward_fn.max_speed = 70.0
+config.reward_fn.min_speed = 10.0
+config.reward_fn.max_speed = 40.0
 config.reward_fn.max_distance = 3.0
 
 config.reward_fn.weight_collision_pedestrian = 15
