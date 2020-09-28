@@ -4,13 +4,14 @@ seed: 1
 
 train:
   checkpoint_every: 0
-  episodes: 10
-  steps: 200
+  episodes: 100
+  device: "cpu"
+
 
 agent:
   sensor:
     dashboard_camera: True
-    spectator_camera: True
+    spectator_camera: False
 
 
 exo_agents:
@@ -25,4 +26,4 @@ model:
   id: '0'
 
 vis:
-  render: True
+  render: False

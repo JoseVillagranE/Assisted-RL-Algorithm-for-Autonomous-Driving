@@ -12,7 +12,35 @@ def conv2d_size_out(size, kernels_size, strides, paddings, dilations):
         size = (size + 2*padding - dilation*(kernel_size - 1) - 1)//stride + 1
     return size
 
+class OUNoise(object):
 
+    def __init__(self, action_space, mu=0.0, theta=0.6, max_sigma=0.4, min_sigma=0.3,
+                decay_period=100000):
+
+        self.mu = mu
+        self.theta = theta
+        self.sigma = max_sigma
+        self.max_sigma = max_sigma
+        self.min_sigma = min_sigma
+        self.decay_period = decay_period
+        self.action_dim = action_space.shape[0]
+        self.low = action_space.low
+        self.high = action_space.high
+        self.reset()
+
+    def reset(self):
+        self.state = np.ones(self.action_dim)*self.mu
+
+    def evolve_state(self):
+        x = self.state
+        dx = self.theta * (self.mu - x) + self.sigma*np.random.randn(self.action_dim)
+        self.state = x + dx
+        return self.state
+
+    def get_action(self, action, t=0):
+        ou_state = self.evolve_state()
+        self.sigma = self.max_sigma - (self.max_sigma - self.min_sigma)*min(1.0, t/self.decay_period)
+        return  np.clip(action+ou_state, self.low, self.high)
 
 class NormalizedEnv(gym.ActionWrapper):
 
@@ -93,7 +121,8 @@ class Critic(nn.Module):
 class DDPG:
 
     def __init__(self, action_space, h_image_in, w_image_in, actor_lr = 1e-3, critic_lr=1e-3,
-                batch_size=10, gamma=0.99,  tau=1e-2, max_memory_size=50000):
+                batch_size=10, gamma=0.99,  tau=1e-2, type_RM="sequential", max_memory_size=50000,
+                device='cpu'):
 
         self.num_actions = action_space.shape[0]
         self.action_min, self.action_max = action_space.low, action_space.high
@@ -120,25 +149,46 @@ class DDPG:
 
         # Training
 
-        self.replay_memory = SequentialDequeMemory(queue_capacity=self.max_memory_size)
+        if type_RM == "sequential":
+            self.replay_memory = SequentialDequeMemory()
+        elif type_RM == "random":
+            self.replay_memory = RandomDequeMemory(queue_capacity=max_memory_size)
+
+
+
         self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
         self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
         self.critic_criterion = nn.MSELoss()
 
-    def predict(self, state):
+        # Noise
+        self.ounoise = OUNoise(action_space)
+
+        # Device
+        self.device = torch.device(device)
+
+        # Pass models to gpu except actor network
+        self.actor_target = self.actor_target.to(self.device)
+        self.critic = self.critic.to(self.device)
+        self.critic_target = self.critic_target.to(self.device)
+
+    def predict(self, state, step):
 
         state = Variable(state.float().unsqueeze(0))
         action = self.actor(state)
         action = action.detach().numpy()[0]
+        action = self.ounoise.get_action(action, step)
         action = self.action_min + ((action + 1)/2)*(self.action_max - self.action_min)
         return action
 
     def update(self):
-        states, actions, rewards, next_states, done = self.replay_memory.get_random_batch_for_replay(self.batch_size)
-        states = torch.cat(states, dim=0)
-        actions = torch.FloatTensor(actions)
-        rewards = torch.FloatTensor(rewards)
-        next_states = torch.cat(next_states, dim=0)
+        states, actions, rewards, next_states, done = self.replay_memory.get_batch_for_replay()
+        states = torch.cat(states, dim=0).to(self.device)
+        actions = torch.FloatTensor(actions).to(self.device)
+        rewards = torch.FloatTensor(rewards).to(self.device)
+        next_states = torch.cat(next_states, dim=0).to(self.device)
+
+        self.actor = self.actor.to(self.device) # Because is used for predict actions
+
         if actions.dim() < 2:
             actions = actions.unsqueeze(1)
         Qvals = self.critic(states, actions)
@@ -163,6 +213,9 @@ class DDPG:
 
         for target_param, param in zip(self.critic_target.parameters(), self.critic.parameters()):
             target_param.data.copy_(param.data*self.tau + target_param.data*(1.0 - self.tau))
+
+        # Back to cpu
+        self.actor = self.actor.cpu()
 
 
 if __name__ == "__main__":

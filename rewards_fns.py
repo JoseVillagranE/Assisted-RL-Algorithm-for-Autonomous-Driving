@@ -79,7 +79,8 @@ def reward_speed_centering_angle_add(env):
         speed_reward = (config.reward_fn.max_speed - speed_kmh) / config.reward_fn.min_speed
 
     # Interpolated from 1 when centered to 0 when 3m from center
-    centering_factor = max(-1*env.distance_from_center / config.reward_fn.max_distance, -1)
+    # centering_factor = max(-1*env.distance_from_center / config.reward_fn.max_distance, -1)
+    centering_factor = -1*env.distance_from_center
 
     # Interpolated from 1 when aligned w/ the road to 0 when +/- 20 degrees of road
     angle_factor = max(-1*abs(angle / np.deg2rad(20)), -1)

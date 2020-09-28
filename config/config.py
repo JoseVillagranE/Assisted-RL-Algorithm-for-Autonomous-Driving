@@ -56,13 +56,17 @@ config.simulation.port = 2000 # Default of world-port CARLA
 # Train Defaults
 config.train = edict()
 config.train.checkpoint_every = 0
-config.train.batch_size = 16
-config.train.episodes = 1e6
-config.train.steps = 500
+config.train.batch_size = 64
+config.train.episodes = 100
 config.train.optimizer = 'Adam'
-config.train.lr = 1e-3
+config.train.actor_lr = 1e-3
+config.train.critic_lr = 1e-3
+config.train.max_memory_size = 50000
 config.train.tau = 1e-2
 config.train.gamma = 0.99
+config.train.device = "cpu"
+config.train.horizon = 128
+config.train.type_RM = "sequential"
 
 # Agent Defaults (Single agent)
 config.agent = edict()
@@ -149,9 +153,9 @@ config.reward_fn.weight_collision_pedestrian = 15
 config.reward_fn.weight_collision_vehicle = 10
 config.reward_fn.weight_collision_other = 7
 config.reward_fn.weight_final_goal = 8
-config.reward_fn.weight_speed_limit = 5
-config.reward_fn.weight_route_al = 1
-config.reward_fn.weight_centralization = 1
+config.reward_fn.weight_speed_limit = 2
+config.reward_fn.weight_route_al = 2
+config.reward_fn.weight_centralization = 3
 
 
 # Visualisation Defaults

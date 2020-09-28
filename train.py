@@ -75,8 +75,18 @@ def train():
     action_space = env.action_space
 
     print("Creating model")
-    model = init_model(config.model.type, action_space, config.preprocess.CenterCrop,
-                                                        config.preprocess.CenterCrop)
+    model = init_model(config.model.type,
+                        action_space,
+                        config.preprocess.CenterCrop,
+                        config.preprocess.CenterCrop,
+                        actor_lr = config.train.actor_lr,
+                        critic_lr = config.train.critic_lr,
+                        batch_size = config.train.batch_size,
+                        gamma = config.train.gamma,
+                        tau = config.train.tau,
+                        type_RM = config.train.type_RM,
+                        max_memory_size = config.train.max_memory_size,
+                        device = config.train.device)
 
     # Stats
     rewards = []
@@ -86,34 +96,38 @@ def train():
         for episode in range(config.train.episodes):
 
             state, terminal_state, episode_reward = env.reset(), False, 0
-
+            step = 0
             while not terminal_state:
 
-                if env.controller.parse_events():
-                    return
-                action = model.predict(state)
-                print(action)
+                for _ in range(config.train.horizon):
+                    if env.controller.parse_events():
+                        return
+                    action = model.predict(state, step) # return a np. action
+                    print(action)
+                    next_state, reward, terminal_state, info = env.step(action)
+                    if info["closed"] == True:
+                        exit(0)
 
-                next_state, reward, terminal_state, info = env.step(action)
-                if info["closed"] == True:
-                    exit(0)
+                    if config.model.type=="DDPG":  # Because exist manual and straight control also
+                        model.replay_memory.add_to_memory((state.unsqueeze(0), action, reward, next_state.unsqueeze(0), terminal_state))
 
-                if config.model.type=="DDPG":
-                    model.replay_memory.add_to_memory((state.unsqueeze(0), action, reward, next_state.unsqueeze(0), terminal_state))
-                    if model.replay_memory.get_memory_size() > config.train.batch_size:
-                        model.update()
+                    episode_reward += reward
+                    state = next_state
+                    step += 1
 
-                episode_reward += reward
-                state = next_state
+                    if config.vis.render:
+                        env.render()
 
-                if config.vis.render:
-                    env.render()
+                    if terminal_state:
+                        if len(env.extra_info) > 0:
+                            print(f"terminal reason: {env.extra_info[-1]}") # print the most recent terminal reason
+                        print(f"episode: {episode}, reward: {np.round(episode_reward, decimals=2)}, avg_reward: {np.mean(rewards[-10:])}")
+                        break
 
-                if terminal_state:
-                    if len(env.extra_info) > 0:
-                        print(f"terminal reason: {env.extra_info[-1]}") # print the most recent terminal reason
-                    print(f"episode: {episode}, reward: {np.round(episode_reward, decimals=2)}, avg_reward: {np.mean(rewards[-10:])}")
-                    break
+                model.update()
+                if config.train.type_RM == "sequential" and config.model.type=="DDPG":
+                    model.replay_memory.delete_memory()
+
             rewards.append(episode_reward)
             avg_rewards.append(np.mean(rewards[-10:]))
 
@@ -137,7 +151,6 @@ def main():
 
     # check some condition and variables
     assert config.train.episodes > 0, "episodes should be more than zero"
-    assert config.train.steps > 0, "Steps should be more than zero"
 
     try:
         train()

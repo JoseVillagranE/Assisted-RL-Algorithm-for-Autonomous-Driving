@@ -11,9 +11,46 @@ from collections import deque
 
 class ExperienceReplayMemory:
 
-    pass
+    def __init__(self):
+        pass
+    def add_to_memory(self, experience_tuple):
+        pass
+    def get_batch_for_replay(self):
+        pass
+    def get_memory_size(self):
+        pass
 
-class SequentialDequeMemory(ExperienceReplayMemory):
+class SequentialDequeMemory:
+
+    def __init__(self):
+
+
+        """
+        Traditional training for RL.
+        """
+
+        self.states, self.actions, self.rewards, self.next_states, self.dones = [], [], [], [], []
+
+    def add_to_memory(self, experience_tuple):
+
+        state, action, reward, next_state, done = experience_tuple
+        self.states.append(state)
+        self.actions.append(action)
+        self.rewards.append(reward)
+        self.next_states.append(next_state)
+        self.dones.append(done)
+
+    def get_batch_for_replay(self):
+        return self.states, self.actions, self.rewards, self.next_states, self.dones
+
+    def get_memory_size(self):
+        return len(self.states)
+
+    def delete_memory(self):
+         self.states, self.actions, self.rewards, self.next_states, self.dones = [], [], [], [], []
+
+
+class RandomDequeMemory(ExperienceReplayMemory):
 
     def __init__(self, queue_capacity=2000):
 
@@ -24,7 +61,7 @@ class SequentialDequeMemory(ExperienceReplayMemory):
     def add_to_memory(self, experience_tuple):
         self.memory.append(experience_tuple)
 
-    def get_random_batch_for_replay(self, batch_size=64):
+    def get_batch_for_replay(self, batch_size=64):
 
         state_batch, action_batch, reward_batch, next_state_batch, done_batch = [], [], [], [], []
 
@@ -40,3 +77,6 @@ class SequentialDequeMemory(ExperienceReplayMemory):
         return state_batch, action_batch, reward_batch, next_state_batch, done_batch
     def get_memory_size(self):
         return len(self.memory)
+
+    def delete_memory(self):
+        pass
