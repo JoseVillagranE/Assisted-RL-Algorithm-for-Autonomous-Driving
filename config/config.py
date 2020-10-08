@@ -58,6 +58,7 @@ config.train = edict()
 config.train.checkpoint_every = 0
 config.train.batch_size = 64
 config.train.episodes = 100
+config.train.steps = 10000
 config.train.optimizer = 'Adam'
 config.train.actor_lr = 1e-3
 config.train.critic_lr = 1e-3
@@ -65,7 +66,6 @@ config.train.max_memory_size = 50000
 config.train.tau = 1e-2
 config.train.gamma = 0.99
 config.train.device = "cpu"
-config.train.horizon = 128
 config.train.type_RM = "sequential"
 
 # Agent Defaults (Single agent)
@@ -144,7 +144,8 @@ config.preprocess.std = [0.229, 0.224, 0.225]
 
 # Reward fn Defaults
 config.reward_fn = edict()
-config.reward_fn.type = "add"
+config.reward_fn.type = "norm"
+config.reward_fn.normalize = False
 config.reward_fn.min_speed = 10.0
 config.reward_fn.max_speed = 40.0
 config.reward_fn.max_distance = 3.0
@@ -153,9 +154,10 @@ config.reward_fn.weight_collision_pedestrian = 15
 config.reward_fn.weight_collision_vehicle = 10
 config.reward_fn.weight_collision_other = 7
 config.reward_fn.weight_final_goal = 8
-config.reward_fn.weight_speed_limit = 2
-config.reward_fn.weight_route_al = 2
-config.reward_fn.weight_centralization = 3
+config.reward_fn.weight_speed_limit = 5
+config.reward_fn.weight_route_al = 5
+config.reward_fn.weight_centralization = 5
+config.reward_fn.weight_distance_to_goal = 5
 
 
 # Visualisation Defaults

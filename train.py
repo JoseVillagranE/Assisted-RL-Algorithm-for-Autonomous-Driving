@@ -11,7 +11,7 @@ from config.config import config, update_config, check_config
 from utils.logger import init_logger
 from Env.CarlaEnv import CarlaEnv
 from models.init_model import init_model
-from rewards_fns import reward_functions
+from rewards_fns import reward_functions, weighted_rw_fn
 from utils.preprocess import create_encode_state_fn
 
 def signal_handler(sig, frame):
@@ -37,8 +37,7 @@ def train():
         torch.cuda.manual_seed(config.seed)
 
     # Setup the paths and dirs
-    save_path = os.path.join(config.model_logs.root_dir, config.model.type,
-                            config.model.id, config.run_id)
+    save_path = os.path.join(config.model_logs.root_dir, config.model.type)
 
 
     if not os.path.exists(save_path):
@@ -52,11 +51,7 @@ def train():
     logger.info(f"training config: {pprint.pformat(config)}")
 
     # Set which reward function you will use
-    reward_fn = None
-    if config.reward_fn.type == "add":
-        reward_fn = "reward_speed_centering_angle_add"
-    else:
-        reward_fn = "reward_speed_centering_angle_mul"
+    reward_fn = "reward_fn"
 
     # Create state encoding fn
     encode_state_fn = create_encode_state_fn(config.preprocess.Resize,
@@ -72,11 +67,19 @@ def train():
         env.seed(config.seed)
 
     best_eval_rew = -float("inf")
-    action_space = env.action_space
+
+    rw_weights = [config.reward_fn.weight_speed_limit,
+                  config.reward_fn.weight_centralization,
+                  config.reward_fn.weight_route_al,
+                  config.reward_fn.weight_collision_vehicle,
+                  config.reward_fn.weight_collision_pedestrian,
+                  config.reward_fn.weight_collision_other,
+                  config.reward_fn.weight_final_goal,
+                  config.reward_fn.weight_distance_to_goal]
 
     print("Creating model")
     model = init_model(config.model.type,
-                        action_space,
+                        env.action_space,
                         config.preprocess.CenterCrop,
                         config.preprocess.CenterCrop,
                         actor_lr = config.train.actor_lr,
@@ -86,7 +89,8 @@ def train():
                         tau = config.train.tau,
                         type_RM = config.train.type_RM,
                         max_memory_size = config.train.max_memory_size,
-                        device = config.train.device)
+                        device = config.train.device,
+                        rw_weights=rw_weights if config.reward_fn.normalize else None)
 
     # Stats
     rewards = []
@@ -96,10 +100,9 @@ def train():
         for episode in range(config.train.episodes):
 
             state, terminal_state, episode_reward = env.reset(), False, 0
-            step = 0
             while not terminal_state:
 
-                for _ in range(config.train.horizon):
+                for step in range(config.train.steps):
                     if env.controller.parse_events():
                         return
                     action = model.predict(state, step) # return a np. action
@@ -108,20 +111,23 @@ def train():
                     if info["closed"] == True:
                         exit(0)
 
+                    weighted_rw = weighted_rw_fn(reward, rw_weights)
+                    if not config.reward_fn.normalize:
+                        reward = weighted_rw # rw is only a scalar value
+
                     if config.model.type=="DDPG":  # Because exist manual and straight control also
                         model.replay_memory.add_to_memory((state.unsqueeze(0), action, reward, next_state.unsqueeze(0), terminal_state))
 
-                    episode_reward += reward
+                    episode_reward += weighted_rw
                     state = next_state
-                    step += 1
 
                     if config.vis.render:
                         env.render()
 
                     if terminal_state:
                         if len(env.extra_info) > 0:
-                            print(f"terminal reason: {env.extra_info[-1]}") # print the most recent terminal reason
-                        print(f"episode: {episode}, reward: {np.round(episode_reward, decimals=2)}, avg_reward: {np.mean(rewards[-10:])}")
+                            print(f"episode: {episode}, reward: {np.round(episode_reward, decimals=2)}, terminal reason: {env.extra_info[-1]}")# print the most recent terminal reason
+                            logger.info(f"episode: {episode}, reward: {np.round(episode_reward, decimals=2)}, terminal reason: {env.extra_info[-1]}")
                         break
 
                 model.update()
@@ -129,11 +135,11 @@ def train():
                     model.replay_memory.delete_memory()
 
             rewards.append(episode_reward)
-            avg_rewards.append(np.mean(rewards[-10:]))
 
     except KeyboardInterrupt:
         pass
     finally:
+        np.save("rewards.npy", np.array(rewards))
         env.close()
 
 def main():

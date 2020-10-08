@@ -4,7 +4,7 @@ from .DDPG import DDPG
 
 def init_model(model_name, action_space, h_image_in, w_image_in,
             actor_lr, critic_lr, batch_size, gamma, tau, type_RM, max_memory_size,
-            device = 'cpu'):
+            device = 'cpu', rw_weights=None):
 
 
     if model_name == "DummyModel":
@@ -24,7 +24,8 @@ def init_model(model_name, action_space, h_image_in, w_image_in,
                     tau = tau,
                     type_RM = type_RM,
                     max_memory_size = max_memory_size,
-                    device=device)
+                    device=device,
+                    rw_weights=rw_weights)
 
     else:
         NotImplementedError("Dont exist that model that you required")

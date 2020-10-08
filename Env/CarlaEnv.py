@@ -102,9 +102,9 @@ class CarlaEnv(gym.Env):
         self.reward_fn = (lambda x: 0) if not callable(reward_fn) else reward_fn
 
         # Init metrics
-        self.total_reward = 0.0
         self.distance_traveled = 0.0
         self.center_lane_deviation = 0.0
+        self.distance_to_goal = 1000000000
 
         # Flags of safety
         self.collision_pedestrian = False
@@ -220,9 +220,9 @@ class CarlaEnv(gym.Env):
         # Reset env to set initial state
         # self.reset()
 
-        self.world.debug.draw_point(carla.Location(config.agent.goal.x,
-                                    config.agent.goal.y, config.agent.goal.z),
-                                    color=carla.Color(0, 0, 255))
+        # self.world.debug.draw_point(carla.Location(config.agent.goal.x,
+        #                             config.agent.goal.y, config.agent.goal.z),
+        #                             color=carla.Color(0, 0, 255))
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -244,9 +244,10 @@ class CarlaEnv(gym.Env):
 
         if action is not None:
             steer, throttle = [float(a) for a in action]
-            self.agent.control.steer = self.agent.control.steer*self.action_smoothing + steer *(1.0 - self.action_smoothing)
-            self.agent.control.throttle = self.agent.control.throttle*self.action_smoothing + throttle *(1.0 - self.action_smoothing)
-
+            # self.agent.control.steer = self.agent.control.steer*self.action_smoothing + steer *(1.0 - self.action_smoothing)
+            # self.agent.control.throttle = self.agent.control.throttle*self.action_smoothing + throttle *(1.0 - self.action_smoothing)
+            self.agent.control.steer = steer
+            self.agent.control.throttle = throttle
         if self.is_exo_vehicle:
             # Always exo agent have action
             next_wp = self.exo_vehicle.get_next_wp()
@@ -287,8 +288,7 @@ class CarlaEnv(gym.Env):
                                                 vector(transform.location))
 
         self.terminal_state = self.check_for_terminal_state()
-        self.last_reward = self.reward_fn(self)
-        self.total_reward += self.last_reward
+        reward = self.reward_fn(self)
 
 
         # Terminal state for distance to exo-agents or objective
@@ -302,7 +302,7 @@ class CarlaEnv(gym.Env):
             self.close()
             self.terminal_state = True
 
-        return encode_state, self.last_reward, self.terminal_state, {"closed": self.closed}
+        return encode_state, reward, self.terminal_state, {"closed": self.closed}
 
     def reset(self, is_training=False):
 
@@ -338,7 +338,6 @@ class CarlaEnv(gym.Env):
         self.closed = False         # Set to True when ESC is pressed
         self.observation = self.observation_buffer = None
         self.viewer_image = self.viewer_image_buffer = None
-        self.total_reward = 0
         self.collision_pedestrian = False
         self.collision_vehicle = False
         self.collision_other = False
@@ -390,8 +389,8 @@ class CarlaEnv(gym.Env):
         if self.collision_other:
             return True
 
-        distance_to_goal = self.agent.get_carla_actor().get_transform().location.distance(self.goal_location)
-        if distance_to_goal < self.margin_to_goal:
+        self.distance_to_goal = self.agent.get_carla_actor().get_transform().location.distance(self.goal_location)
+        if self.distance_to_goal < self.margin_to_goal:
             self.final_goal = True
             return True
 

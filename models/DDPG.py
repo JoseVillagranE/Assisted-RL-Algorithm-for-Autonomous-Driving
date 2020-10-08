@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-from .ExperienceReplayMemory import SequentialDequeMemory
+from .ExperienceReplayMemory import SequentialDequeMemory, RandomDequeMemory
 from .AlexNet import alexnet, AlexNet
 import gym
 
@@ -14,8 +14,8 @@ def conv2d_size_out(size, kernels_size, strides, paddings, dilations):
 
 class OUNoise(object):
 
-    def __init__(self, action_space, mu=0.0, theta=0.6, max_sigma=0.4, min_sigma=0.3,
-                decay_period=100000):
+    def __init__(self, action_space, mu=0.0, theta=0.4, max_sigma=0.4, min_sigma=0.3,
+                decay_period=100):
 
         self.mu = mu
         self.theta = theta
@@ -77,13 +77,13 @@ class Actor(nn.Module):
                                 )
 
         linear_outp_size = convh*convw*self.alexnet_model.out_channel
-        self.linear = nn.Linear(linear_outp_size, 128)
-        self.final_layer = nn.Linear(128, num_actions)
+        self.linear = nn.Linear(linear_outp_size, 512)
+        self.outp_layer = nn.Linear(512, num_actions)
 
     def forward(self, state):
         x = self.alexnet_model(state)
         x = torch.relu(self.linear(x))
-        x = torch.tanh(self.final_layer(x))
+        x = torch.tanh(self.outp_layer(x))
         return x
 
 class Critic(nn.Module):
@@ -120,9 +120,9 @@ class Critic(nn.Module):
 
 class DDPG:
 
-    def __init__(self, action_space, h_image_in, w_image_in, actor_lr = 1e-3, critic_lr=1e-3,
+    def __init__(self, action_space, h_image_in, w_image_in, actor_lr = 1e-3, critic_lr=1e-3, optim="SGD",
                 batch_size=10, gamma=0.99,  tau=1e-2, type_RM="sequential", max_memory_size=50000,
-                device='cpu'):
+                device='cpu', rw_weights=None):
 
         self.num_actions = action_space.shape[0]
         self.action_min, self.action_max = action_space.low, action_space.high
@@ -131,6 +131,8 @@ class DDPG:
         self.tau = tau
         self.max_memory_size = max_memory_size
         self.batch_size = batch_size
+        self.std = 0.5
+        self.rw_weights = rw_weights
 
         # Networks
         self.actor = Actor(self.num_actions, h_image_in, w_image_in)
@@ -149,15 +151,24 @@ class DDPG:
 
         # Training
 
+        self.type_RM = type_RM
         if type_RM == "sequential":
-            self.replay_memory = SequentialDequeMemory()
+            self.replay_memory = SequentialDequeMemory(rw_weights)
         elif type_RM == "random":
-            self.replay_memory = RandomDequeMemory(queue_capacity=max_memory_size)
+            self.replay_memory = RandomDequeMemory(queue_capacity=max_memory_size,
+                                                    rw_weights=rw_weights)
 
 
 
-        self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
-        self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
+        if optim == "SGD":
+            self.actor_optimizer = torch.optim.SGD(self.actor.parameters(), lr=actor_lr)
+            self.critic_optimizer = torch.optim.SGD(self.critic.parameters(), lr=critic_lr)
+        elif optim == "Adam":
+            self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
+            self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
+        else:
+            raise NotImplementedError("Optimizer should be Adam or SGD")
+
         self.critic_criterion = nn.MSELoss()
 
         # Noise
@@ -177,10 +188,16 @@ class DDPG:
         action = self.actor(state)
         action = action.detach().numpy()[0]
         action = self.ounoise.get_action(action, step)
-        action = self.action_min + ((action + 1)/2)*(self.action_max - self.action_min)
+        # action[0] = np.clip(np.random.normal(action[0], self.std, 1), -1, 1)
+        # action[1] = np.clip(np.random.normal(action[1], self.std, 1), 0, 1)
         return action
 
     def update(self):
+
+        if self.type_RM == "random":
+            if self.replay_memory.get_memory_size() < 64:
+                return
+
         states, actions, rewards, next_states, done = self.replay_memory.get_batch_for_replay()
         states = torch.cat(states, dim=0).to(self.device)
         actions = torch.FloatTensor(actions).to(self.device)
@@ -203,9 +220,11 @@ class DDPG:
         # updates networks
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
+        # nn.utils.clip_grad_norm_(self.actor.parameters(), 0.005)
         self.actor_optimizer.step()
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
+        # nn.utils.clip_grad_norm_(self.critic.parameters(), 0.005)
         self.critic_optimizer.step()
 
         for target_param, param in zip(self.actor_target.parameters(), self.actor.parameters()):

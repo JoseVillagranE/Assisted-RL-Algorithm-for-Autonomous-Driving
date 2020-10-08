@@ -6,6 +6,23 @@ from config.config import config
 low_speed_timer = 0
 target_speed = 20.0 # km/h
 
+def weighted_rw_fn(rw_tuple, rw_weights):
+
+    """
+    The actual order of rw_tuple should be:
+
+    reward = speed_reward, entering_factor, angle_factor, collision_vehicle,
+            collision_pedestrian, collision_other, final_goal, distance_to_goal
+
+    Could be change in the future*
+    """
+
+    assert len(rw_tuple) == len(rw_weights)
+    reward = 0
+    for rw, weight in zip(rw_tuple, rw_weights): reward += rw*weight
+    return reward
+
+
 # https://github.com/bitsauce/Carla-ppo
 def create_reward_fn(reward_fn):
     """
@@ -62,7 +79,7 @@ def reward_kendall(env):
     speed_kmh = 3.6*env.vehicle.get_speed()
     return speed_kmh
 
-def reward_speed_centering_angle_add(env):
+def reward_fn(env):
     """
     reward =
     """
@@ -72,11 +89,11 @@ def reward_speed_centering_angle_add(env):
 
     speed_kmh = 3.6*env.agent.get_speed()
     if speed_kmh < config.reward_fn.min_speed:                     # When speed is in [0, min_speed] range
-        speed_reward = speed_kmh / config.reward_fn.min_speed      # Linearly interpolate [0, 1] over [0, min_speed]
+        speed_reward = speed_kmh     # Linearly interpolate [0, 1] over [0, min_speed]
     # elif speed_kmh > target_speed:                #
     #     speed_reward = 1.0 - (speed_kmh - target_speed) / (max_speed - target_speed)
     else:
-        speed_reward = (config.reward_fn.max_speed - speed_kmh) / config.reward_fn.min_speed
+        speed_reward = config.reward_fn.max_speed - speed_kmh
 
     # Interpolated from 1 when centered to 0 when 3m from center
     # centering_factor = max(-1*env.distance_from_center / config.reward_fn.max_distance, -1)
@@ -84,6 +101,8 @@ def reward_speed_centering_angle_add(env):
 
     # Interpolated from 1 when aligned w/ the road to 0 when +/- 20 degrees of road
     angle_factor = max(-1*abs(angle / np.deg2rad(20)), -1)
+
+    distance_to_goal = 1/env.distance_to_goal
 
     collision_pedestrian = 0
     collision_vehicle = 0
@@ -99,14 +118,21 @@ def reward_speed_centering_angle_add(env):
         collision_other = -1
 
     # Final reward
-    reward = speed_reward * config.reward_fn.weight_speed_limit + \
-            centering_factor * config.reward_fn.weight_centralization + \
-            angle_factor * config.reward_fn.weight_route_al + \
-            collision_vehicle * config.reward_fn.weight_collision_vehicle + \
-            collision_pedestrian * config.reward_fn.weight_collision_pedestrian + \
-            collision_other * config.reward_fn.weight_collision_other + \
-            final_goal * config.reward_fn.weight_final_goal
+    return (speed_reward,
+            centering_factor,
+            angle_factor,
+            collision_vehicle,
+            collision_pedestrian,
+            collision_other,
+            final_goal,
+            distance_to_goal)
 
-    return reward
+reward_functions["reward_fn"] = create_reward_fn(reward_fn)
 
-reward_functions["reward_speed_centering_angle_add"] = create_reward_fn(reward_speed_centering_angle_add)
+
+if __name__ == "__main__":
+
+    rw = [2, 3, 4]
+    weights = [1, 0.5, 2]
+    final_rw = weighted_rw_fn(rw, weights)
+    print(final_rw)

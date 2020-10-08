@@ -132,7 +132,7 @@ class Camera(CarlaActorBase):
             return
         if callable(self.on_recv_image):
             image.convert(self.color_converter)
-            array = np.frombuffer(image.raw_data, dtype=np.dtype("uint8")) # Make sure you are tranform data to ints between [0 - 255]
+            array = np.frombuffer(image.raw_data, dtype=np.dtype("uint8")) # Make sure you are tranform data to ints between [0, 255]
             array = np.reshape(array, (image.height, image.width, 4))
             array = array[:, :, :3]
             array = array[:, :, ::-1]
