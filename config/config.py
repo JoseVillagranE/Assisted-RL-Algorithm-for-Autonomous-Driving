@@ -67,6 +67,9 @@ config.train.tau = 1e-2
 config.train.gamma = 0.99
 config.train.device = "cpu"
 config.train.type_RM = "sequential"
+config.train.actor_layers = [512]
+config.train.load_checkpoint_name = ""
+config.train.episode_loading = 0
 
 # Agent Defaults (Single agent)
 config.agent = edict()

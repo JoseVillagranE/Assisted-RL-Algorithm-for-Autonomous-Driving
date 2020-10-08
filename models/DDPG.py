@@ -56,7 +56,8 @@ class NormalizedEnv(gym.ActionWrapper):
 
 class Actor(nn.Module):
 
-    def __init__(self, num_actions, h_image_in, w_image_in, pretrained=False):
+    def __init__(self, num_actions, h_image_in, w_image_in, linear_layers=[],
+                    pretrained=False):
 
         super().__init__()
         self.num_actions= num_actions
@@ -77,13 +78,31 @@ class Actor(nn.Module):
                                 )
 
         linear_outp_size = convh*convw*self.alexnet_model.out_channel
-        self.linear = nn.Linear(linear_outp_size, 512)
-        self.outp_layer = nn.Linear(512, num_actions)
+
+        self.linear_layer_list = nn.ModuleList()
+        if len(linear_layers) > 0:
+            self.linear_layer_list.append(nn.Linear(linear_outp_size, linear_layers[0]))
+            for i in range(len(linear_layers) - 1):
+                self.linear_layer_list.append(nn.Linear(linear_layers[i], linear_layers[i+1]))
+
+            self.linear_layer_list.append(nn.Linear(linear_layers[-1], num_actions)
+
+        else:
+            self.linear_layer_list.append(nn.Linear(linear_outp_size, num_actions))
 
     def forward(self, state):
         x = self.alexnet_model(state)
-        x = torch.relu(self.linear(x))
-        x = torch.tanh(self.outp_layer(x))
+        x = forward_linear(x)
+        return x
+
+    @staticmethod
+    def forward_linear(x, layer_list):
+
+        for i, layer in enumerate(layer_list):
+            if i < len(layer_list) - 1:
+                x = torch.relu(layer(x))
+            else:
+                x = torch.tanh(layer(x)) # just the last layer apply tanh
         return x
 
 class Critic(nn.Module):
@@ -107,7 +126,6 @@ class Critic(nn.Module):
                                 )
 
         linear_outp_size = convh*convw*self.alexnet_model.out_channel
-
         self.linear = nn.Linear(linear_outp_size + action_space, 1)
 
     def forward(self, state, action):
@@ -116,13 +134,11 @@ class Critic(nn.Module):
         x = self.linear(x)
         return x
 
-
-
 class DDPG:
 
     def __init__(self, action_space, h_image_in, w_image_in, actor_lr = 1e-3, critic_lr=1e-3, optim="SGD",
                 batch_size=10, gamma=0.99,  tau=1e-2, type_RM="sequential", max_memory_size=50000,
-                device='cpu', rw_weights=None):
+                device='cpu', rw_weights=None, actor_linear_layers=[]):
 
         self.num_actions = action_space.shape[0]
         self.action_min, self.action_max = action_space.low, action_space.high
@@ -135,7 +151,7 @@ class DDPG:
         self.rw_weights = rw_weights
 
         # Networks
-        self.actor = Actor(self.num_actions, h_image_in, w_image_in)
+        self.actor = Actor(self.num_actions, h_image_in, w_image_in, linear_layers=actor_linear_layers)
         self.actor_target = Actor(self.num_actions, h_image_in, w_image_in)
 
         self.critic = Critic(self.num_actions, h_image_in, w_image_in)

@@ -5,6 +5,7 @@ import argparse
 import pprint
 import signal
 import sys
+import time
 import torch
 
 from config.config import config, update_config, check_config
@@ -13,6 +14,7 @@ from Env.CarlaEnv import CarlaEnv
 from models.init_model import init_model
 from rewards_fns import reward_functions, weighted_rw_fn
 from utils.preprocess import create_encode_state_fn
+from utils.checkpointing import save_checkpoint, load_checkpoint
 
 def signal_handler(sig, frame):
     print('You pressed Ctrl+C!')
@@ -37,8 +39,7 @@ def train():
         torch.cuda.manual_seed(config.seed)
 
     # Setup the paths and dirs
-    save_path = os.path.join(config.model_logs.root_dir, config.model.type)
-
+    save_path = os.path.join(config.model_logs.root_dir, config.model.type) # model_logs/model_type
 
     if not os.path.exists(save_path):
         os.makedirs(save_path)
@@ -46,8 +47,16 @@ def train():
 
     pprint.pprint(config)
 
+    exp_name = time.strftime('%Y-%m-%d-%H-%M') # Each experiment call as the date of training
+
+    # setup a particular folder of experiment
+    os.makedirs(os.path.join(save_path, exp_name), exist_ok=True)
+
+    # set a new particular save path
+    particular_save_path = os.path.join(save_path, exp_name)
+
     # Setup the logger
-    logger = init_logger(save_path, config.run_id)
+    logger = init_logger(particular_save_path, exp_name)
     logger.info(f"training config: {pprint.pformat(config)}")
 
     # Set which reward function you will use
@@ -96,8 +105,14 @@ def train():
     rewards = []
     avg_rewards = []
 
+    # load checkpoint if is necessary
+    model_dicts, optimizers_dicts, rewards, start_episode = load_checkpoint(logger,
+                                                                            config.train.load_checkpoint_name,
+                                                                            config.train.episode_loading)
+
+
     try:
-        for episode in range(config.train.episodes):
+        for episode in range(start_episode, config.train.episodes):
 
             state, terminal_state, episode_reward = env.reset(), False, 0
             while not terminal_state:
@@ -136,10 +151,19 @@ def train():
 
             rewards.append(episode_reward)
 
+            if episode%config.train.checkpoint_every==0:
+                models_dicts = (model.actor.state_dict(),
+                          model.actor_target.state_dict(),
+                          model.critic.state_dict(),
+                          model.critic_target.state_dict())
+                optimizers_dicts = (model.actor_optimizer.state_dict(),
+                              model.critic_optimizer.state_dict())
+                save_checkpoint(models_dicts, optimizers_dicts, rewards, episode, exp_name, particular_save_path)
+
     except KeyboardInterrupt:
         pass
     finally:
-        np.save("rewards.npy", np.array(rewards))
+        np.save(os.path.join(particular_save_path, "rewards.npy"), np.array(rewards))
         env.close()
 
 def main():
