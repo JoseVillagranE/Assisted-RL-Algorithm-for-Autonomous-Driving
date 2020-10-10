@@ -3,9 +3,12 @@ run_id: '1'
 seed: 1
 
 train:
-  checkpoint_every: 0
+  checkpoint_every: 2
   episodes: 100
   device: "cpu"
+  actor_lr: 0.01
+  critic_lr: 0.01
+  type_RM: "random"
 
 
 agent:
@@ -24,6 +27,18 @@ exo_agents:
 model:
   type: "DDPG"
   id: '0'
+
+reward_fn:
+  normalize: True
+  weight_collision_pedestrian: 0
+  weight_collision_vehicle: 0
+  weight_collision_other: 0
+  weight_final_goal: 1
+  weight_speed_limit: 1
+  weight_route_al: 0
+  weight_centralization: 0
+  weight_distance_to_goal: 1
+
 
 vis:
   render: False

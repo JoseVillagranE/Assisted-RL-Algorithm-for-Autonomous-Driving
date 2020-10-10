@@ -85,14 +85,14 @@ class Actor(nn.Module):
             for i in range(len(linear_layers) - 1):
                 self.linear_layer_list.append(nn.Linear(linear_layers[i], linear_layers[i+1]))
 
-            self.linear_layer_list.append(nn.Linear(linear_layers[-1], num_actions)
+            self.linear_layer_list.append(nn.Linear(linear_layers[-1], num_actions))
 
         else:
             self.linear_layer_list.append(nn.Linear(linear_outp_size, num_actions))
 
     def forward(self, state):
         x = self.alexnet_model(state)
-        x = forward_linear(x)
+        x = self.forward_linear(x, self.linear_layer_list)
         return x
 
     @staticmethod
@@ -152,7 +152,7 @@ class DDPG:
 
         # Networks
         self.actor = Actor(self.num_actions, h_image_in, w_image_in, linear_layers=actor_linear_layers)
-        self.actor_target = Actor(self.num_actions, h_image_in, w_image_in)
+        self.actor_target = Actor(self.num_actions, h_image_in, w_image_in, linear_layers=actor_linear_layers)
 
         self.critic = Critic(self.num_actions, h_image_in, w_image_in)
         self.critic_target = Critic(self.num_actions, h_image_in, w_image_in)
@@ -251,6 +251,14 @@ class DDPG:
 
         # Back to cpu
         self.actor = self.actor.cpu()
+
+    def load_state_dict(self, models_state_dict, optimizer_state_dict):
+        self.actor.load_state_dict(models_state_dict[0])
+        self.actor_target.load_state_dict(models_state_dict[1])
+        self.critic.load_state_dict(models_state_dict[2])
+        self.critic_target.load_state_dict(models_state_dict[3])
+        self.actor_optimizer.load_state_dict(optimizer_state_dict[0])
+        self.critic_optimizer.load_state_dict(optimizer_state_dict[1])
 
 
 if __name__ == "__main__":

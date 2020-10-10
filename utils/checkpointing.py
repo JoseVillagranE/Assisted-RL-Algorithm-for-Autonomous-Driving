@@ -20,9 +20,9 @@ def save_checkpoint(models_dicts, optimizers_dicts, episode_reward, episode, nam
                 "models_state_dict": models_dicts,
                 "optimizers_dict": optimizers_dicts,
                 "list_episodes_reward": episode_reward,
-                "name_exp" = name_exp
+                "name_exp": name_exp
     }
-    file_name = "model_epi-" + str(episode) + ".pth.tar"
+    file_name = name_exp + "model_epi-" + str(episode) + ".pth.tar"
     torch.save(save_dict, os.path.join(save_path, file_name))
 
 
@@ -41,8 +41,8 @@ def load_checkpoint(logger, load_path, episode_loading=0):
     models_dicts = []
     optimizers_dicts = []
     file_path = ""
-    list_files = glob.glob(load_path, "*.pth.tar")
-    if list_files > 0:
+    if load_path:
+        list_files = glob.glob(os.path.join(load_path,"*.pth.tar"))
         if episode_loading == 0:
             list_files.sort()
             file_path = list_files[-1]
@@ -53,14 +53,19 @@ def load_checkpoint(logger, load_path, episode_loading=0):
             checkpoint = torch.load(file_path)
             episode = checkpoint["episode"]
             list_episodes_reward = checkpoint["list_episodes_reward"]
-            models_dicts = check
+            models_dicts = checkpoint["models_state_dict"]
+            optimizers_dicts = checkpoint["optimizers_dict"]
+            name_exp = checkpoint["name_exp"]
 
             logger.info("*"*60)
             logger.info("*"*60)
-            logger.info(f"Checkpoint experiment from experiment: {checkpoint["name_exp"]}")
+            logger.info(f"Checkpoint experiment from experiment: {name_exp}")
             logger.info("*"*60)
             logger.info("*"*60)
         else:
             raise FileNotFoundError("Cant find the filepath given")
+
+    else:
+        print("Learning from scratch!")
 
     return models_dicts, optimizers_dicts, list_episodes_reward, episode

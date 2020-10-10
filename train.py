@@ -99,17 +99,20 @@ def train():
                         type_RM = config.train.type_RM,
                         max_memory_size = config.train.max_memory_size,
                         device = config.train.device,
-                        rw_weights=rw_weights if config.reward_fn.normalize else None)
+                        rw_weights=rw_weights if config.reward_fn.normalize else None,
+                        actor_linear_layers=config.train.actor_layers)
 
     # Stats
     rewards = []
-    avg_rewards = []
 
     # load checkpoint if is necessary
     model_dicts, optimizers_dicts, rewards, start_episode = load_checkpoint(logger,
                                                                             config.train.load_checkpoint_name,
                                                                             config.train.episode_loading)
 
+
+    if len(model_dicts) > 0: # And the experience of Replay buffer ?
+        model.load_state_dict(model_dicts, optimizers_dicts)
 
     try:
         for episode in range(start_episode, config.train.episodes):
@@ -151,7 +154,7 @@ def train():
 
             rewards.append(episode_reward)
 
-            if episode%config.train.checkpoint_every==0:
+            if config.train.checkpoint_every > 0 and (episode + 1)%config.train.checkpoint_every==0:
                 models_dicts = (model.actor.state_dict(),
                           model.actor_target.state_dict(),
                           model.critic.state_dict(),
@@ -164,6 +167,16 @@ def train():
         pass
     finally:
         np.save(os.path.join(particular_save_path, "rewards.npy"), np.array(rewards))
+
+        # Last checkpoint to save
+        models_dicts = (model.actor.state_dict(),
+                  model.actor_target.state_dict(),
+                  model.critic.state_dict(),
+                  model.critic_target.state_dict())
+        optimizers_dicts = (model.actor_optimizer.state_dict(),
+                      model.critic_optimizer.state_dict())
+
+        save_checkpoint(models_dicts, optimizers_dicts, rewards, episode, exp_name, particular_save_path)
         env.close()
 
 def main():
@@ -181,6 +194,7 @@ def main():
 
     # check some condition and variables
     assert config.train.episodes > 0, "episodes should be more than zero"
+    assert config.train.checkpoint_every != 0, "checkpoint_every variable cant be zero"
 
     try:
         train()
