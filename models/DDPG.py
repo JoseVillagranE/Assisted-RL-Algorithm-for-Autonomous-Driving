@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-from .ExperienceReplayMemory import SequentialDequeMemory, RandomDequeMemory
+from .ExperienceReplayMemory import SequentialDequeMemory, RandomDequeMemory, PrioritizedDequeMemory
 from .AlexNet import alexnet, AlexNet
 import gym
 
@@ -137,7 +137,7 @@ class Critic(nn.Module):
 class DDPG:
 
     def __init__(self, action_space, h_image_in, w_image_in, actor_lr = 1e-3, critic_lr=1e-3, optim="SGD",
-                batch_size=10, gamma=0.99,  tau=1e-2, type_RM="sequential", max_memory_size=50000,
+                batch_size=10, gamma=0.99,  tau=1e-2, alpha=0.7, beta=0.5, type_RM="sequential", max_memory_size=50000,
                 device='cpu', rw_weights=None, actor_linear_layers=[]):
 
         self.num_actions = action_space.shape[0]
@@ -173,6 +173,11 @@ class DDPG:
         elif type_RM == "random":
             self.replay_memory = RandomDequeMemory(queue_capacity=max_memory_size,
                                                     rw_weights=rw_weights)
+        elif type_RM == "prioritized":
+            self.replay_memory = PrioritizedDequeMemory(queue_capacity=max_memory_size,
+                                                        alpha = alpha,
+                                                        beta = beta,
+                                                        rw_weights=rw_weights)
 
 
 
@@ -193,11 +198,6 @@ class DDPG:
         # Device
         self.device = torch.device(device)
 
-        # Pass models to gpu except actor network
-        self.actor_target = self.actor_target.to(self.device)
-        self.critic = self.critic.to(self.device)
-        self.critic_target = self.critic_target.to(self.device)
-
     def predict(self, state, step):
 
         state = Variable(state.float().unsqueeze(0))
@@ -210,17 +210,30 @@ class DDPG:
 
     def update(self):
 
-        if self.type_RM == "random":
-            if self.replay_memory.get_memory_size() < 64:
+        if self.type_RM in ["random", "prioritized"] :
+            if self.replay_memory.get_memory_size() < self.batch_size:
                 return
 
-        states, actions, rewards, next_states, done = self.replay_memory.get_batch_for_replay()
+        if self.type_RM in ["sequential", "random"]:
+            states, actions, rewards, next_states, done = self.replay_memory.get_batch_for_replay()
+        elif self.type_RM in ["prioritized"]:
+            states, actions, rewards, next_states, done, importance_sampling_weight = \
+                    self.replay_memory.get_batch_for_replay(self.actor_target,
+                                                            self.critic,
+                                                            self.critic_target,
+                                                            self.gamma,
+                                                            self.batch_size)
+            importance_sampling_weight = torch.FloatTensor(importance_sampling_weight).to(self.device)
+
         states = torch.cat(states, dim=0).to(self.device)
         actions = torch.FloatTensor(actions).to(self.device)
         rewards = torch.FloatTensor(rewards).to(self.device)
         next_states = torch.cat(next_states, dim=0).to(self.device)
 
         self.actor = self.actor.to(self.device) # Because is used for predict actions
+        self.actor_target = self.actor_target.to(self.device)
+        self.critic = self.critic.to(self.device)
+        self.critic_target = self.critic_target.to(self.device)
 
         if actions.dim() < 2:
             actions = actions.unsqueeze(1)
@@ -229,7 +242,12 @@ class DDPG:
         next_Q = self.critic_target(next_states, next_actions.detach())
 
         Q_prime = rewards.unsqueeze(1) + self.gamma*next_Q
-        critic_loss = self.critic_criterion(Qvals, Q_prime)
+
+        critic_loss = 0
+        if self.type_RM in ["sequential", "random"]:
+            critic_loss = self.critic_criterion(Qvals, Q_prime)
+        elif self.type_RM in ["prioritized"]:
+            critic_loss = (importance_sampling_weight*(Qvals - Q_prime)**2).mean()
 
         actor_loss = -1*self.critic(states, self.actor(states)).mean()
 
@@ -251,6 +269,9 @@ class DDPG:
 
         # Back to cpu
         self.actor = self.actor.cpu()
+        self.actor_target = self.actor_target.cpu()
+        self.critic = self.critic.cpu()
+        self.critic_target = self.critic_target.cpu()
 
     def load_state_dict(self, models_state_dict, optimizer_state_dict):
         self.actor.load_state_dict(models_state_dict[0])

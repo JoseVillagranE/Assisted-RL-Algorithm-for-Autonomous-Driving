@@ -8,7 +8,7 @@ train:
   device: "cpu"
   actor_lr: 0.01
   critic_lr: 0.01
-  type_RM: "random"
+  type_RM: "prioritized"
 
 
 agent:

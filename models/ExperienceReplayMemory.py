@@ -9,6 +9,7 @@ import random
 from collections import deque
 from sklearn.preprocessing import normalize
 import numpy as np
+import torch
 
 
 class ExperienceReplayMemory:
@@ -114,13 +115,73 @@ class RandomDequeMemory(ExperienceReplayMemory):
             done_batch.append(done)
             reward_batch.append(reward)
 
-        if isinstance(reward[0], tuple):
-            list_rw_i = list(zip(*reward_batch))
-            reward_batch = list(map(lambda x: sum(map(lambda y: (y - min(x)) / (max(x) - min(x) + 1e-30), x)), list_rw_i))
+        if isinstance(reward_batch[0], tuple):
+            list_rw_i = list(zip(*reward_batch)) # sort in order of type reward
+            reward_batch = [list(map(lambda y: (y - min(x)) / (max(x) - min(x) + 1e-30), x)) for x in list_rw_i] # normalize
+            reward_batch = list(zip(*reward_batch))
 
             if self.rw_weights is not None:
                 reward_batch = np.multiply(np.array(reward_batch), self.rw_weights).sum(axis=1)
         return state_batch, action_batch, reward_batch, next_state_batch, done_batch
+
+    def get_memory_size(self):
+        return len(self.memory)
+
+    def delete_memory(self):
+        pass
+
+# Prioritized Experience Replay (Schaul et al., 2015)
+class PrioritizedDequeMemory(ExperienceReplayMemory):
+
+    def __init__(self, queue_capacity=2000, alpha = 0.7, beta=0.5, rw_weights=None):
+
+        self.queue_capacity = queue_capacity
+        self.memory = deque(maxlen=self.queue_capacity)
+        self.priority = deque(maxlen=self.queue_capacity)
+        self.alpha = alpha
+        self.beta = beta
+        self.rw_weights = rw_weights
+
+    def add_to_memory(self, experience_tuple):
+        self.memory.append(experience_tuple)
+        self.priority.append(max(self.priority) if len(self.priority) > 0 else 1) # paper said that you have to restart priority
+
+    def get_batch_for_replay(self, actor_target, critic, critic_target, gamma, batch_size=64):
+
+        state_batch, action_batch, reward_batch, next_state_batch, done_batch = [], [], [], [], []
+        importance_sampling_weight = []
+
+        for _ in range(batch_size):
+            priority_normalized = np.array(self.priority) / sum(self.priority)
+            j = random.choices(range(len(self.memory)), weights=priority_normalized, k=1)[0]# return a list
+            state, action, reward, next_state, done = self.memory[j]
+            state_batch.append(state)
+            action_batch.append(action)
+            next_state_batch.append(next_state)
+            done_batch.append(done)
+            reward_batch.append(reward)
+
+            # compute importance sampling weight
+            w_j = 1 / ((self.queue_capacity*priority_normalized[j])**self.beta) # in paper add max w_i
+            importance_sampling_weight.append(w_j)
+
+            # Calculate TD-error
+            state = torch.FloatTensor(state)
+            action = torch.FloatTensor(action).unsqueeze(0)
+            next_state = torch.FloatTensor(next_state)
+
+            # mm rethink this sum of rewards
+            delta = sum(reward) + gamma*critic_target(next_state, actor_target(next_state)).detach().numpy().squeeze() - critic(state, action).detach().numpy().squeeze()
+            # update
+            self.priority[j] = abs(delta)
+
+        if isinstance(reward_batch[0], tuple):
+            list_rw_i = list(zip(*reward_batch)) # sort in order of type reward
+            reward_batch = [list(map(lambda y: (y - min(x)) / (max(x) - min(x) + 1e-30), x)) for x in list_rw_i] # normalize
+            reward_batch = list(zip(*reward_batch))
+            if self.rw_weights is not None:
+                reward_batch = np.multiply(np.array(reward_batch), self.rw_weights).sum(axis=1)
+        return state_batch, action_batch, reward_batch, next_state_batch, done_batch, importance_sampling_weight
 
     def get_memory_size(self):
         return len(self.memory)
@@ -142,6 +203,17 @@ if __name__ == "__main__":
 
     ##################################################
 
-    l = [[1, 2, 3, 4, 8], [1, 1, 1, 9], [1, 1, 1, 1, 1]]
-    norm_l = list(map(lambda x: sum(map(lambda y: (y - min(x)) / (max(x) - min(x) + 1e-30), x)), l))
+    l = [[1, 2, 3, 4, 8], [1, 1, 1, 1, 9], [1, 1, 1, 1, 1]]
+    # norm_l = list(map(lambda x: sum(map(lambda y: (y - min(x)) / (max(x) - min(x) + 1e-30), x)), l))
+    norm_l = [list(map(lambda y: (y - min(x)) / (max(x) - min(x) + 1e-30), x)) for x in l]
     print(norm_l)
+    print(list(zip(*norm_l)))
+
+    ###################################################
+
+    # PRB = PrioritizedDequeMemory(10, rw_weights=[1,1,2])
+    # RB.add_to_memory((1, 1, (1,2,3,4), 2, False))
+    # RB.add_to_memory((2, 4, (1,2,2,3), 3, False))
+    # RB.add_to_memory((3, 1, (1,2,3,1), 2, False))
+    # RB.add_to_memory((2, 3, (3,2,3,4), 1, True))
+    # state, action, reward, next_state, done = RB.get_batch_for_replay(4)

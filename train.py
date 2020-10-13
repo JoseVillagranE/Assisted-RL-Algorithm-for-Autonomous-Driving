@@ -96,6 +96,8 @@ def train():
                         batch_size = config.train.batch_size,
                         gamma = config.train.gamma,
                         tau = config.train.tau,
+                        alpha = config.train.alpha,
+                        beta = config.train.beta, 
                         type_RM = config.train.type_RM,
                         max_memory_size = config.train.max_memory_size,
                         device = config.train.device,
