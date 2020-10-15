@@ -97,7 +97,7 @@ def train():
                         gamma = config.train.gamma,
                         tau = config.train.tau,
                         alpha = config.train.alpha,
-                        beta = config.train.beta, 
+                        beta = config.train.beta,
                         type_RM = config.train.type_RM,
                         max_memory_size = config.train.max_memory_size,
                         device = config.train.device,
@@ -106,6 +106,7 @@ def train():
 
     # Stats
     rewards = []
+    test_rewards = []
 
     # load checkpoint if is necessary
     model_dicts, optimizers_dicts, rewards, start_episode = load_checkpoint(logger,
@@ -116,6 +117,7 @@ def train():
     if len(model_dicts) > 0: # And the experience of Replay buffer ?
         model.load_state_dict(model_dicts, optimizers_dicts)
 
+    episode_test = 0
     try:
         for episode in range(start_episode, config.train.episodes):
 
@@ -126,7 +128,6 @@ def train():
                     if env.controller.parse_events():
                         return
                     action = model.predict(state, step) # return a np. action
-                    print(action)
                     next_state, reward, terminal_state, info = env.step(action)
                     if info["closed"] == True:
                         exit(0)
@@ -150,9 +151,37 @@ def train():
                             logger.info(f"episode: {episode}, reward: {np.round(episode_reward, decimals=2)}, terminal reason: {env.extra_info[-1]}")
                         break
 
-                model.update()
+                if episode > config.train.start_to_update:
+                    model.update()
                 if config.train.type_RM == "sequential" and config.model.type=="DDPG":
                     model.replay_memory.delete_memory()
+
+
+            if episode % config.test.every == 0 and episode > 0:
+                state, terminal_state, episode_reward_test = env.reset(), False, 0
+                print("Running a test episode")
+                for step in range(config.test.steps):
+                    if env.controller.parse_events():
+                        return
+                    action = model.predict(state, step, mode="testing") # return a np. action
+                    print(action)
+                    next_state, reward, terminal_state, info = env.step(action)
+                    if info["closed"] == True:
+                        exit(0)
+                    weighted_rw = weighted_rw_fn(reward, rw_weights)
+                    episode_reward_test += weighted_rw
+                    state = next_state
+                    if config.vis.render:
+                        env.render()
+
+                    if terminal_state:
+                        if len(env.extra_info) > 0:
+                            print(f"episode_test: {episode_test}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}")# print the most recent terminal reason
+                            logger.info(f"episode_test: {episode_test}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}")
+                        break
+
+                test_rewards.append(episode_reward_test)
+
 
             rewards.append(episode_reward)
 
@@ -169,6 +198,7 @@ def train():
         pass
     finally:
         np.save(os.path.join(particular_save_path, "rewards.npy"), np.array(rewards))
+        np.save(os.path.join(particular_save_path, "test_rewards.npy"), np.array(test_rewards))
 
         # Last checkpoint to save
         models_dicts = (model.actor.state_dict(),

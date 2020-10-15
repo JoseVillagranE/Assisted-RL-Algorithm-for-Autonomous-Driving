@@ -93,20 +93,21 @@ class SequentialDequeMemory:
 
 class RandomDequeMemory(ExperienceReplayMemory):
 
-    def __init__(self, queue_capacity=2000, rw_weights=None):
+    def __init__(self, queue_capacity=2000, rw_weights=None, batch_size=64):
 
         self.queue_capacity = queue_capacity
         self.memory = deque(maxlen=self.queue_capacity)
         self.rw_weights = rw_weights
+        self.batch_size = batch_size
 
     def add_to_memory(self, experience_tuple):
         self.memory.append(experience_tuple)
 
-    def get_batch_for_replay(self, batch_size=64):
+    def get_batch_for_replay(self):
 
         state_batch, action_batch, reward_batch, next_state_batch, done_batch = [], [], [], [], []
 
-        batch = random.sample(self.memory, batch_size)
+        batch = random.sample(self.memory, self.batch_size)
         for experience in batch:
             state, action, reward, next_state, done = experience
             state_batch.append(state)
@@ -133,7 +134,7 @@ class RandomDequeMemory(ExperienceReplayMemory):
 # Prioritized Experience Replay (Schaul et al., 2015)
 class PrioritizedDequeMemory(ExperienceReplayMemory):
 
-    def __init__(self, queue_capacity=2000, alpha = 0.7, beta=0.5, rw_weights=None):
+    def __init__(self, queue_capacity=2000, alpha = 0.7, beta=0.5, rw_weights=None, batch_size=64):
 
         self.queue_capacity = queue_capacity
         self.memory = deque(maxlen=self.queue_capacity)
@@ -141,17 +142,18 @@ class PrioritizedDequeMemory(ExperienceReplayMemory):
         self.alpha = alpha
         self.beta = beta
         self.rw_weights = rw_weights
+        self.batch_size = batch_size
 
     def add_to_memory(self, experience_tuple):
         self.memory.append(experience_tuple)
         self.priority.append(max(self.priority) if len(self.priority) > 0 else 1) # paper said that you have to restart priority
 
-    def get_batch_for_replay(self, actor_target, critic, critic_target, gamma, batch_size=64):
+    def get_batch_for_replay(self, actor_target, critic, critic_target, gamma):
 
         state_batch, action_batch, reward_batch, next_state_batch, done_batch = [], [], [], [], []
         importance_sampling_weight = []
 
-        for _ in range(batch_size):
+        for _ in range(self.batch_size):
             priority_normalized = np.array(self.priority) / sum(self.priority)
             j = random.choices(range(len(self.memory)), weights=priority_normalized, k=1)[0]# return a list
             state, action, reward, next_state, done = self.memory[j]

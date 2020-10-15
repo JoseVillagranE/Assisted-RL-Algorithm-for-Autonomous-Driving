@@ -14,8 +14,8 @@ def conv2d_size_out(size, kernels_size, strides, paddings, dilations):
 
 class OUNoise(object):
 
-    def __init__(self, action_space, mu=0.0, theta=0.4, max_sigma=0.4, min_sigma=0.3,
-                decay_period=100):
+    def __init__(self, action_space, mu=0.0, theta=0.15, max_sigma=0.2, min_sigma=0.2,
+                decay_period=10000):
 
         self.mu = mu
         self.theta = theta
@@ -24,8 +24,6 @@ class OUNoise(object):
         self.min_sigma = min_sigma
         self.decay_period = decay_period
         self.action_dim = action_space.shape[0]
-        self.low = action_space.low
-        self.high = action_space.high
         self.reset()
 
     def reset(self):
@@ -40,7 +38,7 @@ class OUNoise(object):
     def get_action(self, action, t=0):
         ou_state = self.evolve_state()
         self.sigma = self.max_sigma - (self.max_sigma - self.min_sigma)*min(1.0, t/self.decay_period)
-        return  np.clip(action+ou_state, self.low, self.high)
+        return  action+ou_state
 
 class NormalizedEnv(gym.ActionWrapper):
 
@@ -147,8 +145,10 @@ class DDPG:
         self.tau = tau
         self.max_memory_size = max_memory_size
         self.batch_size = batch_size
-        self.std = 0.5
+        self.std = 0.1
         self.rw_weights = rw_weights
+        self.low = action_space.low
+        self.high = action_space.high
 
         # Networks
         self.actor = Actor(self.num_actions, h_image_in, w_image_in, linear_layers=actor_linear_layers)
@@ -172,12 +172,14 @@ class DDPG:
             self.replay_memory = SequentialDequeMemory(rw_weights)
         elif type_RM == "random":
             self.replay_memory = RandomDequeMemory(queue_capacity=max_memory_size,
-                                                    rw_weights=rw_weights)
+                                                    rw_weights=rw_weights,
+                                                    batch_size=batch_size)
         elif type_RM == "prioritized":
             self.replay_memory = PrioritizedDequeMemory(queue_capacity=max_memory_size,
                                                         alpha = alpha,
                                                         beta = beta,
-                                                        rw_weights=rw_weights)
+                                                        rw_weights=rw_weights,
+                                                        batch_size=batch_size)
 
 
 
@@ -198,15 +200,16 @@ class DDPG:
         # Device
         self.device = torch.device(device)
 
-    def predict(self, state, step):
+    def predict(self, state, step, mode="training"):
 
         state = Variable(state.float().unsqueeze(0))
         action = self.actor(state)
         action = action.detach().numpy()[0]
-        action = self.ounoise.get_action(action, step)
-        # action[0] = np.clip(np.random.normal(action[0], self.std, 1), -1, 1)
-        # action[1] = np.clip(np.random.normal(action[1], self.std, 1), 0, 1)
-        return action
+        if mode=="training":
+            action = self.ounoise.get_action(action, step)
+            # action[0] = np.clip(np.random.normal(action[0], self.std, 1), -1, 1)
+            # action[1] = np.clip(np.random.normal(action[1], self.std, 1), 0, 1)
+        return np.clip(action, self.low, self.high)
 
     def update(self):
 
@@ -221,8 +224,7 @@ class DDPG:
                     self.replay_memory.get_batch_for_replay(self.actor_target,
                                                             self.critic,
                                                             self.critic_target,
-                                                            self.gamma,
-                                                            self.batch_size)
+                                                            self.gamma)
             importance_sampling_weight = torch.FloatTensor(importance_sampling_weight).to(self.device)
 
         states = torch.cat(states, dim=0).to(self.device)

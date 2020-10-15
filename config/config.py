@@ -45,7 +45,7 @@ config.simulation.sleep = 20
 config.simulation.timeout = 4.0
 config.simulation.action_smoothing = 0.8
 config.simulation.view_res = (640, 480)
-config.simulation.obs_res = (240, 240)
+config.simulation.obs_res = (640, 480)
 config.simulation.fps = 10
 config.simulation.host = "localhost"
 config.simulation.port = 2000 # Default of world-port CARLA
@@ -64,7 +64,7 @@ config.train.actor_lr = 1e-3
 config.train.critic_lr = 1e-3
 config.train.max_memory_size = 1000000 # 1e6
 config.train.tau = 1e-2
-config.train.gamma = 0.99
+config.train.gamma = 0.9
 config.train.alpha = 0.7 # Prioritized Experience Replay
 config.train.beta = 0.5 # Prioritized Experience Replay
 config.train.device = "cpu"
@@ -72,6 +72,7 @@ config.train.type_RM = "sequential"
 config.train.actor_layers = [512]
 config.train.load_checkpoint_name = ""
 config.train.episode_loading = 0
+config.train.start_to_update = 0
 
 # Agent Defaults (Single agent)
 config.agent = edict()
@@ -141,8 +142,8 @@ config.model.id = 0
 
 # Preprocess Defaults
 config.preprocess = edict()
-config.preprocess.Resize = 256
-config.preprocess.CenterCrop = 224
+config.preprocess.Resize = 320
+config.preprocess.CenterCrop = 320
 config.preprocess.mean = [0.485, 0.456, 0.406]
 config.preprocess.std = [0.229, 0.224, 0.225]
 
@@ -163,6 +164,11 @@ config.reward_fn.weight_speed_limit = 5
 config.reward_fn.weight_route_al = 5
 config.reward_fn.weight_centralization = 5
 config.reward_fn.weight_distance_to_goal = 5
+
+# Test Defaults
+config.test = edict()
+config.test.every = 10
+config.test.steps = 100000
 
 
 # Visualisation Defaults
