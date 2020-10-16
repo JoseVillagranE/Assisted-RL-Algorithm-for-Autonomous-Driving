@@ -46,6 +46,18 @@ class KeyboardControl(object):
         return (key == K_ESCAPE) or (key == K_q and pygame.key.get_mods() & KMOD_CTRL)
 
 
+class NormalizedEnv(gym.ActionWrapper):
+
+    def action(self, action):
+        act_k = (self.action_space.high - self.action_space.low)/ 2.
+        act_b = (self.action_space.high + self.action_space.low)/ 2.
+        return act_k*action + act_b
+
+    def reverse_action(self, action):
+        act_k_inv = 2./(self.action_space.high - self.action_space.low)
+        act_b = (self.action_space.high + self.action_space.low)/ 2.
+        return act_k_inv*(action - act_b)
+
 class CarlaEnv(gym.Env):
 
     metadata = {"render.modes": ["human", "rgb_array", "rgb_array_no_hud", "state_pixels"]}
@@ -245,10 +257,8 @@ class CarlaEnv(gym.Env):
 
         if action is not None:
             steer, throttle = [float(a) for a in action]
-            # self.agent.control.steer = self.agent.control.steer*self.action_smoothing + steer *(1.0 - self.action_smoothing)
-            # self.agent.control.throttle = self.agent.control.throttle*self.action_smoothing + throttle *(1.0 - self.action_smoothing)
-            self.agent.control.steer = steer
-            self.agent.control.throttle = throttle
+            self.agent.control.steer = self.agent.control.steer*self.action_smoothing + steer *(1.0 - self.action_smoothing)
+            self.agent.control.throttle = self.agent.control.throttle*self.action_smoothing + throttle *(1.0 - self.action_smoothing)
         if self.is_exo_vehicle:
             # Always exo agent have action
             next_wp = self.exo_vehicle.get_next_wp()
@@ -436,15 +446,6 @@ class CarlaEnv(gym.Env):
                 w1.transform.location,
                 thickness=0.1, color=carla.Color(255, 0, 0),
                 life_time=life_time) # Fix the color specified
-
-
-
-
-
-
-
-
-
     def close(self):
         pygame.quit()
         if self.carla_process:

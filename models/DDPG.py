@@ -15,7 +15,7 @@ def conv2d_size_out(size, kernels_size, strides, paddings, dilations):
 class OUNoise(object):
 
     def __init__(self, action_space, mu=0.0, theta=0.15, max_sigma=0.2, min_sigma=0.2,
-                decay_period=10000):
+                decay_period=100):
 
         self.mu = mu
         self.theta = theta
@@ -39,18 +39,6 @@ class OUNoise(object):
         ou_state = self.evolve_state()
         self.sigma = self.max_sigma - (self.max_sigma - self.min_sigma)*min(1.0, t/self.decay_period)
         return  action+ou_state
-
-class NormalizedEnv(gym.ActionWrapper):
-
-    def action(self, action):
-        act_k = (self.action_space.high - self.action_space.low)/ 2.
-        act_b = (self.action_space.high + self.action_space.low)/ 2.
-        return act_k*action + act_b
-
-    def reverse_action(self, action):
-        act_k_inv = 2./(self.action_space.high - self.action_space.low)
-        act_b = (self.action_space.high + self.action_space.low)/ 2.
-        return act_k_inv*(action - act_b)
 
 class Actor(nn.Module):
 
@@ -205,8 +193,8 @@ class DDPG:
         state = Variable(state.float().unsqueeze(0))
         action = self.actor(state)
         action = action.detach().numpy()[0]
-        if mode=="training":
-            action = self.ounoise.get_action(action, step)
+        # if mode=="training":
+        #     action = self.ounoise.get_action(action, step)
             # action[0] = np.clip(np.random.normal(action[0], self.std, 1), -1, 1)
             # action[1] = np.clip(np.random.normal(action[1], self.std, 1), 0, 1)
         return np.clip(action, self.low, self.high)

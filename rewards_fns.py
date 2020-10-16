@@ -88,10 +88,10 @@ def reward_fn(env):
     angle = angle_diff(fwd, wp_fwd)
 
     speed_kmh = 3.6*env.agent.get_speed()
-    if speed_kmh < config.reward_fn.min_speed:                     # When speed is in [0, min_speed] range
-        speed_reward = speed_kmh     # Linearly interpolate [0, 1] over [0, min_speed]
-    # elif speed_kmh > target_speed:                #
-    #     speed_reward = 1.0 - (speed_kmh - target_speed) / (max_speed - target_speed)
+    if speed_kmh < config.reward_fn.min_speed:
+        speed_reward = speed_kmh
+    elif speed_kmh < config.reward_fn.max_speed and speed_kmh > config.reward_fn.min_speed:
+        speed_reward = speed_kmh
     else:
         speed_reward = config.reward_fn.max_speed - speed_kmh
 

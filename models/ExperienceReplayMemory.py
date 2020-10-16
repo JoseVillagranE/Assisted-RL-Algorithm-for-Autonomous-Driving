@@ -154,7 +154,7 @@ class PrioritizedDequeMemory(ExperienceReplayMemory):
         importance_sampling_weight = []
 
         for _ in range(self.batch_size):
-            priority_normalized = np.array(self.priority) / sum(self.priority)
+            priority_normalized = np.power(np.array(self.priority), self.alpha) / np.sum(np.power(np.array(self.priority), self.alpha))
             j = random.choices(range(len(self.memory)), weights=priority_normalized, k=1)[0]# return a list
             state, action, reward, next_state, done = self.memory[j]
             state_batch.append(state)
@@ -173,7 +173,10 @@ class PrioritizedDequeMemory(ExperienceReplayMemory):
             next_state = torch.FloatTensor(next_state)
 
             # mm rethink this sum of rewards
-            delta = sum(reward) + gamma*critic_target(next_state, actor_target(next_state)).detach().numpy().squeeze() - critic(state, action).detach().numpy().squeeze()
+            if isinstance(reward_batch[0], tuple):
+                delta = sum(reward) + gamma*critic_target(next_state, actor_target(next_state)).detach().numpy().squeeze() - critic(state, action).detach().numpy().squeeze()
+            else:
+                delta = reward + gamma*critic_target(next_state, actor_target(next_state)).detach().numpy().squeeze() - critic(state, action).detach().numpy().squeeze()
             # update
             self.priority[j] = abs(delta)
 

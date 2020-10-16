@@ -10,7 +10,7 @@ import torch
 
 from config.config import config, update_config, check_config
 from utils.logger import init_logger
-from Env.CarlaEnv import CarlaEnv
+from Env.CarlaEnv import CarlaEnv, NormalizedEnv
 from models.init_model import init_model
 from rewards_fns import reward_functions, weighted_rw_fn
 from utils.preprocess import create_encode_state_fn
@@ -69,8 +69,10 @@ def train():
                                             config.preprocess.std)
 
     print("Creating Environment")
-    env = CarlaEnv(reward_fn=reward_functions[reward_fn],
-                    encode_state_fn=encode_state_fn)
+    env = NormalizedEnv(CarlaEnv(reward_fn=reward_functions[reward_fn],
+                    encode_state_fn=encode_state_fn))
+
+    # normalize actions
 
     if isinstance(config.seed, int):
         env.seed(config.seed)
@@ -120,10 +122,8 @@ def train():
     episode_test = 0
     try:
         for episode in range(start_episode, config.train.episodes):
-
             state, terminal_state, episode_reward = env.reset(), False, 0
             while not terminal_state:
-
                 for step in range(config.train.steps):
                     if env.controller.parse_events():
                         return
@@ -152,7 +152,8 @@ def train():
                         break
 
                 if episode > config.train.start_to_update:
-                    model.update()
+                    for _ in range(config.train.optimization_steps):
+                        model.update()
                 if config.train.type_RM == "sequential" and config.model.type=="DDPG":
                     model.replay_memory.delete_memory()
 

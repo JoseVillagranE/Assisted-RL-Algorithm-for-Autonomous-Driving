@@ -18,20 +18,10 @@ def create_encode_state_fn(Resize, CenterCrop, mean, std):
         preprocess = transforms.Compose([ ## Only transform PIL Image
         transforms.Resize(Resize),
         transforms.CenterCrop(CenterCrop),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=mean, std=std),
+        transforms.ToTensor(), # map image to 0 1
+        #transforms.Normalize(mean=mean, std=std),
         ])
-
-        # trf = Compose([
-        #     Scale(size=(256, 256)),
-        #     CenterCrop(size=(224, 224)),
-        #     Normalize_mean_std(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        #     ToTensor()
-        #     ])
-
-        # tensor_img = trf(frame)
-        tensor_img = preprocess(frame)
-        encoded_state = tensor_img
+        encoded_state = preprocess(frame)
         return encoded_state
 
     return encode_state
