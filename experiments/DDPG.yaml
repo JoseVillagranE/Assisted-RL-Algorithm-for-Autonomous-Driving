@@ -6,10 +6,10 @@ train:
   checkpoint_every: 100000
   episodes: 100
   device: "cpu"
-  actor_lr: 0.1
-  critic_lr: 0.1
-  type_RM: "prioritized"
-  batch_size: 64
+  actor_lr: 0.01
+  critic_lr: 0.01
+  type_RM: "random"
+  batch_size: 16
 
 agent:
   sensor:
@@ -33,10 +33,10 @@ reward_fn:
   weight_collision_pedestrian: 0
   weight_collision_vehicle: 0
   weight_collision_other: 0
-  weight_final_goal: 1
+  weight_final_goal: 3
   weight_speed_limit: 1
-  weight_route_al: 0
-  weight_centralization: 0
+  weight_route_al: 1
+  weight_centralization: 1
   weight_distance_to_goal: 1
 
 test:

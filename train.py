@@ -165,7 +165,6 @@ def train():
                     if env.controller.parse_events():
                         return
                     action = model.predict(state, step, mode="testing") # return a np. action
-                    print(action)
                     next_state, reward, terminal_state, info = env.step(action)
                     if info["closed"] == True:
                         exit(0)

@@ -14,7 +14,7 @@ def conv2d_size_out(size, kernels_size, strides, paddings, dilations):
 
 class OUNoise(object):
 
-    def __init__(self, action_space, mu=0.0, theta=0.15, max_sigma=0.2, min_sigma=0.2,
+    def __init__(self, action_space, mu=0.0, theta=0.6, max_sigma=0.4, min_sigma=0.3,
                 decay_period=100):
 
         self.mu = mu
@@ -193,11 +193,11 @@ class DDPG:
         state = Variable(state.float().unsqueeze(0))
         action = self.actor(state)
         action = action.detach().numpy()[0]
-        # if mode=="training":
-        #     action = self.ounoise.get_action(action, step)
+        if mode=="training":
+            action = self.ounoise.get_action(action, step)
             # action[0] = np.clip(np.random.normal(action[0], self.std, 1), -1, 1)
             # action[1] = np.clip(np.random.normal(action[1], self.std, 1), 0, 1)
-        return np.clip(action, self.low, self.high)
+        return action
 
     def update(self):
 
@@ -238,17 +238,16 @@ class DDPG:
             critic_loss = self.critic_criterion(Qvals, Q_prime)
         elif self.type_RM in ["prioritized"]:
             critic_loss = (importance_sampling_weight*(Qvals - Q_prime)**2).mean()
-
         actor_loss = -1*self.critic(states, self.actor(states)).mean()
 
         # updates networks
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
-        # nn.utils.clip_grad_norm_(self.actor.parameters(), 0.005)
+        nn.utils.clip_grad_norm_(self.actor.parameters(), 1000.0)
         self.actor_optimizer.step()
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
-        # nn.utils.clip_grad_norm_(self.critic.parameters(), 0.005)
+        nn.utils.clip_grad_norm_(self.critic.parameters(), 1000.0)
         self.critic_optimizer.step()
 
         for target_param, param in zip(self.actor_target.parameters(), self.actor.parameters()):
