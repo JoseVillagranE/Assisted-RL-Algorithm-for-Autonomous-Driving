@@ -2,8 +2,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-from .ExperienceReplayMemory import SequentialDequeMemory, RandomDequeMemory, PrioritizedDequeMemory
-from .AlexNet import alexnet, AlexNet
+from ExperienceReplayMemory import SequentialDequeMemory, RandomDequeMemory, PrioritizedDequeMemory
+from AlexNet import alexnet, AlexNet
 import gym
 
 

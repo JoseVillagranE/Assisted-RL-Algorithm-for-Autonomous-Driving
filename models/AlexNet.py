@@ -9,13 +9,14 @@ model_urls = {
 
 class AlexNet(nn.Module):
 
-    def __init__(self, pretrained, num_classes=1000):
+    def __init__(self, pretrained, num_classes=1000, flatten=True):
         super().__init__()
         self.kernels_size = [11, 3, 5, 3, 3, 3, 3, 3]
         self.strides = [4, 2, 1, 2, 1, 1, 1, 2]
         self.paddings = [2, 0, 2, 0, 1, 1, 1, 0]
         self.dilations = [1, 1, 1, 1, 1, 1, 1, 1]
         self.out_channel = 256
+        self.flatten = flatten
 
         # H and W must be at least 224 of size
 
@@ -50,18 +51,18 @@ class AlexNet(nn.Module):
 
     def forward(self, x):
         x = self.features(x)
-        #x = self.avgpool(x)
-        x = torch.flatten(x, 1)
+        if self.flatten:
+            x = torch.flatten(x, 1)
         return x
 
-def alexnet(pretrained=False, progress=True, **kwargs):
+def alexnet(pretrained=False, flatten=True, progress=True, **kwargs):
     r"""AlexNet model architecture from the
     `"One weird trick..." <https://arxiv.org/abs/1404.5997>`_ paper.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
         progress (bool): If True, displays a progress bar of the download to stderr
     """
-    model = AlexNet(pretrained)
+    model = AlexNet(pretrained, flatten=flatten)
     if pretrained:
         state_dict = load_state_dict_from_url(model_urls['alexnet'],
                                               progress=progress)
