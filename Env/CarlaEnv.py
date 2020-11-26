@@ -129,7 +129,8 @@ class CarlaEnv(gym.Env):
                                         "Wall",
                                         "Traffic sign",
                                         "SideWalk",
-                                        "Unknown"]
+                                        "Unknown",
+                                        "Other"]
         self.final_goal = False
 
         # functions for encode state

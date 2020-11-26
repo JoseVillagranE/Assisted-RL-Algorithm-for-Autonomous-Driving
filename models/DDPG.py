@@ -191,13 +191,11 @@ class DDPG:
         self.device = torch.device(device)
 
     def predict(self, state, step, mode="training"):
-
         state = Variable(state.unsqueeze(0)) # [1, C, H, W]
         action = self.actor(state)
         action = action.detach().numpy()[0] # [steer, throttle]
-        print(action)
-        # if mode=="training":
-        #     action = self.ounoise.get_action(action, step)
+        if mode=="training":
+            action = self.ounoise.get_action(action, step)
             # action[0] = np.clip(np.random.normal(action[0], self.std, 1), -1, 1)
             # action[1] = np.clip(np.random.normal(action[1], self.std, 1), 0, 1)
         return action
