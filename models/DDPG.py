@@ -2,8 +2,9 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-from ExperienceReplayMemory import SequentialDequeMemory, RandomDequeMemory, PrioritizedDequeMemory
-from AlexNet import alexnet, AlexNet
+from .ExperienceReplayMemory import SequentialDequeMemory, RandomDequeMemory, PrioritizedDequeMemory
+from .AlexNet import alexnet, AlexNet
+from .KendallNetwork import KendallNetwork
 import gym
 
 
@@ -48,22 +49,23 @@ class Actor(nn.Module):
         super().__init__()
         self.num_actions= num_actions
 
-        self.alexnet_model = alexnet(pretrained) # feature extractor
+        # self.conv_model = alexnet(pretrained) # feature extractor
+        self.conv_model = KendallNetwork()
 
         convh =  conv2d_size_out(h_image_in,
-                                self.alexnet_model.kernels_size,
-                                self.alexnet_model.strides,
-                                self.alexnet_model.paddings,
-                                self.alexnet_model.dilations,
+                                self.conv_model.kernels_size,
+                                self.conv_model.strides,
+                                self.conv_model.paddings,
+                                self.conv_model.dilations,
                                 )
         convw =  conv2d_size_out(w_image_in,
-                                self.alexnet_model.kernels_size,
-                                self.alexnet_model.strides,
-                                self.alexnet_model.paddings,
-                                self.alexnet_model.dilations,
+                                self.conv_model.kernels_size,
+                                self.conv_model.strides,
+                                self.conv_model.paddings,
+                                self.conv_model.dilations,
                                 )
 
-        linear_outp_size = convh*convw*self.alexnet_model.out_channel
+        linear_outp_size = convh*convw*self.conv_model.out_channel
 
         self.linear_layer_list = nn.ModuleList()
         if len(linear_layers) > 0:
@@ -77,7 +79,7 @@ class Actor(nn.Module):
             self.linear_layer_list.append(nn.Linear(linear_outp_size, num_actions))
 
     def forward(self, state):
-        x = self.alexnet_model(state)
+        x = self.conv_model(state)
         x = self.forward_linear(x, self.linear_layer_list)
         return x
 
@@ -190,11 +192,12 @@ class DDPG:
 
     def predict(self, state, step, mode="training"):
 
-        state = Variable(state.float().unsqueeze(0))
+        state = Variable(state.unsqueeze(0)) # [1, C, H, W]
         action = self.actor(state)
-        action = action.detach().numpy()[0]
-        if mode=="training":
-            action = self.ounoise.get_action(action, step)
+        action = action.detach().numpy()[0] # [steer, throttle]
+        print(action)
+        # if mode=="training":
+        #     action = self.ounoise.get_action(action, step)
             # action[0] = np.clip(np.random.normal(action[0], self.std, 1), -1, 1)
             # action[1] = np.clip(np.random.normal(action[1], self.std, 1), 0, 1)
         return action
@@ -230,7 +233,6 @@ class DDPG:
         Qvals = self.critic(states, actions)
         next_actions = self.actor_target(next_states)
         next_Q = self.critic_target(next_states, next_actions.detach())
-
         Q_prime = rewards.unsqueeze(1) + self.gamma*next_Q
 
         critic_loss = 0

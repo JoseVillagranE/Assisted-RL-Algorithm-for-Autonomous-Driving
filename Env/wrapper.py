@@ -6,7 +6,7 @@ import math
 import numpy as np
 import weakref
 import pygame
-from utils.utils import read_wp_from_file
+from utils.utils import read_wp_from_file, vector
 from config.config import config
 from collections import deque
 import sys
@@ -35,7 +35,7 @@ class CarlaActorBase(object):
         self.no_ped = True
         self.no_veh = False
 
-    def trace_route(self, start_waypoint, end_waypoint, sampling_resolution=1.0):
+    def trace_route(self, initial_location, end_location, sampling_resolution=1.0):
         """
         This method sets up a global router and returns the
         optimal route from start_waypoint to end_waypoint.
@@ -48,7 +48,7 @@ class CarlaActorBase(object):
         grp.setup()
 
         # Obtain route plan
-        route = grp.trace_route(start_waypoint.transform.location,end_waypoint.transform.location)
+        route = grp.trace_route(initial_location, end_location)
         return route
 
 
@@ -174,6 +174,8 @@ class Vehicle(CarlaActorBase):
         self.waypoints_queue = None
         self.route_wp = None
 
+        self.current_wp_index = 0
+
         self.target_speed = target_speed # Km/h
         self.sampling_radius = self.target_speed * 1 / 3.6  # 1 seconds horizon
         self.min_distance = self.sampling_radius * 0.9 # TODO: Try to understand this equation
@@ -191,10 +193,7 @@ class Vehicle(CarlaActorBase):
         """
         Set a waypoint list from initial and end location. The final list is a list of a carla.Waypoint object
         """
-
-        self.initial_wp = self.map.get_waypoint(self.initial_location)
-        self.end_wp = self.map.get_waypoint(self.end_location)
-        wp_list = self.trace_route(initial_wp, end_wp)
+        wp_list = self.trace_route(self.initial_location, self.end_location)
         self.route_wp = [ wp_list[i][0] for i in range(len(wp_list))] # carla.waypoint
         self.waypoints_queue = deque(self.route_wp)
 
@@ -206,7 +205,36 @@ class Vehicle(CarlaActorBase):
         self.end_wp = self.world.map.get_waypoint(wp_list[-1])
         self.waypoints_queue = deque(wp_list) # translate from location to waypoint !!!!!!!!!
 
+    def get_current_wp_index(self, current_location):
+
+        """
+        dedicate method to ago-agent
+        """
+        wp_index = 0
+        for _ in range(len(self.route_wp)):
+            idx = self.current_wp_index + wp_index
+            if idx >= len(self.route_wp):
+                idx = -1
+            next_wp = self.route_wp[idx]
+            dot = np.dot(vector(next_wp.transform.get_forward_vector())[:2],
+                         vector(current_location - next_wp.transform.location)[:2])
+            if dot > 0.0:
+                wp_index += 1
+            else:
+                break
+        self.current_wp_index += wp_index
+
+    def get_current_wp(self):
+        return self.route_wp[self.current_wp_index]
+
+    def get_next_wp_ego(self):
+        return self.route_wp[self.current_wp_index + 1]
+
     def get_next_wp(self):
+
+        """
+        dedicate method to a exo agent
+        """
 
         # Clean the waypoint buffer
         max_index = -1

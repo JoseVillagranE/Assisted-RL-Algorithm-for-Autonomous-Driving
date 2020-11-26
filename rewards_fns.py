@@ -49,7 +49,9 @@ def create_reward_fn(reward_fn):
         #     env.terminal_state = True
         #     terminal_reason = "Off-Track"
 
-        if config.reward_fn.max_speed > 0 and speed_kmh > config.reward_fn.max_speed:
+        assert config.reward_fn.max_speed > 0
+
+        if  speed_kmh > config.reward_fn.max_speed:
             env.terminal_state = True
             terminal_reason = "Too fast"
 
@@ -84,7 +86,7 @@ def reward_fn(env):
     reward =
     """
     fwd = vector(env.agent.get_velocity())
-    wp_fwd = vector(env.current_wp.transform.rotation.get_forward_vector())
+    wp_fwd = vector(env.agent.get_current_wp().transform.rotation.get_forward_vector())
     angle = angle_diff(fwd, wp_fwd)
 
     speed_kmh = 3.6*env.agent.get_speed()

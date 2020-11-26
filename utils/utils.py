@@ -34,7 +34,7 @@ def distance_to_lane(A, B, p):
     num = np.linalg.norm(np.cross(B-A, A-p))
     den = np.linalg.norm(B-A)
     if np.isclose(den, 0):
-        return np.linalg(p-A)
+        return np.linalg.norm(p-A)
     return num/den
 
 def vector(v):
@@ -45,12 +45,6 @@ def vector(v):
         return np.array([v.x, v.y, v.z])
     elif isinstance(v, carla.Rotation):
         return np.array([v.pitch, v.yaw, v.roll])
-
-
-
-
-
-
 
 def read_wp_from_file(file):
 

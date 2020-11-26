@@ -128,7 +128,8 @@ class CarlaEnv(gym.Env):
                                         "Vegetation",
                                         "Wall",
                                         "Traffic sign",
-                                        "SideWalk"]
+                                        "SideWalk",
+                                        "Unknown"]
         self.final_goal = False
 
         # functions for encode state
@@ -151,13 +152,20 @@ class CarlaEnv(gym.Env):
                                             y=config.agent.initial_position.y,
                                             z=config.agent.initial_position.z)
 
+            end_location = carla.Location(x = config.agent.goal.x,
+                                          y = config.agent.goal.y,
+                                          z = config.agent.goal.z)
+
             self.initial_transform = carla.Transform(initial_location,
                                                         carla.Rotation(yaw=config.agent.initial_position.yaw))
             # Create a agent vehicle
             self.agent = Vehicle(self.world,
                                 transform=self.initial_transform,
                                 vehicle_type=config.agent.vehicle_type,
-                                on_collision_fn=lambda e: self._on_collision(e))
+                                on_collision_fn=lambda e: self._on_collision(e),
+                                end_location=end_location)
+
+            self.agent.set_automatic_wp() # I need for orientation reward
 
             self.exo_veh_initial_transform = None
             if self.is_exo_vehicle:
@@ -290,11 +298,11 @@ class CarlaEnv(gym.Env):
         transform = self.agent.get_transform()
 
         # Closest wp related to current location
-        self.current_wp = self.agent.get_closest_waypoint()
+        self.agent.get_current_wp_index(transform.location)
+        current_wp = self.agent.get_current_wp()
+        next_wp = self.agent.get_next_wp_ego()
 
-        next_wp = self.current_wp.next(3)[0] # "FIX!!"
-
-        self.distance_from_center = distance_to_lane(vector(self.current_wp.transform.location),
+        self.distance_from_center = distance_to_lane(vector(current_wp.transform.location),
                                                 vector(next_wp.transform.location),
                                                 vector(transform.location))
 
@@ -319,6 +327,7 @@ class CarlaEnv(gym.Env):
 
         self.agent.control.steer = float(0.0)
         self.agent.control.throttle = float(0.0)
+        self.agent.current_wp_index = 0
         self.agent.tick() # Apply control
 
         self.agent.set_transform(self.initial_transform)
@@ -330,18 +339,14 @@ class CarlaEnv(gym.Env):
         if self.is_pedestrian:
             self.pedestrian.set_transform(self.initial_transform_ped)
         if self.synchronous:
-            print("sync mode..")
             ticks = 0
             while ticks < self.fps*2:
                 self.world.tick()
-                print("Tick")
                 try:
                     self.world.wait_for_tick(seconds=(1.0/self.fps) + 0.1)
                     ticks += 1
-                    print(ticks)
                 except:
                     pass
-            print("End sync mode..")
         else:
             time.sleep(2.0)
 
