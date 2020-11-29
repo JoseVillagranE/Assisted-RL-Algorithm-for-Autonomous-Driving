@@ -32,8 +32,8 @@ reward_fn:
   normalize: True
   weight_collision_pedestrian: 0
   weight_collision_vehicle: 0
-  weight_collision_other: 0
-  weight_final_goal: 3
+  weight_collision_other: 10000
+  weight_final_goal: 5000
   weight_speed_limit: 1
   weight_route_al: 1
   weight_centralization: 1

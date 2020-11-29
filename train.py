@@ -133,7 +133,7 @@ def train():
                         exit(0)
 
                     weighted_rw = weighted_rw_fn(reward, rw_weights)
-                    if not config.reward_fn.normalize:
+                    if config.reward_fn.normalize:
                         reward = weighted_rw # rw is only a scalar value
 
                     if config.model.type=="DDPG":  # Because exist manual and straight control also

@@ -228,7 +228,8 @@ class Vehicle(CarlaActorBase):
         return self.route_wp[self.current_wp_index]
 
     def get_next_wp_ego(self):
-        return self.route_wp[self.current_wp_index + 1]
+        if self.current_wp_index + 1 >= len(self.route_wp): return self.route_wp[-1]
+        else: return self.route_wp[self.current_wp_index + 1]
 
     def get_next_wp(self):
 

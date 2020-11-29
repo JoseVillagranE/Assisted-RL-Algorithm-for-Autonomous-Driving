@@ -107,7 +107,7 @@ class RandomDequeMemory(ExperienceReplayMemory):
 
         state_batch, action_batch, reward_batch, next_state_batch, done_batch = [], [], [], [], []
 
-        batch = random.sample(self.memory, self.batch_size)
+        batch = random.sample(self.memory, self.batch_size) # without replacement
         for experience in batch:
             state, action, reward, next_state, done = experience
             state_batch.append(state)
@@ -116,13 +116,14 @@ class RandomDequeMemory(ExperienceReplayMemory):
             done_batch.append(done)
             reward_batch.append(reward)
 
+
         if isinstance(reward_batch[0], tuple):
             list_rw_i = list(zip(*reward_batch)) # sort in order of type reward
-            reward_batch = [list(map(lambda y: (y - min(x)) / (max(x) - min(x) + 1e-30), x)) for x in list_rw_i] # normalize
-            reward_batch = list(zip(*reward_batch))
+            reward_batch = [list(map(lambda y: (y - min(x)) / (max(x) - min(x) + 1e-30), x)) for x in list_rw_i] # normalize for type of reward
+            reward_batch = list(zip(*reward_batch)) # re-order in his original order
 
             if self.rw_weights is not None:
-                reward_batch = np.multiply(np.array(reward_batch), self.rw_weights).sum(axis=1)
+                reward_batch = np.multiply(np.array(reward_batch), self.rw_weights).sum(axis=1) # sum over tuple at time t
         return state_batch, action_batch, reward_batch, next_state_batch, done_batch
 
     def get_memory_size(self):
@@ -197,22 +198,24 @@ class PrioritizedDequeMemory(ExperienceReplayMemory):
 
 if __name__ == "__main__":
 
-    # RB = RandomDequeMemory(10)
-    # RB.add_to_memory((1, 1, (1,2,3,4), 2, False))
-    # RB.add_to_memory((2, 4, (1,2,2,3), 3, False))
-    # RB.add_to_memory((3, 1, (1,2,3,1), 2, False))
-    # RB.add_to_memory((2, 3, (3,2,3,4), 1, True))
-    #
-    # state, action, reward, next_state, done = RB.get_batch_for_replay(4)
-    # print(reward)
+    rw_weights = [1, 2, 3, 4]
+
+    RB = RandomDequeMemory(10, rw_weights=rw_weights, batch_size=4)
+    RB.add_to_memory((1, 1, (1,2,3,4), 2, False))
+    RB.add_to_memory((2, 4, (1,2,2,3), 3, False))
+    RB.add_to_memory((3, 1, (1,2,3,1), 2, False))
+    RB.add_to_memory((2, 3, (3,2,3,4), 1, True))
+
+    state, action, reward, next_state, done = RB.get_batch_for_replay()
+    print(reward)
 
     ##################################################
 
-    l = [[1, 2, 3, 4, 8], [1, 1, 1, 1, 9], [1, 1, 1, 1, 1]]
-    # norm_l = list(map(lambda x: sum(map(lambda y: (y - min(x)) / (max(x) - min(x) + 1e-30), x)), l))
-    norm_l = [list(map(lambda y: (y - min(x)) / (max(x) - min(x) + 1e-30), x)) for x in l]
-    print(norm_l)
-    print(list(zip(*norm_l)))
+    # l = [[1, 2, 3, 4, 8], [1, 1, 1, 1, 9], [1, 1, 1, 1, 1]]
+    # # norm_l = list(map(lambda x: sum(map(lambda y: (y - min(x)) / (max(x) - min(x) + 1e-30), x)), l))
+    # norm_l = [list(map(lambda y: (y - min(x)) / (max(x) - min(x) + 1e-30), x)) for x in l]
+    # print(norm_l)
+    # print(list(zip(*norm_l)))
 
     ###################################################
 
