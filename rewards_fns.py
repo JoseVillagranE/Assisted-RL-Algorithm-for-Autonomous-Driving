@@ -123,10 +123,10 @@ def reward_fn(env):
     return (speed_reward,
             centering_factor,
             angle_factor,
-            collision_vehicle,
-            collision_pedestrian,
-            collision_other,
-            final_goal,
+            #collision_vehicle,
+            #collision_pedestrian,
+            #collision_other,
+            #final_goal,
             distance_to_goal)
 
 reward_functions["reward_fn"] = create_reward_fn(reward_fn)

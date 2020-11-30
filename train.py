@@ -82,10 +82,10 @@ def train():
     rw_weights = [config.reward_fn.weight_speed_limit,
                   config.reward_fn.weight_centralization,
                   config.reward_fn.weight_route_al,
-                  config.reward_fn.weight_collision_vehicle,
-                  config.reward_fn.weight_collision_pedestrian,
-                  config.reward_fn.weight_collision_other,
-                  config.reward_fn.weight_final_goal,
+                  #config.reward_fn.weight_collision_vehicle,
+                  #config.reward_fn.weight_collision_pedestrian,
+                  #config.reward_fn.weight_collision_other,
+                  #config.reward_fn.weight_final_goal,
                   config.reward_fn.weight_distance_to_goal]
 
     print("Creating model")
@@ -122,7 +122,7 @@ def train():
     episode_test = 0
     try:
         for episode in range(start_episode, config.train.episodes):
-            state, terminal_state, episode_reward = env.reset(), False, 0
+            state, terminal_state, episode_reward = env.reset(), False, []
             while not terminal_state:
                 for step in range(config.train.steps):
                     if env.controller.parse_events():
@@ -133,13 +133,13 @@ def train():
                         exit(0)
 
                     weighted_rw = weighted_rw_fn(reward, rw_weights)
-                    if config.reward_fn.normalize:
+                    if not config.reward_fn.normalize:
                         reward = weighted_rw # rw is only a scalar value
 
                     if config.model.type=="DDPG":  # Because exist manual and straight control also
                         model.replay_memory.add_to_memory((state.unsqueeze(0), action, reward, next_state.unsqueeze(0), terminal_state))
 
-                    episode_reward += weighted_rw
+                    episode_reward.append(reward)
                     state = next_state
 
                     if config.vis.render:
@@ -147,6 +147,10 @@ def train():
 
                     if terminal_state:
                         if len(env.extra_info) > 0:
+                            episode_reward = list(zip(*episode_reward)) # normalize in type order
+                            episode_reward = [list(map(lambda y: (y - min(x)) / (max(x) - min(x) + 1e-30), x)) for x in episode_reward]
+                            episode_reward = list(zip(*episode_reward)) # get-back
+                            episode_reward = np.multiply(np.array(episode_reward), rw_weights).sum(axis=1).sum()
                             print(f"episode: {episode}, reward: {np.round(episode_reward, decimals=2)}, terminal reason: {env.extra_info[-1]}")# print the most recent terminal reason
                             logger.info(f"episode: {episode}, reward: {np.round(episode_reward, decimals=2)}, terminal reason: {env.extra_info[-1]}")
                         break
