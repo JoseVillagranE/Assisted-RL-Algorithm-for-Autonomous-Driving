@@ -67,7 +67,7 @@ class ConvVAE(nn.Module):
         
     
     def decode(self, z):
-        z = self.decoder_input(z).view(-1, 256, 8, 3)
+        z = self.decoder_input(z).view(-1, 256, 3, 8)
         recons = self.decoder(z)
         return recons
     
@@ -89,7 +89,7 @@ class ConvVAE(nn.Module):
 if __name__ == "__main__":
     
     model = ConvVAE(3, 64, 1.0)
-    input = torch.rand((10, 3, 160, 80))
+    input = torch.rand((10, 3, 80, 160))
     
     recons, mu, logvar = model(input)
     loss = model.compute_loss(input, recons, mu, logvar)
