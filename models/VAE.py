@@ -36,9 +36,9 @@ class ConvVAE(nn.Module):
         self.decoder_input = nn.Linear(z_dim, 256*24)
         
         self.decoder = nn.Sequential(nn.ConvTranspose2d(256, 128, kernel_size=4, stride=2), nn.ReLU(),
-                                     nn.ConvTranspose2d(128, 64, kernel_size=5, stride=2), nn.ReLU(),
+                                     nn.ConvTranspose2d(128, 64, kernel_size=4, stride=2), nn.ReLU(),
                                      nn.ConvTranspose2d(64, 32, kernel_size=5, stride=2), nn.ReLU(),
-                                     nn.ConvTranspose2d(32, n_channel, kernel_size=4, stride=2), nn.ReLU())
+                                     nn.ConvTranspose2d(32, n_channel, kernel_size=4, stride=2), nn.Sigmoid())
         
         self.mu = nn.Linear(256*24, z_dim)
         self.logvar = nn.Linear(256*24, z_dim)
@@ -71,7 +71,7 @@ class ConvVAE(nn.Module):
         recons = self.decoder(z)
         return recons
     
-    def compute_loss(input, recons, mu, logvar):
+    def compute_loss(self, input, recons, mu, logvar):
         recons_loss = self.bce(recons, input)
         kl_loss = -0.5*torch.sum(1 + logvar - mu**2 - logvar.exp())
         return recons_loss + self.beta*kl_loss
@@ -79,7 +79,8 @@ class ConvVAE(nn.Module):
     
 if __name__ == "__main__":
     
-    model = ConvVAE(3, 10, 1.0)
+    model = ConvVAE(3, 64, 1.0)
     input = torch.rand((10, 3, 160, 80))
     
     recons, mu, logvar = model(input)
+    loss = model.compute_loss(input, recons, mu, logvar)
