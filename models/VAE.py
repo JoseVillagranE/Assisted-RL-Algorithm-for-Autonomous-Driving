@@ -76,6 +76,15 @@ class ConvVAE(nn.Module):
         kl_loss = -0.5*torch.sum(1 + logvar - mu**2 - logvar.exp())
         return recons_loss + self.beta*kl_loss
     
+    def save_struct(self, module, file):
+        torch.save(getattr(self, module).state_dict(), file)
+        
+    def load_struct(self, module, path):
+        getattr(self, module).load_state_dict(torch.load(path))
+        
+    def to_device(self, module, device):
+        getattr(self, module).to(device)
+    
     
 if __name__ == "__main__":
     
@@ -84,3 +93,5 @@ if __name__ == "__main__":
     
     recons, mu, logvar = model(input)
     loss = model.compute_loss(input, recons, mu, logvar)
+    encoder = model.to_device("encoder", "cpu")
+    
