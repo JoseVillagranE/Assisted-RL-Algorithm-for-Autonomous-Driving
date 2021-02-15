@@ -41,9 +41,9 @@ def create_reward_fn(reward_fn):
         speed = env.agent.get_speed()
         speed_kmh = speed*3.6
         terminal_reason = ""
-        if low_speed_timer > 1.0 and speed_kmh < 1e-3: # No admite freno
-            env.terminal_state = True
-            terminal_reason = "Vehicle Stopped"
+        # if low_speed_timer > 1.0 and speed_kmh < 1e-3: # No admite freno
+        #     env.terminal_state = True
+        #     terminal_reason = "Vehicle Stopped"
 
         # if env.distance_from_center > config.reward_fn.max_distance:
         #     env.terminal_state = True
@@ -51,9 +51,9 @@ def create_reward_fn(reward_fn):
 
         assert config.reward_fn.max_speed > 0
 
-        if  speed_kmh > config.reward_fn.max_speed:
-            env.terminal_state = True
-            terminal_reason = "Too fast"
+        # if  speed_kmh > config.reward_fn.max_speed:
+        #     env.terminal_state = True
+        #     terminal_reason = "Too fast"
 
         reward = reward_fn(env)
 

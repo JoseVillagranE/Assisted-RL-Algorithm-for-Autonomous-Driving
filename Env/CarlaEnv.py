@@ -25,7 +25,7 @@ import signal
 from collections import deque
 from agents.navigation.controller import VehiclePIDController
 from utils.utils import vector, distance_to_lane, get_actor_display_name
-
+from PIL import Image
 
 class KeyboardControl(object):
     def __init__(self):
@@ -239,6 +239,9 @@ class CarlaEnv(gym.Env):
 
 
         self.world.get_exo_agents(self.agent.get_carla_actor().id)
+        
+        self.num_saved_obs = 2477
+        
         # Reset env to set initial state
         # self.reset()
 
@@ -290,6 +293,12 @@ class CarlaEnv(gym.Env):
         # Get most recent observation and viewer image
         if config.agent.sensor.dashboard_camera:
             self.observation = self._get_observation_image()
+            
+            img = Image.fromarray(self.observation)
+            img.save("./data/"+str(self.num_saved_obs)+".png")
+            self.num_saved_obs += 1
+            
+            
         if config.agent.sensor.spectator_camera:
             self.viewer_image = self._get_viewer_image()
 
@@ -404,10 +413,12 @@ class CarlaEnv(gym.Env):
                 return True
 
         if self.collision_other:
+            print("Collision w/ other")
             return True
 
         self.distance_to_goal = self.agent.get_carla_actor().get_transform().location.distance(self.goal_location)
         if self.distance_to_goal < self.margin_to_goal:
+            print("Arrive to the goal!")
             self.final_goal = True
             return True
 

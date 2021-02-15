@@ -17,9 +17,6 @@ RUN apt-get update && apt-get install -y apt-transport-https --no-install-recomm
     ca-certificates \
     libjpeg-dev \
     libpng-dev \
-    libtiff5 \
-    libxerces-c-dev \
-    
     libcudnn7-dev=$CUDNN_VERSION-1+cuda10.1 && \
     libcudnn7-dev=$CUDNN_VERSION-1+cuda10.1 && \
     rm -rf /var/lib/apt/lists/*
@@ -40,21 +37,9 @@ RUN pip install torchvision==0.6.0
 RUN pip install hashfs pydevd remote_pdb rpdb maplotlib visdom
 RUN pip install namedlist cython tensorboardX sklearn
 
+RUN mkdir -p ~/codigo
 
-# Install python requirements
-RUN pip install --user setuptools==46.3.0 wheel==0.34.2 && pip3 install py_trees==0.8.3 networkx==2.2 pygame==1.9.6 \
-    six==1.14.0 numpy==1.18.4 psutil==5.7.0 shapely==1.7.0 xmlschema==1.1.3 ephem==3.7.6.0 tabulate==0.8.7
-    
-    
-RUN wget -O /home/CARLA.tar.gz https://carla-releases.s3.eu-west-3.amazonaws.com/Linux/CARLA_0.9.11.tar.gz
 
-RUN mkdir /home/carla
-RUN tar -xf /home/CARLA.tar.gz -C /home/carla
-
-RUN mkdir /home/carla/PythonAPI/codigo
-RUN mkdir /home/carla/PythonAPI/codigo/Tesis
-COPY . /home/carla/PythonAPI/codigo/Tesis
+COPY . /codigo
 
 ENTRYPOINT ["/opt/conda/bin/python"]
-
-

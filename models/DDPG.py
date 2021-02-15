@@ -5,6 +5,7 @@ from torch.autograd import Variable
 from .ExperienceReplayMemory import SequentialDequeMemory, RandomDequeMemory, PrioritizedDequeMemory
 from .AlexNet import alexnet, AlexNet
 from .KendallNetwork import KendallNetwork
+from .VAE import ConvVAE
 import gym
 
 
@@ -40,7 +41,7 @@ class OUNoise(object):
         ou_state = self.evolve_state()
         self.sigma = self.max_sigma - (self.max_sigma - self.min_sigma)*min(1.0, t/self.decay_period)
         return  action+ou_state
-
+    
 class Actor(nn.Module):
 
     def __init__(self, num_actions, h_image_in, w_image_in, linear_layers=[],
@@ -122,13 +123,61 @@ class Critic(nn.Module):
         x = self.linear(x)
         return x
 
+class VAE_Actor(nn.Module):
+        
+    def __init__(self, state_dim, num_actions, z_dim, beta=1.0):
+        super().__init__()        
+        self.num_actions = num_actions
+        vae = ConvVAE(z_dim, beta=beta)
+        vae.load_struct("encoder", "./weights/encoder.pt")
+        vae.load_struct("mu", "./weights/mu.pt")
+        vae.load_struct("logvar", "./weights/logvar.pt")
+        
+        self.linear = nn.Linear(state_dim, num_actions)
+        
+        
+    def forward(self, x, distance, orientation):
+        mu, logvar = self.vae.encode(x)
+        z = self.vae.reparametrize(mu, logvar)
+        outp = self.linear(torch.cat([z, distance, orientation], 1)) 
+        return z
+    
+class VAE_critic(nn.Module):
+    
+    def __init__(self, state_dim, num_actions):
+        super().__init__()
+        self.num_actions = num_actions
+        self.linear = nn.Linear(state_dim, 1)
+        
+    def forward(self, state, action):
+        return self.linear(torch.cat([state, action], 1))
+        
+        
+        
+
+
 class DDPG:
 
-    def __init__(self, action_space, h_image_in, w_image_in, actor_lr = 1e-3, critic_lr=1e-3, optim="SGD",
-                batch_size=10, gamma=0.99,  tau=1e-2, alpha=0.7, beta=0.5, type_RM="sequential", max_memory_size=50000,
-                device='cpu', rw_weights=None, actor_linear_layers=[]):
+    def __init__(self, state_dim,
+                 action_space,
+                 h_image_in=0,
+                 w_image_in=0,
+                 actor_lr = 1e-3,
+                 critic_lr=1e-3,
+                 optim="SGD",
+                 batch_size=10,
+                 gamma=0.99,
+                 tau=1e-2,
+                 alpha=0.7,
+                 beta=0.5,
+                 type_RM="sequential",
+                 max_memory_size=50000,
+                 device='cpu',
+                 rw_weights=None,
+                 actor_linear_layers=[]):
 
         self.num_actions = action_space.shape[0]
+        self.state_dim = state_dim
         self.action_min, self.action_max = action_space.low, action_space.high
 
         self.gamma = gamma
@@ -139,13 +188,20 @@ class DDPG:
         self.rw_weights = rw_weights
         self.low = action_space.low
         self.high = action_space.high
+        
 
         # Networks
-        self.actor = Actor(self.num_actions, h_image_in, w_image_in, linear_layers=actor_linear_layers)
-        self.actor_target = Actor(self.num_actions, h_image_in, w_image_in, linear_layers=actor_linear_layers)
-
-        self.critic = Critic(self.num_actions, h_image_in, w_image_in)
-        self.critic_target = Critic(self.num_actions, h_image_in, w_image_in)
+        if model_type == "VAE":
+            self.actor = VAE_Actor(state_dim, self.num_actions, z_dim, beta=beta)
+            self.actor_target = VAE_Actor(state_dim, self.num_actions, z_dim, beta=beta)
+            self.critic = VAE_critic(state_dim, self.num_actions)
+            self.critic_target = VAE_critic(state_dim, self.num_actions) 
+       
+        else:
+            self.actor = Actor(self.num_actions, h_image_in, w_image_in, linear_layers=actor_linear_layers)
+            self.actor_target = Actor(self.num_actions, h_image_in, w_image_in, linear_layers=actor_linear_layers)        
+            self.critic = Critic(self.num_actions, h_image_in, w_image_in)
+            self.critic_target = Critic(self.num_actions, h_image_in, w_image_in)
 
         # Copy weights
         for target_param, param in zip(self.actor_target.parameters(), self.actor.parameters()):
@@ -280,7 +336,7 @@ if __name__ == "__main__":
     actions = [action, action, action]
 
     new_tensor = torch.cat(states, dim=0)
-    new_tensor = torch.cat([new_tensor, action], )
+    new_tensor = torch.cat([new_tensor, action])
     # new_tensor = reduce(lambda x,y: torch.cat(x), states)
     # new_tensor = reduce(lambda x,y: torch.cat((x,y)), states + actions)
     print(new_tensor)

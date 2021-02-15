@@ -11,7 +11,7 @@ def init_model(model_name, action_space, h_image_in, w_image_in,
         model = DummyModel(action_space)
 
     elif model_name == "manual_model":
-        model = Manual_Model(action_space)
+        model = Manual_Model(2)
 
     elif model_name == "DDPG":
         model = DDPG(action_space,
