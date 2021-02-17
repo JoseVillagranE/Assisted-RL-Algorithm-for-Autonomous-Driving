@@ -70,14 +70,14 @@ class CarlaEnv(gym.Env):
         """
 
         self.carla_process = None
-        # carla_path = os.path.join(config.carla_dir, "CarlaUE4.sh")
-        # launch_command = [carla_path]
-        # launch_command += [config.simulation.map]
-        # if config.synchronous_mode: launch_command += ["-benchmark"]
-        # launch_command += ["-fps=%i" % config.simulation.fps]
-        # self.carla_process = subprocess.Popen(launch_command, stdout=subprocess.DEVNULL)
-        # print("Waiting for CARLA to initialize..")
-        # time.sleep(config.simulation.sleep)
+        carla_path = os.path.join(config.carla_dir, "CarlaUE4.sh")
+        launch_command = [carla_path]
+        launch_command += [config.simulation.map]
+        if config.synchronous_mode: launch_command += ["-benchmark"]
+        launch_command += ["-fps=%i" % config.simulation.fps]
+        self.carla_process = subprocess.Popen(launch_command, stdout=subprocess.DEVNULL)
+        print("Waiting for CARLA to initialize..")
+        time.sleep(config.simulation.sleep)
 
         pygame.init()
         pygame.font.init()

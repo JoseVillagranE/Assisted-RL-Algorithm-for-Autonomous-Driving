@@ -41,7 +41,7 @@ config.synchronous_mode = False
 # Simulation Defaults
 config.simulation = edict()
 config.simulation.map = "Town02"
-config.simulation.sleep = 20
+config.simulation.sleep = 30
 config.simulation.timeout = 4.0
 config.simulation.action_smoothing = 0.0 # w/out action_smoothing
 config.simulation.view_res = (640, 480)
