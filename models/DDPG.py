@@ -158,7 +158,8 @@ class VAE_critic(nn.Module):
 
 class DDPG:
 
-    def __init__(self, state_dim,
+    def __init__(self, 
+                 state_dim,
                  action_space,
                  h_image_in=0,
                  w_image_in=0,
@@ -170,6 +171,7 @@ class DDPG:
                  tau=1e-2,
                  alpha=0.7,
                  beta=0.5,
+                 model_type="Conv",
                  type_RM="sequential",
                  max_memory_size=50000,
                  device='cpu',
@@ -186,8 +188,6 @@ class DDPG:
         self.batch_size = batch_size
         self.std = 0.1
         self.rw_weights = rw_weights
-        self.low = action_space.low
-        self.high = action_space.high
         
 
         # Networks

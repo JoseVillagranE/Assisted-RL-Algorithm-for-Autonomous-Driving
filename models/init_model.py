@@ -2,7 +2,7 @@ from .DummyModel import DummyModel
 from .manual_model import Manual_Model
 from .DDPG import DDPG
 
-def init_model(model_name, action_space, h_image_in, w_image_in,
+def init_model(model_name, state_dim, action_space, h_image_in, w_image_in,
             actor_lr, critic_lr, batch_size, gamma, tau, alpha, beta,
             type_RM, max_memory_size, device = 'cpu', rw_weights=None, actor_linear_layers=[]):
 
@@ -14,7 +14,8 @@ def init_model(model_name, action_space, h_image_in, w_image_in,
         model = Manual_Model(2)
 
     elif model_name == "DDPG":
-        model = DDPG(action_space,
+        model = DDPG(state_dim,
+                    action_space,
                     h_image_in,
                     w_image_in,
                     actor_lr = actor_lr,

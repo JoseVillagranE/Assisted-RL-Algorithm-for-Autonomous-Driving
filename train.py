@@ -90,21 +90,22 @@ def train():
 
     print("Creating model")
     model = init_model(config.model.type,
-                        env.action_space,
-                        config.preprocess.CenterCrop,
-                        config.preprocess.CenterCrop,
-                        actor_lr = config.train.actor_lr,
-                        critic_lr = config.train.critic_lr,
-                        batch_size = config.train.batch_size,
-                        gamma = config.train.gamma,
-                        tau = config.train.tau,
-                        alpha = config.train.alpha,
-                        beta = config.train.beta,
-                        type_RM = config.train.type_RM,
-                        max_memory_size = config.train.max_memory_size,
-                        device = config.train.device,
-                        rw_weights=rw_weights if config.reward_fn.normalize else None,
-                        actor_linear_layers=config.train.actor_layers)
+                       env.observation_space,
+                       env.action_space,
+                       config.preprocess.CenterCrop,
+                       config.preprocess.CenterCrop,
+                       actor_lr = config.train.actor_lr,
+                       critic_lr = config.train.critic_lr,
+                       batch_size = config.train.batch_size,
+                       gamma = config.train.gamma,
+                       tau = config.train.tau,
+                       alpha = config.train.alpha,
+                       beta = config.train.beta,
+                       type_RM = config.train.type_RM,
+                       max_memory_size = config.train.max_memory_size,
+                       device = config.train.device,
+                       rw_weights=rw_weights if config.reward_fn.normalize else None,
+                       actor_linear_layers=config.train.actor_layers)
 
     # Stats
     rewards = []
