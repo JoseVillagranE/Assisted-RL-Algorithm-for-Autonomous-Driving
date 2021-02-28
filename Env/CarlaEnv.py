@@ -69,15 +69,16 @@ class CarlaEnv(gym.Env):
         reward_fn (function): Custom reward function is called every step. If none, no reward function is used
         """
 
-        self.carla_process = None
-        carla_path = os.path.join(config.carla_dir, "CarlaUE4.sh")
-        launch_command = [carla_path]
-        launch_command += [config.simulation.map]
-        if config.synchronous_mode: launch_command += ["-benchmark"]
-        launch_command += ["-fps=%i" % config.simulation.fps]
-        self.carla_process = subprocess.Popen(launch_command, stdout=subprocess.DEVNULL)
-        print("Waiting for CARLA to initialize..")
-        time.sleep(config.simulation.sleep)
+        # self.carla_process = None
+        # #carla_path = os.path.join(config.carla_dir, "CarlaUE4.sh")
+        # #launch_command = [carla_path, "-opengl"]
+        # #launch_command += [config.simulation.map]
+        # if config.synchronous_mode: launch_command += ["-benchmark"]
+        # launch_command += ["-fps=%i" % config.simulation.fps]
+        # launch_command += ["-carla-world-port="+str(config.simulation.port)]
+        # self.carla_process = subprocess.Popen(launch_command, stdout=subprocess.DEVNULL)
+        # print("Waiting for CARLA to initialize..")
+        # time.sleep(config.simulation.sleep)
 
         pygame.init()
         pygame.font.init()
@@ -132,7 +133,6 @@ class CarlaEnv(gym.Env):
                                         "Unknown",
                                         "Other"]
         self.final_goal = False
-
         # functions for encode state
         self.encode_state_fn = (lambda x: x) if not callable(encode_state_fn) else encode_state_fn
         try:
