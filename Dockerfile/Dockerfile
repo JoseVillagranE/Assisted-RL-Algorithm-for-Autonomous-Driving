@@ -36,7 +36,7 @@ RUN pip install torchvision==0.8.1
 RUN pip install hashfs pydevd remote_pdb rpdb matplotlib visdom
 RUN pip install namedlist tensorboardX sklearn easydict
 
-RUN wget -O /home/carla.tar.xz -r 'https://drive.google.com/file/d/1ULdbY4UXLggKFd22AKw8RSKYQEico6aK/view?usp=sharing'
+RUN wget -O /home/carla.tar.xz -r 'https://drive.google.com/uc?export=download&id=1ULdbY4UXLggKFd22AKw8RSKYQEico6aK'
 RUN tar -xvf /home/carla.tar.xz
 
 RUN mkdir /home/Tesis
