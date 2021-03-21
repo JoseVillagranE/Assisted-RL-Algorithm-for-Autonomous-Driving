@@ -33,11 +33,11 @@ RUN conda create -y --name pytorch-p37 python=3.7.4 numpy pyyaml scipy ipython m
 RUN conda install pytorch=1.5.0 torchvision cudatoolkit=10.1 -c pytorch
 RUN conda install -y mpi4py opencv
 RUN pip install torchvision==0.8.1
-RUN pip install hashfs pydevd remote_pdb rpdb maplotlib visdom
+RUN pip install hashfs pydevd remote_pdb rpdb matplotlib visdom
 RUN pip install namedlist tensorboardX sklearn easydict
 
-RUN wget -O /home wget -r 'https://drive.google.com/uc?export=download&id=1jw78WoAJzsZoh2Ba2-53vEK525dsFF3l' -O carla.zip
-RUN unzip /home/carla.zip
+RUN wget -O /home/carla.tar.xz -r 'https://drive.google.com/file/d/1ULdbY4UXLggKFd22AKw8RSKYQEico6aK/view?usp=sharing'
+RUN tar -xvf /home/carla.tar.xz
 
 RUN mkdir /home/Tesis
 COPY . /home/Tesis
