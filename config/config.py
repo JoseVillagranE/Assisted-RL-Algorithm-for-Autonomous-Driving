@@ -41,9 +41,9 @@ config.synchronous_mode = False
 # Simulation Defaults
 config.simulation = edict()
 config.simulation.map = "Town02"
-config.simulation.sleep = 30
+config.simulation.sleep = 120
 config.simulation.timeout = 4.0
-config.simulation.action_smoothing = 0.0 # w/out action_smoothing
+config.simulation.action_smoothing = 0.5 # w/out action_smoothing
 config.simulation.view_res = (640, 480)
 config.simulation.obs_res = (640, 480)
 config.simulation.fps = 10
@@ -59,7 +59,7 @@ config.train.checkpoint_every = 0
 config.train.batch_size = 10
 config.train.episodes = 100
 config.train.steps = 10000
-config.train.optimizer = 'Adam'
+config.train.optimizer = 'SGD'
 config.train.actor_lr = 1e-4
 config.train.critic_lr = 1e-4
 config.train.max_memory_size = 1000000 # 1e6
@@ -74,6 +74,10 @@ config.train.load_checkpoint_name = ""
 config.train.episode_loading = 0
 config.train.start_to_update = 0
 config.train.optimization_steps = 1
+config.train.action_space = 2 # [throttle, orientation]
+config.train.measurements_to_include = set(["speed", "orientation"])
+config.train.z_dim = 64
+config.train.state_dim = config.train.z_dim + 4 # harcoded
 
 # Agent Defaults (Single agent)
 config.agent = edict()
@@ -95,6 +99,8 @@ config.agent.goal.z = 1.0
 config.agent.sensor = edict()
 config.agent.sensor.spectator_camera = False
 config.agent.sensor.dashboard_camera = False
+config.agent.sensor.camera_type = "sensor.camera.rgb"
+config.agent.sensor.color_converter = "raw"
 
 
 # ExoAgent Defaults
@@ -110,9 +116,9 @@ config.exo_agents.pedestrian.initial_position.yaw = 0
 
 config.exo_agents.vehicle = edict()
 config.exo_agents.vehicle.spawn = True
-config.exo_agents.vehicle.vehicle_type = "vehicle.tesla.cybertruck"
+config.exo_agents.vehicle.vehicle_type = "vehicle.audi.a2"
 config.exo_agents.vehicle.target_speed = 20.0 # Km/h
-config.exo_agents.vehicle.controller = "PID" # How control the exo vehicle ?
+config.exo_agents.vehicle.controller = "None" # How control the exo vehicle ?
 
 config.exo_agents.vehicle.PID = edict()
 config.exo_agents.vehicle.PID.lateral_Kp = 1.95
@@ -137,13 +143,14 @@ config.exo_agents.vehicle.end_position.z = 1.0
 
 # Models Defaults
 config.model = edict()
-config.model.type = "DDPG"
+config.model.type = "Conv" # CLassic convolutional network train from scratch
 config.model.id = 0
 
 
 # Preprocess Defaults
 config.preprocess = edict()
-config.preprocess.Resize = 320
+config.preprocess.Resize_h = 80
+config.preprocess.Resize_w = 160
 config.preprocess.CenterCrop = 320
 config.preprocess.mean = [0.485, 0.456, 0.406]
 config.preprocess.std = [0.229, 0.224, 0.225]
@@ -154,8 +161,10 @@ config.reward_fn = edict()
 config.reward_fn.type = "norm"
 config.reward_fn.normalize = False
 config.reward_fn.min_speed = 10.0
-config.reward_fn.max_speed = 40.0
+config.reward_fn.target_speed = 40.0
+config.reward_fn.max_speed = 60.0
 config.reward_fn.max_distance = 3.0
+config.reward_fn.max_angle = 30.0
 
 config.reward_fn.weight_collision_pedestrian = 15
 config.reward_fn.weight_collision_vehicle = 10

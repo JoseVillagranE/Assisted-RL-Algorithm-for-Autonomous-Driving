@@ -121,7 +121,6 @@ class RandomDequeMemory(ExperienceReplayMemory):
             list_rw_i = list(zip(*reward_batch)) # sort in order of type reward
             reward_batch = [list(map(lambda y: (y - min(x)) / (max(x) - min(x) + 1e-30), x)) for x in list_rw_i] # normalize for type of reward
             reward_batch = list(zip(*reward_batch)) # re-order in his original order
-
             if self.rw_weights is not None:
                 reward_batch = np.multiply(np.array(reward_batch), self.rw_weights).sum(axis=1) # sum over tuple at time t
         return state_batch, action_batch, reward_batch, next_state_batch, done_batch
@@ -211,7 +210,7 @@ if __name__ == "__main__":
 
     ##################################################
 
-    # l = [[1, 2, 3, 4, 8], [1, 1, 1, 1, 9], [1, 1, 1, 1, 1]]
+    # l = [[1,2,3], [1,4,3], [1,4,4]]
     # # norm_l = list(map(lambda x: sum(map(lambda y: (y - min(x)) / (max(x) - min(x) + 1e-30), x)), l))
     # norm_l = [list(map(lambda y: (y - min(x)) / (max(x) - min(x) + 1e-30), x)) for x in l]
     # print(norm_l)

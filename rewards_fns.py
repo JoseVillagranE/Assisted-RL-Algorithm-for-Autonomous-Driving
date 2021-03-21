@@ -41,9 +41,9 @@ def create_reward_fn(reward_fn):
         speed = env.agent.get_speed()
         speed_kmh = speed*3.6
         terminal_reason = ""
-        # if low_speed_timer > 1.0 and speed_kmh < 1e-3: # No admite freno
-        #     env.terminal_state = True
-        #     terminal_reason = "Vehicle Stopped"
+        if low_speed_timer > 1.0 and speed_kmh < 1e-3: # No admite freno
+            env.terminal_state = True
+            terminal_reason = "Vehicle Stopped"
 
         # if env.distance_from_center > config.reward_fn.max_distance:
         #     env.terminal_state = True
@@ -90,21 +90,31 @@ def reward_fn(env):
     angle = angle_diff(fwd, wp_fwd)
 
     speed_kmh = 3.6*env.agent.get_speed()
+    
+    # R(v)
     if speed_kmh < config.reward_fn.min_speed:
-        speed_reward = speed_kmh
-    elif speed_kmh < config.reward_fn.max_speed and speed_kmh > config.reward_fn.min_speed:
-        speed_reward = speed_kmh
+        speed_reward = speed_kmh/config.reward_fn.min_speed
+    elif speed_kmh < config.reward_fn.target_speed and speed_kmh > config.reward_fn.min_speed:
+        speed_reward = 1
+    elif speed_kmh > config.reward_fn.target_speed and speed_kmh < config.reward_fn.max_speed:
+        speed_reward = 1 - (speed_kmh - config.reward_fn.target_speed)/(config.reward_fn.max_speed - \
+                                                                        config.reward_fn.target_speed)
     else:
-        speed_reward = config.reward_fn.max_speed - speed_kmh
+        speed_reward = -1
+    
+    # R(d)
+    if env.distance_from_center <= config.reward_fn.max_distance:
+        centering_factor = 1 - env.distance_from_center/config.reward_fn.max_distance
+    else:
+        centering_factor= -1
+    
+    # R(alpha)
+    if angle < config.reward_fn.max_angle:
+        angle_factor = 1 - abs(angle / np.deg2rad(config.reward_fn.max_angle))
+    else:
+        angle_factor = -1
 
-    # Interpolated from 1 when centered to 0 when 3m from center
-    # centering_factor = max(-1*env.distance_from_center / config.reward_fn.max_distance, -1)
-    centering_factor = -1*env.distance_from_center
-
-    # Interpolated from 1 when aligned w/ the road to 0 when +/- 20 degrees of road
-    angle_factor = max(-1*abs(angle / np.deg2rad(20)), -1)
-
-    distance_to_goal = 1/env.distance_to_goal
+    #distance_to_goal = 1/env.distance_to_goal
 
     collision_pedestrian = 0
     collision_vehicle = 0
@@ -123,11 +133,10 @@ def reward_fn(env):
     return (speed_reward,
             centering_factor,
             angle_factor,
-            #collision_vehicle,
-            #collision_pedestrian,
-            #collision_other,
-            #final_goal,
-            distance_to_goal)
+            collision_vehicle,
+            collision_pedestrian,
+            collision_other,
+            final_goal)
 
 reward_functions["reward_fn"] = create_reward_fn(reward_fn)
 

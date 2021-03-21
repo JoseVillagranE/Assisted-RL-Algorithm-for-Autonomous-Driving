@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from torchvision import transforms
 from PIL import Image
+from utils.utils import vector
 
 # https://github.com/bitsauce/Carla-ppo
 def preprocess_frame(frame):
@@ -9,24 +10,39 @@ def preprocess_frame(frame):
     return frame
 
 
-def create_encode_state_fn(Resize, CenterCrop, mean, std):
-
+def create_encode_state_fn(Resize_h, Resize_w, CenterCrop, mean, std,
+                           measurement_to_include,
+                           vae_encode=None):
+    
+    measure_flags = ["steer" in measurement_to_include,
+                     "throttle" in measurement_to_include,
+                     "speed" in measurement_to_include,
+                     "orientation" in measurement_to_include]
+    
     def encode_state(env):
         """
         :env.observation (ndarray) [H, W, C]
-        :encode_state (Tensor) [C, H, W]
+        :encode_state (Tensor)
         """
-        # frame = preprocess_frame(env.observation) # np.ndarray
-        # frame = Image.fromarray(preprocess_frame(env.observation).astype('uint8'), 'RGB')
-        # frame = torch.from_numpy(env.observation)
+        
         preprocess = transforms.Compose([
         transforms.ToPILImage(),
-        transforms.Resize(Resize),
-        transforms.CenterCrop(CenterCrop),
+        transforms.Resize((Resize_h, Resize_w)),
+        #transforms.CenterCrop(CenterCrop),
         transforms.ToTensor()
-        # transforms.Normalize(mean=mean, std=std),
         ])
+        
         encoded_state = preprocess(env.observation)
+        if vae_encode is not None:
+            encoded_state = vae_encode(encoded_state.unsqueeze(0)).squeeze().detach().numpy()
+            measurements = []
+            if measure_flags[0]: measurements.append(env.agent.control.steer)
+            if measure_flags[1]: measurements.append(env.agent.control.throttle)
+            if measure_flags[2]: measurements.append(env.agent.get_speed())
+            if measure_flags[3]: measurements.extend(vector(env.agent.get_forward_vector()))
+            #measurements = torch.tensor(measurements).float()
+            #encoded_state = torch.cat((encoded_state, measurements))
+            encoded_state = np.append(encoded_state, measurements).astype(np.float)
         return encoded_state
 
     return encode_state

@@ -16,8 +16,8 @@ def conv2d_size_out(size, kernels_size, strides, paddings, dilations):
 
 class OUNoise(object):
 
-    def __init__(self, action_space, mu=0.0, theta=0.6, max_sigma=0.4, min_sigma=0.3,
-                decay_period=100):
+    def __init__(self, action_space, mu=0.0, theta=0.3, max_sigma=0.2, min_sigma=0.3,
+                decay_period=10):
 
         self.mu = mu
         self.theta = theta
@@ -25,7 +25,8 @@ class OUNoise(object):
         self.max_sigma = max_sigma
         self.min_sigma = min_sigma
         self.decay_period = decay_period
-        self.action_dim = action_space.shape[0]
+        #self.action_dim = action_space.shape[0]
+        self.action_dim = action_space
         self.reset()
 
     def reset(self):
@@ -125,29 +126,40 @@ class Critic(nn.Module):
 
 class VAE_Actor(nn.Module):
         
-    def __init__(self, state_dim, num_actions, z_dim, beta=1.0):
+    def __init__(self, state_dim, num_actions, n_channel, z_dim, beta=1.0):
         super().__init__()        
         self.num_actions = num_actions
-        vae = ConvVAE(z_dim, beta=beta)
-        vae.load_struct("encoder", "./weights/encoder.pt")
-        vae.load_struct("mu", "./weights/mu.pt")
-        vae.load_struct("logvar", "./weights/logvar.pt")
-        
+        self.vae = ConvVAE(n_channel, z_dim, beta=beta)
+        self.vae.load_struct("encoder", "models/weights/encoder.pt")
+        self.vae.load_struct("mu", "models/weights/mu.pt")
+        self.vae.load_struct("logvar", "models/weights/logvar.pt")
         self.linear = nn.Linear(state_dim, num_actions)
         
         
-    def forward(self, x, distance, orientation):
-        mu, logvar = self.vae.encode(x)
-        z = self.vae.reparametrize(mu, logvar)
-        outp = self.linear(torch.cat([z, distance, orientation], 1)) 
-        return z
+    def forward(self, state):
+        action = torch.tanh(self.linear(state)) 
+        return action
+    
+    def feat_ext(self, x):
+        """
+        Parameters
+        ----------
+        state : PIL Image
+            image from RGB camera.
+        Returns
+        -------
+        z: latent state.
+        """
+        with torch.no_grad():
+            mu, logvar = self.vae.encode(x)
+        return self.vae.reparametrize(mu, logvar)
     
 class VAE_critic(nn.Module):
     
     def __init__(self, state_dim, num_actions):
         super().__init__()
         self.num_actions = num_actions
-        self.linear = nn.Linear(state_dim, 1)
+        self.linear = nn.Linear(state_dim+num_actions, 1)
         
     def forward(self, state, action):
         return self.linear(torch.cat([state, action], 1))
@@ -165,37 +177,39 @@ class DDPG:
                  w_image_in=0,
                  actor_lr = 1e-3,
                  critic_lr=1e-3,
-                 optim="SGD",
+                 optim="Adam",
                  batch_size=10,
                  gamma=0.99,
                  tau=1e-2,
                  alpha=0.7,
                  beta=0.5,
                  model_type="Conv",
+                 n_channel=3, 
+                 z_dim=0,
                  type_RM="sequential",
                  max_memory_size=50000,
                  device='cpu',
                  rw_weights=None,
                  actor_linear_layers=[]):
 
-        self.num_actions = action_space.shape[0]
+        #self.num_actions = action_space.shape[0]
+        self.num_actions = action_space
         self.state_dim = state_dim
-        self.action_min, self.action_max = action_space.low, action_space.high
-
+        #self.action_min, self.action_max = action_space.low, action_space.high
         self.gamma = gamma
         self.tau = tau
         self.max_memory_size = max_memory_size
         self.batch_size = batch_size
         self.std = 0.1
         self.rw_weights = rw_weights
-        
+        self.model_type = model_type
 
         # Networks
         if model_type == "VAE":
-            self.actor = VAE_Actor(state_dim, self.num_actions, z_dim, beta=beta)
-            self.actor_target = VAE_Actor(state_dim, self.num_actions, z_dim, beta=beta)
-            self.critic = VAE_critic(state_dim, self.num_actions)
-            self.critic_target = VAE_critic(state_dim, self.num_actions) 
+            self.actor = VAE_Actor(state_dim, self.num_actions, n_channel, z_dim, beta=beta).float()
+            self.actor_target = VAE_Actor(state_dim, self.num_actions, n_channel, z_dim, beta=beta).float()
+            self.critic = VAE_critic(state_dim, self.num_actions).float()
+            self.critic_target = VAE_critic(state_dim, self.num_actions).float()
        
         else:
             self.actor = Actor(self.num_actions, h_image_in, w_image_in, linear_layers=actor_linear_layers)
@@ -247,17 +261,20 @@ class DDPG:
         self.device = torch.device(device)
 
     def predict(self, state, step, mode="training"):
-        state = Variable(state.unsqueeze(0)) # [1, C, H, W]
+        #if self.model_type != "VAE": state = Variable(state.unsqueeze(0)) # [1, C, H, W]
+        state = torch.from_numpy(state).float()
         action = self.actor(state)
         action = action.detach().numpy()[0] # [steer, throttle]
         if mode=="training":
             action = self.ounoise.get_action(action, step)
+            action[0] = np.clip(action[0], -1, 1)
+            action[1] = np.clip(action[1], 0, 1)
             # action[0] = np.clip(np.random.normal(action[0], self.std, 1), -1, 1)
             # action[1] = np.clip(np.random.normal(action[1], self.std, 1), 0, 1)
         return action
 
     def update(self):
-
+        
         if self.type_RM in ["random", "prioritized"] :
             if self.replay_memory.get_memory_size() < self.batch_size:
                 return
@@ -272,10 +289,10 @@ class DDPG:
                                                             self.gamma)
             importance_sampling_weight = torch.FloatTensor(importance_sampling_weight).to(self.device)
 
-        states = torch.cat(states, dim=0).to(self.device)
+        states = torch.FloatTensor(states).to(self.device)
         actions = torch.FloatTensor(actions).to(self.device)
         rewards = torch.FloatTensor(rewards).to(self.device)
-        next_states = torch.cat(next_states, dim=0).to(self.device)
+        next_states = torch.FloatTensor(next_states).to(self.device)
 
         self.actor = self.actor.to(self.device) # Because is used for predict actions
         self.actor_target = self.actor_target.to(self.device)
@@ -287,7 +304,7 @@ class DDPG:
         Qvals = self.critic(states, actions)
         next_actions = self.actor_target(next_states)
         next_Q = self.critic_target(next_states, next_actions.detach())
-        Q_prime = rewards.unsqueeze(1) + self.gamma*next_Q
+        Q_prime = rewards.unsqueeze(1) + self.gamma*next_Q.detach()
 
         critic_loss = 0
         if self.type_RM in ["sequential", "random"]:
@@ -299,11 +316,11 @@ class DDPG:
         # updates networks
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
-        nn.utils.clip_grad_norm_(self.actor.parameters(), 1000.0)
+        #nn.utils.clip_grad_norm_(self.actor.parameters(), 1000.0)
         self.actor_optimizer.step()
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
-        nn.utils.clip_grad_norm_(self.critic.parameters(), 1000.0)
+        #nn.utils.clip_grad_norm_(self.critic.parameters(), 1000.0)
         self.critic_optimizer.step()
 
         for target_param, param in zip(self.actor_target.parameters(), self.actor.parameters()):
@@ -317,6 +334,9 @@ class DDPG:
         self.actor_target = self.actor_target.cpu()
         self.critic = self.critic.cpu()
         self.critic_target = self.critic_target.cpu()
+
+    def feat_ext(self, state):
+        return self.actor.feat_ext(state)
 
     def load_state_dict(self, models_state_dict, optimizer_state_dict):
         self.actor.load_state_dict(models_state_dict[0])

@@ -62,38 +62,24 @@ def train():
     # Set which reward function you will use
     reward_fn = "reward_fn"
 
-    # Create state encoding fn
-    encode_state_fn = create_encode_state_fn(config.preprocess.Resize,
-                                            config.preprocess.CenterCrop,
-                                            config.preprocess.mean,
-                                            config.preprocess.std)
-
-    print("Creating Environment")
-    env = NormalizedEnv(CarlaEnv(reward_fn=reward_functions[reward_fn],
-                    encode_state_fn=encode_state_fn))
-
-    # normalize actions
-
-    if isinstance(config.seed, int):
-        env.seed(config.seed)
-
     best_eval_rew = -float("inf")
 
     rw_weights = [config.reward_fn.weight_speed_limit,
                   config.reward_fn.weight_centralization,
                   config.reward_fn.weight_route_al,
-                  #config.reward_fn.weight_collision_vehicle,
-                  #config.reward_fn.weight_collision_pedestrian,
-                  #config.reward_fn.weight_collision_other,
-                  #config.reward_fn.weight_final_goal,
-                  config.reward_fn.weight_distance_to_goal]
+                  config.reward_fn.weight_collision_vehicle,
+                  config.reward_fn.weight_collision_pedestrian,
+                  config.reward_fn.weight_collision_other,
+                  config.reward_fn.weight_final_goal]
 
-    print("Creating model")
-    model = init_model(config.model.type,
-                       env.observation_space,
-                       env.action_space,
+    print("Creating model..")
+    model = init_model(config.run_type,
+                       config.model.type,
+                       config.train.state_dim,
+                       config.train.action_space,
                        config.preprocess.CenterCrop,
                        config.preprocess.CenterCrop,
+                       z_dim=config.train.z_dim,
                        actor_lr = config.train.actor_lr,
                        critic_lr = config.train.critic_lr,
                        batch_size = config.train.batch_size,
@@ -106,6 +92,25 @@ def train():
                        device = config.train.device,
                        rw_weights=rw_weights if config.reward_fn.normalize else None,
                        actor_linear_layers=config.train.actor_layers)
+
+
+    # Create state encoding fn
+    encode_state_fn = create_encode_state_fn(config.preprocess.Resize_h,
+                                             config.preprocess.Resize_w,
+                                             config.preprocess.CenterCrop,
+                                             config.preprocess.mean,
+                                             config.preprocess.std,
+                                             config.train.measurements_to_include,
+                                             vae_encode=model.feat_ext if config.model.type=="VAE" else None)
+
+    print("Creating Environment..")
+    env = NormalizedEnv(CarlaEnv(reward_fn=reward_functions[reward_fn],
+                    encode_state_fn=encode_state_fn))
+
+    # normalize actions
+
+    if isinstance(config.seed, int):
+        env.seed(config.seed)
 
     # Stats
     rewards = []
@@ -128,6 +133,7 @@ def train():
                 for step in range(config.train.steps):
                     if env.controller.parse_events():
                         return
+                    
                     action = model.predict(state, step) # return a np. action
                     next_state, reward, terminal_state, info = env.step(action)
                     if info["closed"] == True:
@@ -137,8 +143,8 @@ def train():
                     if not config.reward_fn.normalize:
                         reward = weighted_rw # rw is only a scalar value
 
-                    if config.model.type=="DDPG":  # Because exist manual and straight control also
-                        model.replay_memory.add_to_memory((state.unsqueeze(0), action, reward, next_state.unsqueeze(0), terminal_state))
+                    if config.run_type=="DDPG":  # Because exist manual and straight control also
+                        model.replay_memory.add_to_memory((state, action, reward, next_state, terminal_state))
 
                     episode_reward.append(reward)
                     state = next_state
@@ -148,19 +154,20 @@ def train():
 
                     if terminal_state:
                         if len(env.extra_info) > 0:
-                            episode_reward = list(zip(*episode_reward)) # normalize in type order
-                            episode_reward = [list(map(lambda y: (y - min(x)) / (max(x) - min(x) + 1e-30), x)) for x in episode_reward]
-                            episode_reward = list(zip(*episode_reward)) # get-back
-                            episode_reward = np.multiply(np.array(episode_reward), rw_weights).sum(axis=1).sum()
-                            print(f"episode: {episode}, reward: {np.round(episode_reward, decimals=2)}, terminal reason: {env.extra_info[-1]}")# print the most recent terminal reason
-                            logger.info(f"episode: {episode}, reward: {np.round(episode_reward, decimals=2)}, terminal reason: {env.extra_info[-1]}")
+                            #episode_reward = list(zip(*episode_reward)) # normalize in type order
+                            #episode_reward = [list(map(lambda y: (y - min(x)) / (max(x) - min(x) + 1e-30), x)) for x in episode_reward]
+                            #episode_reward = list(zip(*episode_reward)) # get-back
+                            #episode_reward = np.multiply(np.array(episode_reward), rw_weights).sum(axis=1).sum()
+                            episode_reward = sum(episode_reward)
+                            print(f"episode: {episode} || step: {step} || reward: {np.round(episode_reward, decimals=2)} || terminal reason: {env.extra_info[-1]}")# print the most recent terminal reason
+                            logger.info(f"episode: {episode} || step: {step} || reward: {np.round(episode_reward, decimals=2)}, terminal reason: {env.extra_info[-1]}")
                         break
 
-                if episode > config.train.start_to_update:
-                    for _ in range(config.train.optimization_steps):
-                        model.update()
-                if config.train.type_RM == "sequential" and config.model.type=="DDPG":
-                    model.replay_memory.delete_memory()
+            if episode > config.train.start_to_update and config.run_type=="DDPG":
+                for _ in range(config.train.optimization_steps):
+                    model.update()
+            if config.train.type_RM == "sequential" and config.model.type=="DDPG":
+                model.replay_memory.delete_memory()
 
 
             if episode % config.test.every == 0 and episode > 0:
@@ -184,6 +191,7 @@ def train():
                             print(f"episode_test: {episode_test}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}")# print the most recent terminal reason
                             logger.info(f"episode_test: {episode_test}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}")
                         break
+                episode_test += 1
 
                 test_rewards.append(episode_reward_test)
 

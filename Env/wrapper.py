@@ -24,6 +24,7 @@ from agents.navigation.global_route_planner import GlobalRoutePlanner
 camera_transforms = {
     "spectator": carla.Transform(carla.Location(x=-5.5, z=2.8), carla.Rotation(pitch=-15)),
     "dashboard": carla.Transform(carla.Location(x=1.6, z=1.7))
+    # "dashboard_1": carla.Transform(carla.Location(x=1.6, y=-0.5, z=1.7), carla.Rotation(yaw=-90))
 }
 
 class CarlaActorBase(object):
@@ -273,6 +274,9 @@ class Vehicle(CarlaActorBase):
     def get_speed(self):
         velocity = self.get_velocity()
         return np.sqrt(velocity.x**2 + velocity.y**2 + velocity.z**2)
+    
+    def get_forward_vector(self):
+        return self.get_transform().get_forward_vector()
 
     def get_closest_waypoint(self):
         return self.world.map.get_waypoint(self.get_transform().location, project_to_road=True)

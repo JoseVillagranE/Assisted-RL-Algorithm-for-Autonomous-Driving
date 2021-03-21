@@ -69,7 +69,7 @@ class CarlaEnv(gym.Env):
         reward_fn (function): Custom reward function is called every step. If none, no reward function is used
         """
 
-        # self.carla_process = None
+        self.carla_process = None
         # #carla_path = os.path.join(config.carla_dir, "CarlaUE4.sh")
         # #launch_command = [carla_path, "-opengl"]
         # #launch_command += [config.simulation.map]
@@ -138,7 +138,7 @@ class CarlaEnv(gym.Env):
         try:
             self.client = carla.Client(config.simulation.host, config.simulation.port)
             self.client.set_timeout(config.simulation.timeout)
-
+            
             # create the World
             self.world = World(self.client)
             self.controller = KeyboardControl()
@@ -206,7 +206,8 @@ class CarlaEnv(gym.Env):
                                                                 args_lateral=args_lateral_dict,
                                                                 args_longitudinal=args_longitudinal_dict)
 
-
+                else:
+                    self.exo_vehicle.is_static = True
             self.initial_transform_ped = None
             if self.is_pedestrian:
                 # Create a pedestrian
@@ -223,7 +224,16 @@ class CarlaEnv(gym.Env):
                                     config.simulation.obs_res[1],
                                     transform= camera_transforms["dashboard"],
                                         attach_to=self.agent, on_recv_image = lambda e: self._set_observation_image(e),
+                                        camera_type=config.agent.sensor.camera_type,
+                                        color_converter=carla.ColorConverter.Raw if config.agent.sensor.color_converter=="raw" else \
+                                                        carla.ColorConverter.CityScapesPalette, 
                                         sensor_tick=0.0 if config.synchronous_mode else 1.0/self.fps)
+                
+                # self.dashcam_1 = Camera(self.world, config.simulation.obs_res[0],
+                #                     config.simulation.obs_res[1],
+                #                     transform= camera_transforms["dashboard_1"],
+                #                         attach_to=self.agent, on_recv_image = lambda e: self._set_observation_image(e),
+                #                         sensor_tick=0.0 if config.synchronous_mode else 1.0/self.fps)
 
 
             if config.agent.sensor.spectator_camera:
@@ -240,7 +250,7 @@ class CarlaEnv(gym.Env):
 
         self.world.get_exo_agents(self.agent.get_carla_actor().id)
         
-        self.num_saved_obs = 2477
+        self.num_saved_obs = 8887
         
         # Reset env to set initial state
         # self.reset()
@@ -274,7 +284,7 @@ class CarlaEnv(gym.Env):
         if self.is_exo_vehicle:
             # Always exo agent have action
             next_wp = self.exo_vehicle.get_next_wp()
-            if not self.exo_vehicle.autopilot_mode:
+            if not self.exo_vehicle.autopilot_mode and not self.exo_vehicle.is_static:
                 exo_control = self.exo_vehicle_controller.run_step(self.speed, next_wp)
                 self.exo_vehicle.control.steer = exo_control.steer
                 self.exo_vehicle.control.throttle = exo_control.throttle
@@ -293,16 +303,15 @@ class CarlaEnv(gym.Env):
         # Get most recent observation and viewer image
         if config.agent.sensor.dashboard_camera:
             self.observation = self._get_observation_image()
-            
-            img = Image.fromarray(self.observation)
-            img.save("./data/"+str(self.num_saved_obs)+".png")
-            self.num_saved_obs += 1
+            # img = Image.fromarray(self.observation)
+            # img.save("./data/"+str(self.num_saved_obs)+".png")
+            # self.num_saved_obs += 1
             
             
         if config.agent.sensor.spectator_camera:
             self.viewer_image = self._get_viewer_image()
 
-        encode_state = self.encode_state_fn(self)
+        encode_state = self.encode_state_fn(self) # preprocess image
 
         # Current location
         transform = self.agent.get_transform()
