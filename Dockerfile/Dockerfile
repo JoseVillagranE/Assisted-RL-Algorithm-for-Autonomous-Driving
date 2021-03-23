@@ -34,10 +34,10 @@ RUN conda install pytorch=1.5.0 torchvision cudatoolkit=10.1 -c pytorch
 RUN conda install -y mpi4py opencv
 RUN pip install torchvision==0.8.1
 RUN pip install hashfs pydevd remote_pdb rpdb matplotlib visdom
-RUN pip install namedlist tensorboardX sklearn easydict
+RUN pip install namedlist tensorboardX sklearn easydict gym pygame networkx
 
 RUN wget -O /home/carla.tar.xz -r 'https://drive.google.com/uc?export=download&id=1ULdbY4UXLggKFd22AKw8RSKYQEico6aK'
-RUN tar -xvf /home/carla.tar.xz
+RUN tar -xvf /home/carla.tar.xz -C /home
 
 RUN mkdir /home/Tesis
 COPY . /home/Tesis

@@ -130,9 +130,10 @@ class VAE_Actor(nn.Module):
         super().__init__()        
         self.num_actions = num_actions
         self.vae = ConvVAE(n_channel, z_dim, beta=beta)
-        self.vae.load_struct("encoder", "models/weights/encoder.pt")
-        self.vae.load_struct("mu", "models/weights/mu.pt")
-        self.vae.load_struct("logvar", "models/weights/logvar.pt")
+        self.vae.load_state_dict(torch.load("models/weights/segmodel.pt"))
+        #self.vae.load_struct("encoder", "models/weights/encoder.pt")
+        #self.vae.load_struct("mu", "models/weights/mu.pt")
+        #self.vae.load_struct("logvar", "models/weights/logvar.pt")
         self.linear = nn.Linear(state_dim, num_actions)
         
         
@@ -267,8 +268,6 @@ class DDPG:
         action = action.detach().numpy()[0] # [steer, throttle]
         if mode=="training":
             action = self.ounoise.get_action(action, step)
-            action[0] = np.clip(action[0], -1, 1)
-            action[1] = np.clip(action[1], 0, 1)
             # action[0] = np.clip(np.random.normal(action[0], self.std, 1), -1, 1)
             # action[1] = np.clip(np.random.normal(action[1], self.std, 1), 0, 1)
         return action
@@ -316,11 +315,11 @@ class DDPG:
         # updates networks
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
-        #nn.utils.clip_grad_norm_(self.actor.parameters(), 1000.0)
+        nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
         self.actor_optimizer.step()
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
-        #nn.utils.clip_grad_norm_(self.critic.parameters(), 1000.0)
+        nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
         self.critic_optimizer.step()
 
         for target_param, param in zip(self.actor_target.parameters(), self.actor.parameters()):

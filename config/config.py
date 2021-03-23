@@ -16,8 +16,6 @@ path_egg = glob.glob(str(carla_dir) + '/PythonAPI/carla/dist/carla-*%d.%d-%s.egg
 
 
 
-
-
 # Project Setup
 config = edict()
 config.project = str(root_dir.resolve()) # Root of the project
@@ -59,11 +57,11 @@ config.train.checkpoint_every = 0
 config.train.batch_size = 10
 config.train.episodes = 100
 config.train.steps = 10000
-config.train.optimizer = 'SGD'
+config.train.optimizer = 'Adam'
 config.train.actor_lr = 1e-4
 config.train.critic_lr = 1e-4
-config.train.max_memory_size = 1000000 # 1e6
-config.train.tau = 0.5
+config.train.max_memory_size = 100000000 # 1e8
+config.train.tau = 0.001
 config.train.gamma = 0.9
 config.train.alpha = 0.7 # Prioritized Experience Replay
 config.train.beta = 0.5 # Prioritized Experience Replay
@@ -75,9 +73,9 @@ config.train.episode_loading = 0
 config.train.start_to_update = 0
 config.train.optimization_steps = 1
 config.train.action_space = 2 # [throttle, orientation]
-config.train.measurements_to_include = set(["speed", "orientation"])
+config.train.measurements_to_include = []#set(["speed", "orientation"])
 config.train.z_dim = 64
-config.train.state_dim = config.train.z_dim + 4 # harcoded
+config.train.state_dim = config.train.z_dim # + 4 harcoded
 
 # Agent Defaults (Single agent)
 config.agent = edict()

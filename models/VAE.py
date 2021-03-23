@@ -21,7 +21,7 @@ import torchvision.datasets as datasets
 
 class ConvVAE(nn.Module):
     
-    def __init__(self, n_channel, z_dim, beta=1.0):
+    def __init__(self, n_channel, z_dim, reduction="sum", beta=1.0):
         super().__init__()
         
         self.n_channel = n_channel
@@ -43,7 +43,7 @@ class ConvVAE(nn.Module):
         self.mu = nn.Linear(256*24, z_dim)
         self.logvar = nn.Linear(256*24, z_dim)
         
-        self.bce = nn.BCELoss(reduction='sum')
+        self.bce = nn.BCELoss(reduction=reduction)
         
     def forward(self, x):
         mu, logvar = self.encode(x)
