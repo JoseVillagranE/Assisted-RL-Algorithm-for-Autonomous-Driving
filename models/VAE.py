@@ -21,7 +21,7 @@ import torchvision.datasets as datasets
 
 class ConvVAE(nn.Module):
     
-    def __init__(self, n_channel, z_dim, reduction="sum", beta=1.0):
+    def __init__(self, n_channel, z_dim, beta=1.0, reduction="sum", recons_loss="bce"):
         super().__init__()
         
         self.n_channel = n_channel
@@ -43,7 +43,8 @@ class ConvVAE(nn.Module):
         self.mu = nn.Linear(256*24, z_dim)
         self.logvar = nn.Linear(256*24, z_dim)
         
-        self.bce = nn.BCELoss(reduction=reduction)
+        self.recons_loss = nn.BCELoss(reduction=reduction) if recons_loss=="bce" \
+                                                            else nn.MSELoss(reduction=reduction)
         
     def forward(self, x):
         mu, logvar = self.encode(x)
@@ -72,7 +73,7 @@ class ConvVAE(nn.Module):
         return recons
     
     def compute_loss(self, input, recons, mu, logvar):
-        recons_loss = self.bce(recons, input)
+        recons_loss = self.recons_loss(recons, input)
         kl_loss = -0.5*torch.sum(1 + logvar - mu**2 - logvar.exp())
         return recons_loss + self.beta*kl_loss
     
@@ -88,7 +89,7 @@ class ConvVAE(nn.Module):
     
 if __name__ == "__main__":
     
-    model = ConvVAE(3, 64, 1.0)
+    model = ConvVAE(3, 64, beta=1.0, reduction="sum", recons_loss="mse")
     input = torch.rand((10, 3, 80, 160))
     
     recons, mu, logvar = model(input)
