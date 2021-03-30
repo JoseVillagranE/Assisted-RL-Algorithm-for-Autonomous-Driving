@@ -105,7 +105,18 @@ class CarlaEnv(gym.Env):
 
         self.terminal_state = False
         self.extra_info = [] # List of extra info shown of the HUD
-        self.goal_location = carla.Location(config.agent.goal.x, config.agent.goal.y, config.agent.goal.z)
+        
+        self.initial_location = carla.Location(config.agent.initial_position.x,
+                                               config.agent.initial_position.y,
+                                               config.agent.initial_position.z,)
+        
+        self.goal_location = carla.Location(config.agent.goal.x,
+                                            config.agent.goal.y,
+                                            config.agent.goal.z)
+        
+        self.max_distance_to_goal = self.initial_location.distance(self.goal_location) #[m]
+        
+        
         self.margin_to_goal = config.agent.margin_to_goal
         self.safe_distance = config.agent.safe_distance
 
@@ -250,7 +261,7 @@ class CarlaEnv(gym.Env):
 
         self.world.get_exo_agents(self.agent.get_carla_actor().id)
         
-        self.num_saved_obs = 8887
+        self.num_saved_obs = 5435
         
         # Reset env to set initial state
         # self.reset()
@@ -303,9 +314,9 @@ class CarlaEnv(gym.Env):
         # Get most recent observation and viewer image
         if config.agent.sensor.dashboard_camera:
             self.observation = self._get_observation_image()
-            # img = Image.fromarray(self.observation)
-            # img.save("./data/"+str(self.num_saved_obs)+".png")
-            # self.num_saved_obs += 1
+            #img = Image.fromarray(self.observation)
+            #img.save("./segmentation_data/"+str(self.num_saved_obs)+".png")
+            #self.num_saved_obs += 1
             
             
         if config.agent.sensor.spectator_camera:

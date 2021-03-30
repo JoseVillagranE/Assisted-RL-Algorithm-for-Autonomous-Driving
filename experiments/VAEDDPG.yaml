@@ -1,6 +1,6 @@
 run_type: 'DDPG'
 run_id: '1'
-seed: 123
+seed: 218752
 
 train:
   checkpoint_every: 100000
@@ -9,9 +9,9 @@ train:
   actor_lr: 0.0001
   critic_lr: 0.0001
   type_RM: "random"
-  batch_size: 32
+  batch_size: 256
   start_to_update: 5
-  optimization_steps: 5
+  optimization_steps: 1
 
 agent:
   sensor:
@@ -41,7 +41,7 @@ reward_fn:
   weight_speed_limit: 1
   weight_route_al: 1
   weight_centralization: 1
-  weight_distance_to_goal: 0
+  weight_distance_to_goal: 1
 
 test:
   every: 10

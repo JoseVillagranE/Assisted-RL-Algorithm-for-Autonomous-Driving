@@ -113,8 +113,12 @@ def reward_fn(env):
         angle_factor = 1 - abs(angle / np.deg2rad(config.reward_fn.max_angle))
     else:
         angle_factor = -1
-
-    #distance_to_goal = 1/env.distance_to_goal
+    
+    # R(d-to-goal)
+    if env.distance_to_goal <= env.max_distance_to_goal:
+        rdtg = 1 - env.distance_to_goal/env.max_distance_to_goal
+    else:
+        rdtg = -1
 
     collision_pedestrian = 0
     collision_vehicle = 0
@@ -136,7 +140,8 @@ def reward_fn(env):
             collision_vehicle,
             collision_pedestrian,
             collision_other,
-            final_goal)
+            final_goal,
+            rdtg)
 
 reward_functions["reward_fn"] = create_reward_fn(reward_fn)
 

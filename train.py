@@ -70,7 +70,8 @@ def train():
                   config.reward_fn.weight_collision_vehicle,
                   config.reward_fn.weight_collision_pedestrian,
                   config.reward_fn.weight_collision_other,
-                  config.reward_fn.weight_final_goal]
+                  config.reward_fn.weight_final_goal,
+                  config.reward_fn.weight_distance_to_goal]
 
     print("Creating model..")
     model = init_model(config.run_type,
@@ -134,7 +135,7 @@ def train():
                     if env.controller.parse_events():
                         return
                     
-                    action = model.predict(state, step) # return a np. action
+                    action = model.predict(state, episode) # return a np. action
                     next_state, reward, terminal_state, info = env.step(action)
                     if info["closed"] == True:
                         exit(0)
@@ -166,7 +167,7 @@ def train():
             if episode > config.train.start_to_update and config.run_type=="DDPG":
                 for _ in range(config.train.optimization_steps):
                     model.update()
-            if config.train.type_RM == "sequential" and config.model.type=="DDPG":
+            if config.train.type_RM == "sequential" and config.run.type=="DDPG":
                 model.replay_memory.delete_memory()
 
 
