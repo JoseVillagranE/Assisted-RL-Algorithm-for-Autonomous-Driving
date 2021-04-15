@@ -31,8 +31,8 @@ class VelocityPlanner:
             return self._prev_trajectory[0][2]
 
         for i in range(len(self._prev_trajectory)-1):
-            distance_step = np.linalg.norm(np.subtract(self._prev_trajectory[i+1][0:2], 
-                                                       self._prev_trajectory[i][0:2]))
+            distance_step = np.linalg.norm(np.subtract(self._prev_trajectory[i+1][:2], 
+                                                       self._prev_trajectory[i][:2]))
             velocity = self._prev_trajectory[i][2]
             time_delta = distance_step / velocity
            

@@ -35,7 +35,6 @@ config.model_logs.root_dir = os.path.join(root_dir, 'models_logs')
 # ---------------------- Simulation ----------------------------------------------
 
 config.synchronous_mode = False
-
 # Simulation Defaults
 config.simulation = edict()
 config.simulation.map = "Town02"
@@ -57,12 +56,12 @@ config.train.checkpoint_every = 0
 config.train.batch_size = 10
 config.train.episodes = 100
 config.train.steps = 10000
-config.train.optimizer = 'SGD'
+config.train.optimizer = 'Adam'
 config.train.actor_lr = 1e-4
-config.train.critic_lr = 1e-4
+config.train.critic_lr = 1e-3
 config.train.max_memory_size = 100000000 # 1e8
 config.train.tau = 0.001
-config.train.gamma = 0.95
+config.train.gamma = 0.99
 config.train.alpha = 0.7 # Prioritized Experience Replay
 config.train.beta = 0.5 # Prioritized Experience Replay
 config.train.device = "cpu"
@@ -72,10 +71,10 @@ config.train.load_checkpoint_name = ""
 config.train.episode_loading = 0
 config.train.start_to_update = 0
 config.train.optimization_steps = 1
-config.train.action_space = 2 # [throttle, orientation]
-config.train.measurements_to_include = []#set(["steer", "throttle", "speed", "orientation"])
+config.train.action_space = 2 # [steer, throttle]
+config.train.measurements_to_include = set(["steer", "throttle"])#,"speed"]) #"orientation"])
 config.train.z_dim = 128
-config.train.state_dim = config.train.z_dim# + 6 #harcoded
+config.train.state_dim = config.train.z_dim + 2#harcoded
 
 # Agent Defaults (Single agent)
 config.agent = edict()

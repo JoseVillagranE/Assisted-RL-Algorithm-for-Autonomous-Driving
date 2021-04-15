@@ -17,175 +17,176 @@ path_egg = glob.glob(str(carla_dir) + '/PythonAPI/carla/dist/carla-*%d.%d-%s.egg
 
 
 # Project Setup
-config = edict()
-config.project = str(root_dir.resolve()) # Root of the project
-config.seed = 1
-config.carla_dir = carla_dir
-config.carla_egg = path_egg
+planning_config = edict()
+planning_config.project = str(root_dir.resolve()) # Root of the project
+planning_config.seed = 1
+planning_config.carla_dir = carla_dir
+planning_config.carla_egg = path_egg
 
 # Shared Defaults
-config.run_type = None
-config.run_id = None
+planning_config.run_type = None
+planning_config.run_id = None
 
 
-config.iter_for_sim_timestep = 10 # no. iterations to compute approx sim timestep
-config.total_frame_buffer = 300 # number of frames to buffer after total runtime
+planning_config.iter_for_sim_timestep = 10 # no. iterations to compute approx sim timestep
 
-config.waypoints_filename = 'agent_waypoints.txt'  # waypoint file to load
-config.dist_threshold_to_last_waypoint = 2.0  # some distance from last position before
+planning_config.total_frame_buffer = 300 # number of frames to buffer after total runtime
+
+planning_config.dist_threshold_to_last_waypoint = 2.0  # some distance from last position before
                                                 # simulation ends
 
 
 # Path interpolation parameters
-config.interp_distance_res = 0.01 # distance between interpolated points
+planning_config.interp_distance_res = 0.01 # distance between interpolated points
 
 # controller output directory
-config.controller_output_folder = root_dir + 'Planning/controller_output/'
+planning_config.controller_output_folder = str(root_dir) + 'Planning/controller_output/'
 
 
 # ---------------------- Simulation ----------------------------------------------
 
-config.synchronous_mode = False
+planning_config.synchronous_mode = True
 
 # Simulation Defaults
-config.simulation = edict()
-config.simulation.map = "Town02"
-config.simulation.sleep = 10.00   # game seconds (time before controller start)
-config.simulation.timeout = 4.0
-config.simulation.action_smoothing = 0.5 # w/out action_smoothing
-config.simulation.view_res = (640, 480)
-config.simulation.obs_res = (640, 480)
-config.simulation.fps = 10
-config.simulation.host = "localhost"
-config.simulation.port = 2000 # Default of world-port CARLA
-config.simulation.num_pedestrians = 0      # total number of pedestrians to spawn
-config.simulationn.num_vehicles = 2      # total number of vehicles to spawn
+planning_config.simulation = edict()
+planning_config.simulation.map = "Town02"
+planning_config.simulation.sleep = 5.0   # game seconds (time before controller start)
+planning_config.simulation.timeout = 4.0
+planning_config.simulation.total_run_time = 100
+planning_config.simulation.action_smoothing = 0.5 # w/out action_smoothing
+planning_config.simulation.view_res = (640, 480)
+planning_config.simulation.obs_res = (640, 480)
+planning_config.simulation.fps = 10
+planning_config.simulation.host = "localhost"
+planning_config.simulation.port = 2000 # Default of world-port CARLA
+planning_config.simulation.num_pedestrians = 0      # total number of pedestrians to spawn
+planning_config.simulation.num_vehicles = 2      # total number of vehicles to spawn
+planning_config.simulation.wait_time_before_start = 4.0 # s
+
 
 
 # Agent Defaults (Single agent)
-config.agent = edict()
-config.agent.vehicle_type = "vehicle.tesla.model3"
-config.agent.safe_distance = 3.0
-config.agent.margin_to_goal = 3.0
+planning_config.agent = edict()
+planning_config.agent.vehicle_type = "vehicle.tesla.model3"
+planning_config.agent.safe_distance = 3.0
+planning_config.agent.margin_to_goal = 3.0
 
-config.agent.initial_position = edict()
-config.agent.initial_position.x = 100
-config.agent.initial_position.y = 63
-config.agent.initial_position.z = 1.0
-config.agent.initial_position.yaw = 0
+planning_config.agent.initial_position = edict()
+planning_config.agent.initial_position.x = 100
+planning_config.agent.initial_position.y = 63
+planning_config.agent.initial_position.z = 1.0
+planning_config.agent.initial_position.yaw = 0
 
-config.agent.goal = edict()
-config.agent.goal.x = 215
-config.agent.goal.y = 64
-config.agent.goal.z = 1.0
+planning_config.agent.goal = edict()
+planning_config.agent.goal.x = 130#215
+planning_config.agent.goal.y = 64
+planning_config.agent.goal.z = 1.0
 
-config.agent.sensor = edict()
-config.agent.sensor.spectator_camera = False
-config.agent.sensor.dashboard_camera = False
-config.agent.sensor.camera_type = "sensor.camera.rgb"
-config.agent.sensor.color_converter = "raw"
+planning_config.agent.sensor = edict()
+planning_config.agent.sensor.spectator_camera = False
+planning_config.agent.sensor.dashboard_camera = True
+planning_config.agent.sensor.camera_type = "sensor.camera.semantic_segmentation" #"sensor.camera.rgb"
+planning_config.agent.sensor.color_converter = "CityScapesPallete"#"raw"
 
 
 # ExoAgent Defaults
-config.exo_agents = edict()
-config.exo_agents.pedestrian = edict()
-config.exo_agents.pedestrian.spawn = True
+planning_config.exo_agents = edict()
+planning_config.exo_agents.pedestrian = edict()
+planning_config.exo_agents.pedestrian.spawn = False
 
-config.exo_agents.pedestrian.initial_position = edict()
-config.exo_agents.pedestrian.initial_position.x = 191
-config.exo_agents.pedestrian.initial_position.y = 71
-config.exo_agents.pedestrian.initial_position.z = 1.0
-config.exo_agents.pedestrian.initial_position.yaw = 0
+planning_config.exo_agents.pedestrian.initial_position = edict()
+planning_config.exo_agents.pedestrian.initial_position.x = 191
+planning_config.exo_agents.pedestrian.initial_position.y = 71
+planning_config.exo_agents.pedestrian.initial_position.z = 1.0
+planning_config.exo_agents.pedestrian.initial_position.yaw = 0
 
-config.exo_agents.vehicle = edict()
-config.exo_agents.vehicle.spawn = True
-config.exo_agents.vehicle.vehicle_type = "vehicle.audi.a2"
-config.exo_agents.vehicle.target_speed = 20.0 # Km/h
-config.exo_agents.vehicle.controller = "None" # How control the exo vehicle ?
+planning_config.exo_agents.vehicle = edict()
+planning_config.exo_agents.vehicle.spawn =  True
+planning_config.exo_agents.vehicle.vehicle_type = "vehicle.audi.a2"
+planning_config.exo_agents.vehicle.target_speed = 20.0 # Km/h
+planning_config.exo_agents.vehicle.controller = "None" # How control the exo vehicle ?
 
-config.exo_agents.vehicle.PID = edict()
-config.exo_agents.vehicle.PID.lateral_Kp = 1.95
-config.exo_agents.vehicle.PID.lateral_Ki = 0.07
-config.exo_agents.vehicle.PID.lateral_Kd = 0.2
+planning_config.exo_agents.vehicle.PID = edict()
+planning_config.exo_agents.vehicle.PID.lateral_Kp = 1.95
+planning_config.exo_agents.vehicle.PID.lateral_Ki = 0.07
+planning_config.exo_agents.vehicle.PID.lateral_Kd = 0.2
 
-config.exo_agents.vehicle.PID.longitudinal_Kp = 1.0
-config.exo_agents.vehicle.PID.longitudinal_Ki = 0.05
-config.exo_agents.vehicle.PID.longitudinal_Kd = 0
+planning_config.exo_agents.vehicle.PID.longitudinal_Kp = 1.0
+planning_config.exo_agents.vehicle.PID.longitudinal_Ki = 0.05
+planning_config.exo_agents.vehicle.PID.longitudinal_Kd = 0
 
 
-config.exo_agents.vehicle.initial_position = edict()
-config.exo_agents.vehicle.initial_position.x = 221
-config.exo_agents.vehicle.initial_position.y = 57
-config.exo_agents.vehicle.initial_position.z = 1.0
-config.exo_agents.vehicle.initial_position.yaw = 180
+planning_config.exo_agents.vehicle.initial_position = edict()
+planning_config.exo_agents.vehicle.initial_position.x = 120#149
+planning_config.exo_agents.vehicle.initial_position.y = 58
+planning_config.exo_agents.vehicle.initial_position.z = 1.0
+planning_config.exo_agents.vehicle.initial_position.yaw = 90
 
-config.exo_agents.vehicle.end_position = edict()
-config.exo_agents.vehicle.end_position.x = 64
-config.exo_agents.vehicle.end_position.y = 54
-config.exo_agents.vehicle.end_position.z = 1.0
+planning_config.exo_agents.vehicle.end_position = edict()
+planning_config.exo_agents.vehicle.end_position.x = 64
+planning_config.exo_agents.vehicle.end_position.y = 54
+planning_config.exo_agents.vehicle.end_position.z = 1.0
 
 
 # Visualisation Defaults
-config.vis = edict()
-config.vis.every = 0
-config.vis.render = False
-config.vis.live_plotting = False
+planning_config.vis = edict()
+planning_config.vis.every = 0
+planning_config.vis.render = False
 
 # Planning Constants
-config.planning = edict()
-config.planning.num_paths = 7
-config.planning.bp_lookahed_base = 8.0 # m
-config.planning.bp_lookahed_time = 2.0 # s
-config.planning.path_offset = 1.5 # m
-config.planning.circle_offset = [-1.0, 1.0, 3.0] # m
-config.planning.circle.radii = [1.5, 1.5, 1.5]  # m
-config.planning.time_gap = 1.0 # s
-config.planning.path_select_weight = 10
-config.planning.a_max = 1.5 # m/s^2
-config.planning.slow_speed = 2.0 # m/s
-config.planning.stop_line_buffer = 2.0 # m
-config.planning.lead_vehicle_lookahed = 20.0 # m
-config.planning.lp_frequency_divisor   = 2 # Frequency divisor to make the 
+planning_config.planning = edict()
+planning_config.planning.num_paths = 7
+planning_config.planning.bp_lookahed_base = 8.0 # m
+planning_config.planning.bp_lookahed_time = 2.0 # s
+planning_config.planning.path_offset = 0.5 # m
+planning_config.planning.circle_offset = [-1.0, 0.0, 1.0] # m
+planning_config.planning.circle_radii = [2.0, 2.0, 2.0]  # m
+planning_config.planning.time_gap = 1.0 # s
+planning_config.planning.path_select_weight = 10
+planning_config.planning.a_max = 1.5 # m/s^2
+planning_config.planning.slow_speed = 2.0 # m/s
+planning_config.planning.stop_line_buffer = 2.0 # m
+planning_config.planning.lead_vehicle_lookahed = 20.0 # m
+planning_config.planning.lp_frequency_divisor   = 2 # Frequency divisor to make the 
                                            # local planner operate at a lower
                                            # frequency than the controller
                                            # (which operates at the simulation
                                            # frequency). Must be a natural
                                            # number.
 
-# plots config
+planning_config.planning.sampling_resolution = 0.5
 
-config.plot = edict()
-config.plot.figsize_x_inches = 8 # x figure size of feedback in inches
-config.plot.figsize_y_inches = 8 # y figure size of feedback in inches
-config.plot.plot_left = 0.1    # in fractions of figure width and height
-config.plot.plot_bot = 0.1    
-config.plot.plot_width = 0.8
-config.plot.plot_height = 0.8
-config.plot.interp_max_points_plot = 10 # number of points used for displaying
-                                         # selected path
+# plots planning_config
 
-config.plot.live_plotting = True
-#Duration (in seconds) per plot refresh (set to 0 for refreshing every simulation iteration)
-config.plot.live_plotting_period = 0.1
+planning_config.plot = edict()
+planning_config.plot.figsize_x_inches = 8 # x figure size of feedback in inches
+planning_config.plot.figsize_y_inches = 8 # y figure size of feedback in inches
+planning_config.plot.plot_left = 0.1    # in fractions of figure width and height
+planning_config.plot.plot_bot = 0.1    
+planning_config.plot.plot_width = 0.8
+planning_config.plot.plot_height = 0.8
+planning_config.plot.interp_max_points_plot = 10 # number of points used for displaying selected path
+planning_config.plot.live_plotting = True
+planning_config.plot.live_plotting_period = 0.1 #Duration (in seconds) per plot refresh (set to 0 for refreshing every simulation iteration)
 
-def update_config(config_file):
-    print(config_file)
-    with open(config_file) as f:
-        exp_config = edict(yaml.load(f))
-        recursive_update(exp_config, c=config)
+def update_planning_config(planning_config_file):
+    print(planning_config_file)
+    with open(planning_config_file) as f:
+        exp_planning_config = edict(yaml.load(f))
+        recursive_update(exp_planning_config, c=planning_config)
 
-def recursive_update(in_config, c):
-    for ki, vi in in_config.items():
+def recursive_update(in_planning_config, c):
+    for ki, vi in in_planning_config.items():
         if isinstance(vi, edict):
             recursive_update(vi, c[ki])
         else:
             c[ki] = vi
 
-def check_config(in_config, k=''):
-    for ki, vi in in_config.items():
+def check_planning_config(in_planning_config, k=''):
+    for ki, vi in in_planning_config.items():
         if isinstance(vi, edict):
-            check_config(vi, k+'.'+ki)
+            check_planning_config(vi, k+'.'+ki)
         elif vi is None:
-            raise ValueError(f"{k+'.'+ki} Must be specified in the .yaml config file")
+            raise ValueError(f"{k+'.'+ki} Must be specified in the .yaml planning_config file")
         elif vi=='':
-            in_config[ki] = None
+            in_planning_config[ki] = None

@@ -1,16 +1,20 @@
 run_type: 'DDPG'
 run_id: '1'
-seed: 218752
+seed: 1
+
+
+simulation:
+    fps: 10
 
 train:
   checkpoint_every: 100000
-  episodes: 10000
+  episodes: 100
   device: "cpu"
   actor_lr: 0.0001
-  critic_lr: 0.0001
+  critic_lr: 0.001
   type_RM: "random"
-  batch_size: 256
-  start_to_update: 5
+  batch_size: 64
+  start_to_update: 8
   optimization_steps: 1
 
 agent:

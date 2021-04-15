@@ -189,12 +189,14 @@ class Vehicle(CarlaActorBase):
         if callable(on_invasion_fn):
             self.lane_sensor = LaneInvasionSensor(world, self, on_invasion_fn=on_invasion_fn)
 
-    def set_automatic_wp(self):
+    def set_automatic_wp(self, sampling_resolution=1.0):
 
         """
         Set a waypoint list from initial and end location. The final list is a list of a carla.Waypoint object
         """
-        wp_list = self.trace_route(self.initial_location, self.end_location)
+        wp_list = self.trace_route(self.initial_location, 
+                                   self.end_location,
+                                   sampling_resolution=sampling_resolution)
         self.route_wp = [ wp_list[i][0] for i in range(len(wp_list))] # carla.waypoint
         self.waypoints_queue = deque(self.route_wp)
 
@@ -226,7 +228,8 @@ class Vehicle(CarlaActorBase):
         self.current_wp_index += wp_index
 
     def get_current_wp(self):
-        return self.route_wp[self.current_wp_index]
+        if self.current_wp_index >= len(self.route_wp): return self.route_wp[-1]
+        else: return self.route_wp[self.current_wp_index]
 
     def get_next_wp_ego(self):
         if self.current_wp_index + 1 >= len(self.route_wp): return self.route_wp[-1]

@@ -130,6 +130,10 @@ class RandomDequeMemory(ExperienceReplayMemory):
 
     def delete_memory(self):
         pass
+    
+    def create_rm(self, states, actions):
+        for i in range(states.shape[0]):
+            self.memory.append((states[i, :], actions[i, :], 0, 0, 0))
 
 # Prioritized Experience Replay (Schaul et al., 2015)
 class PrioritizedDequeMemory(ExperienceReplayMemory):

@@ -3,172 +3,11 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 from .ExperienceReplayMemory import SequentialDequeMemory, RandomDequeMemory, PrioritizedDequeMemory
-from .AlexNet import alexnet, AlexNet
-from .KendallNetwork import KendallNetwork
-from .VAE import ConvVAE
+from .Conv_Actor_Critic import Conv_Actor, Conv_Critic
+from .VAE import VAE_Actor, VAE_Critic
 import gym
 
-
-def conv2d_size_out(size, kernels_size, strides, paddings, dilations):
-    for kernel_size, stride, padding, dilation in zip(kernels_size, strides, paddings, dilations):
-        size = (size + 2*padding - dilation*(kernel_size - 1) - 1)//stride + 1
-    return size
-
-class OUNoise(object):
-
-    def __init__(self, action_space, mu=0.0, theta=0.3, max_sigma=0.2, min_sigma=0.3,
-                decay_period=10):
-
-        self.mu = mu
-        self.theta = theta
-        self.sigma = max_sigma
-        self.max_sigma = max_sigma
-        self.min_sigma = min_sigma
-        self.decay_period = decay_period
-        #self.action_dim = action_space.shape[0]
-        self.action_dim = action_space
-        self.reset()
-
-    def reset(self):
-        self.state = np.ones(self.action_dim)*self.mu
-
-    def evolve_state(self):
-        x = self.state
-        dx = self.theta * (self.mu - x) + self.sigma*np.random.randn(self.action_dim)
-        self.state = x + dx
-        return self.state
-
-    def get_action(self, action, t=0):
-        ou_state = self.evolve_state()
-        self.sigma = self.max_sigma - (self.max_sigma - self.min_sigma)*min(1.0, t/self.decay_period)
-        return  action+ou_state
     
-class Actor(nn.Module):
-
-    def __init__(self, num_actions, h_image_in, w_image_in, linear_layers=[],
-                    pretrained=False):
-
-        super().__init__()
-        self.num_actions= num_actions
-
-        # self.conv_model = alexnet(pretrained) # feature extractor
-        self.conv_model = KendallNetwork()
-
-        convh =  conv2d_size_out(h_image_in,
-                                self.conv_model.kernels_size,
-                                self.conv_model.strides,
-                                self.conv_model.paddings,
-                                self.conv_model.dilations,
-                                )
-        convw =  conv2d_size_out(w_image_in,
-                                self.conv_model.kernels_size,
-                                self.conv_model.strides,
-                                self.conv_model.paddings,
-                                self.conv_model.dilations,
-                                )
-
-        linear_outp_size = convh*convw*self.conv_model.out_channel
-
-        self.linear_layer_list = nn.ModuleList()
-        if len(linear_layers) > 0:
-            self.linear_layer_list.append(nn.Linear(linear_outp_size, linear_layers[0]))
-            for i in range(len(linear_layers) - 1):
-                self.linear_layer_list.append(nn.Linear(linear_layers[i], linear_layers[i+1]))
-
-            self.linear_layer_list.append(nn.Linear(linear_layers[-1], num_actions))
-
-        else:
-            self.linear_layer_list.append(nn.Linear(linear_outp_size, num_actions))
-
-    def forward(self, state):
-        x = self.conv_model(state)
-        x = self.forward_linear(x, self.linear_layer_list)
-        return x
-
-    @staticmethod
-    def forward_linear(x, layer_list):
-
-        for i, layer in enumerate(layer_list):
-            if i < len(layer_list) - 1:
-                x = torch.relu(layer(x))
-            else:
-                x = torch.tanh(layer(x)) # just the last layer apply tanh
-        return x
-
-class Critic(nn.Module):
-
-    def __init__(self, action_space,  h_image_in, w_image_in, pretrained=False):
-        super().__init__()
-        self.action_space = action_space
-        self.alexnet_model = alexnet(pretrained) # feature extractor
-
-        convh =  conv2d_size_out(h_image_in,
-                                self.alexnet_model.kernels_size,
-                                self.alexnet_model.strides,
-                                self.alexnet_model.paddings,
-                                self.alexnet_model.dilations,
-                                )
-        convw =  conv2d_size_out(w_image_in,
-                                self.alexnet_model.kernels_size,
-                                self.alexnet_model.strides,
-                                self.alexnet_model.paddings,
-                                self.alexnet_model.dilations,
-                                )
-
-        linear_outp_size = convh*convw*self.alexnet_model.out_channel
-        self.linear = nn.Linear(linear_outp_size + action_space, 1)
-
-    def forward(self, state, action):
-        x = self.alexnet_model(state)
-        x = torch.cat([x, action], 1)
-        x = self.linear(x)
-        return x
-
-class VAE_Actor(nn.Module):
-        
-    def __init__(self, state_dim, num_actions, n_channel, z_dim, beta=1.0):
-        super().__init__()        
-        self.num_actions = num_actions
-        self.vae = ConvVAE(n_channel, z_dim, beta=beta)
-        self.vae.load_state_dict(torch.load("models/weights/segmodel.pt"))
-        #self.vae.load_struct("encoder", "models/weights/encoder.pt")
-        #self.vae.load_struct("mu", "models/weights/mu.pt")
-        #self.vae.load_struct("logvar", "models/weights/logvar.pt")
-        self.linear = nn.Linear(state_dim, num_actions)
-        
-        
-    def forward(self, state):
-        action = torch.tanh(self.linear(state)) 
-        return action
-    
-    def feat_ext(self, x):
-        """
-        Parameters
-        ----------
-        state : PIL Image
-            image from RGB camera.
-        Returns
-        -------
-        z: latent state.
-        """
-        with torch.no_grad():
-            mu, logvar = self.vae.encode(x)
-        return self.vae.reparametrize(mu, logvar)
-    
-class VAE_critic(nn.Module):
-    
-    def __init__(self, state_dim, num_actions):
-        super().__init__()
-        self.num_actions = num_actions
-        self.linear = nn.Linear(state_dim+num_actions, 1)
-        
-    def forward(self, state, action):
-        return self.linear(torch.cat([state, action], 1))
-        
-        
-        
-
-
 class DDPG:
 
     def __init__(self, 
@@ -187,7 +26,7 @@ class DDPG:
                  model_type="Conv",
                  n_channel=3, 
                  z_dim=0,
-                 type_RM="sequential",
+                 type_RM="random",
                  max_memory_size=50000,
                  device='cpu',
                  rw_weights=None,
@@ -245,15 +84,23 @@ class DDPG:
 
 
         if optim == "SGD":
-            self.actor_optimizer = torch.optim.SGD(self.actor.parameters(), lr=actor_lr)
-            self.critic_optimizer = torch.optim.SGD(self.critic.parameters(), lr=critic_lr)
+            self.actor_optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad,
+                                                          self.actor.parameters()),
+                                                    lr=actor_lr)
+            self.critic_optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad,
+                                                           self.critic.parameters()),
+                                                     lr=critic_lr)
         elif optim == "Adam":
-            self.actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=actor_lr)
-            self.critic_optimizer = torch.optim.Adam(self.critic.parameters(), lr=critic_lr)
+            self.actor_optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad,
+                                                           self.actor.parameters()),
+                                                    lr=actor_lr)
+            self.critic_optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad,
+                                                            self.critic.parameters()),
+                                                     lr=critic_lr)
         else:
             raise NotImplementedError("Optimizer should be Adam or SGD")
 
-        self.critic_criterion = nn.MSELoss()
+        self.critic_criterion = nn.MSELoss() # mean reduction
 
         # Noise
         self.ounoise = OUNoise(action_space)
@@ -269,7 +116,9 @@ class DDPG:
         if mode=="training":
             action = self.ounoise.get_action(action, step)
             # action[0] = np.clip(np.random.normal(action[0], self.std, 1), -1, 1)
-            # action[1] = np.clip(np.random.normal(action[1], self.std, 1), 0, 1)
+            # action[1] = np.clip(np.random.normal(action[1], self.std, 1), -1, 1)
+            action[0] = np.clip(action[0], -1, 1)
+            action[1] = np.clip(action[1], -1, 1)
         return action
 
     def update(self):
@@ -279,7 +128,7 @@ class DDPG:
                 return
 
         if self.type_RM in ["sequential", "random"]:
-            states, actions, rewards, next_states, done = self.replay_memory.get_batch_for_replay()
+            states, actions, rewards, next_states, dones = self.replay_memory.get_batch_for_replay()
         elif self.type_RM in ["prioritized"]:
             states, actions, rewards, next_states, done, importance_sampling_weight = \
                     self.replay_memory.get_batch_for_replay(self.actor_target,
@@ -292,35 +141,44 @@ class DDPG:
         actions = torch.FloatTensor(actions).to(self.device)
         rewards = torch.FloatTensor(rewards).to(self.device)
         next_states = torch.FloatTensor(next_states).to(self.device)
+        dones = torch.BoolTensor(dones).to(self.device)
 
-        self.actor = self.actor.to(self.device) # Because is used for predict actions
-        self.actor_target = self.actor_target.to(self.device)
-        self.critic = self.critic.to(self.device)
-        self.critic_target = self.critic_target.to(self.device)
+        self.actor = self.actor.to(self.device).train() # Because is used for predict actions
+        self.actor_target = self.actor_target.to(self.device).train()
+        self.critic = self.critic.to(self.device).train()
+        self.critic_target = self.critic_target.to(self.device).train()
 
         if actions.dim() < 2:
             actions = actions.unsqueeze(1)
+            
+        
         Qvals = self.critic(states, actions)
         next_actions = self.actor_target(next_states)
-        next_Q = self.critic_target(next_states, next_actions.detach())
-        Q_prime = rewards.unsqueeze(1) + self.gamma*next_Q.detach()
+        next_Q = self.critic_target(next_states, next_actions)
+        Q_prime = rewards.unsqueeze(1) + (self.gamma*next_Q.squeeze()*(~dones)).unsqueeze(1)
 
         critic_loss = 0
         if self.type_RM in ["sequential", "random"]:
-            critic_loss = self.critic_criterion(Qvals, Q_prime)
+            critic_loss = self.critic_criterion(Q_prime, Qvals) # default mean reduction
         elif self.type_RM in ["prioritized"]:
             critic_loss = (importance_sampling_weight*(Qvals - Q_prime)**2).mean()
-        actor_loss = -1*self.critic(states, self.actor(states)).mean()
-
-        # updates networks
-        self.actor_optimizer.zero_grad()
-        actor_loss.backward()
-        nn.utils.clip_grad_norm_(self.actor.parameters(), 0.5)
-        self.actor_optimizer.step()
+        
+        # update critic
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
-        nn.utils.clip_grad_norm_(self.critic.parameters(), 0.5)
+        nn.utils.clip_grad_norm_(self.critic.parameters(), 0.005)
         self.critic_optimizer.step()
+        
+        actor_loss = -self.critic(states, self.actor(states)).mean()
+
+        # update actor
+        self.actor_optimizer.zero_grad()
+        actor_loss.backward()
+        nn.utils.clip_grad_norm_(self.actor.parameters(), 0.005)
+        self.actor_optimizer.step()
+        
+        print(actor_loss.item())
+        
 
         for target_param, param in zip(self.actor_target.parameters(), self.actor.parameters()):
             target_param.data.copy_(param.data*self.tau + target_param.data*(1.0 - self.tau))
@@ -329,10 +187,10 @@ class DDPG:
             target_param.data.copy_(param.data*self.tau + target_param.data*(1.0 - self.tau))
 
         # Back to cpu
-        self.actor = self.actor.cpu()
-        self.actor_target = self.actor_target.cpu()
-        self.critic = self.critic.cpu()
-        self.critic_target = self.critic_target.cpu()
+        self.actor = self.actor.cpu().eval()
+        self.actor_target = self.actor_target.cpu().eval()
+        self.critic = self.critic.cpu().eval()
+        self.critic_target = self.critic_target.cpu().eval()
 
     def feat_ext(self, state):
         return self.actor.feat_ext(state)
@@ -346,16 +204,7 @@ class DDPG:
         self.critic_optimizer.load_state_dict(optimizer_state_dict[1])
 
 
-if __name__ == "__main__":
-
-    from functools import reduce
-    x = torch.randn(3,16,16)
-    states = [x, x, x]
-    action = torch.FloatTensor([1, 1.3])
-    actions = [action, action, action]
-
-    new_tensor = torch.cat(states, dim=0)
-    new_tensor = torch.cat([new_tensor, action])
-    # new_tensor = reduce(lambda x,y: torch.cat(x), states)
-    # new_tensor = reduce(lambda x,y: torch.cat((x,y)), states + actions)
-    print(new_tensor)
+        
+    
+    
+    

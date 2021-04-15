@@ -50,6 +50,9 @@ class CollisionChecker:
                 circle_locations[:, 0] = path[0][j] + np.asarray(self._circle_offsets)*cos(path[2][j]) 
                 circle_locations[:, 1] = path[1][j] + np.asarray(self._circle_offsets)*sin(path[2][j])
                 for k in range(len(obstacles)):
+                    
+                    if len(obstacles[k]) == 0:
+                        continue
                     collision_dists = \
                         scipy.spatial.distance.cdist(obstacles[k], 
                                                      circle_locations)
@@ -62,9 +65,8 @@ class CollisionChecker:
                         break
                 if not collision_free:
                     break
-
+                
             collision_check_array[i] = collision_free
-
         return collision_check_array
 
     def select_best_path_index(self, paths, collision_check_array, goal_state):

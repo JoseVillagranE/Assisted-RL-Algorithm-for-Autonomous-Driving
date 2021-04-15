@@ -156,7 +156,7 @@ class CarlaEnv(gym.Env):
 
             if self.synchronous:
                 settings = self.world.get_settings()
-                settings.synchronous_mode = False
+                settings.synchronous_mode = True
                 self.world.apply_settings(settings)
 
             # Initial location
@@ -275,6 +275,8 @@ class CarlaEnv(gym.Env):
         return [seed]
 
     def step(self, action):
+        
+        #print(self.clock.get_fps())
 
         if self.closed:
             raise Exception("Env was closed")
@@ -358,7 +360,7 @@ class CarlaEnv(gym.Env):
         self.agent.control.steer = float(0.0)
         self.agent.control.throttle = float(0.0)
         self.agent.current_wp_index = 0
-        self.agent.tick() # Apply control
+        # self.agent.tick() # Apply control
 
         self.agent.set_transform(self.initial_transform)
         self.agent.set_simulate_physics(False)
@@ -373,12 +375,15 @@ class CarlaEnv(gym.Env):
             while ticks < self.fps*2:
                 self.world.tick()
                 try:
-                    self.world.wait_for_tick(seconds=(1.0/self.fps) + 0.1)
+                    # self.world.wait_for_tick(seconds=(1.0/self.fps) + 0.1)
+                    self.world.wait_for_tick()
+                    print("tick!")
                     ticks += 1
                 except:
                     pass
         else:
-            time.sleep(2.0)
+            self.world.tick()
+            #time.sleep(2.0)
 
         self.terminal_state = False # Set to true when we want to end episode
         self.closed = False         # Set to True when ESC is pressed
@@ -441,7 +446,10 @@ class CarlaEnv(gym.Env):
             print("Arrive to the goal!")
             self.final_goal = True
             return True
-
+        
+        if self.agent.get_carla_actor().get_transform().location.x > config.agent.goal.x:
+            print("cross de finish line")
+            return True
         return False
 
     def _get_observation_image(self):

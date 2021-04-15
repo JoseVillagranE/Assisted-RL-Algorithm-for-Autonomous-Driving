@@ -17,7 +17,53 @@ import torchvision
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 
-
+class VAE_Actor(nn.Module):
+        
+    def __init__(self, 
+                 state_dim,
+                 num_actions,
+                 n_channel,
+                 z_dim,
+                 beta=1.0,
+                 weights_path="",
+                 freeze_params=False):
+        super().__init__()        
+        self.num_actions = num_actions
+        self.vae = ConvVAE(n_channel, z_dim, beta=beta)
+        self.linear = nn.Linear(state_dim, num_actions)
+        if len(weights_path) > 0:
+            self.vae.load_state_dict(torch.load(weights_path))
+            if freeze_params:
+                freeze_params(self.vae)
+        
+        
+    def forward(self, state):
+        x = self.linear(state)
+        action = torch.tanh(x) 
+        return action
+    
+    def feat_ext(self, x):
+        """
+        Parameters
+        ----------
+        state : PIL Image
+            image from RGB camera.
+        Returns
+        -------
+        z: latent state.
+        """
+        mu, logvar = self.vae.encode(x)
+        return self.vae.reparametrize(mu, logvar)
+    
+class VAE_critic(nn.Module):
+    
+    def __init__(self, state_dim, num_actions):
+        super().__init__()
+        self.num_actions = num_actions
+        self.linear = nn.Linear(state_dim+num_actions, 1)
+        
+    def forward(self, state, action):
+        return self.linear(torch.cat([state, action], 1))
 
 class ConvVAE(nn.Module):
     
