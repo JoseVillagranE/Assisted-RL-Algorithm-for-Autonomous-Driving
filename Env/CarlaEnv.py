@@ -154,9 +154,11 @@ class CarlaEnv(gym.Env):
             self.world = World(self.client)
             self.controller = KeyboardControl()
 
+            #synchronous mode
             if self.synchronous:
                 settings = self.world.get_settings()
                 settings.synchronous_mode = True
+                settings.fixed_delta_seconds = 0.05
                 self.world.apply_settings(settings)
 
             # Initial location
@@ -263,9 +265,14 @@ class CarlaEnv(gym.Env):
         
         self.num_saved_obs = 5435
         
-        # Reset env to set initial state
-        # self.reset()
-
+        for i in range(100):
+            self.agent.control.steer = -1.
+            self.agent.control.throttle = 0.
+            self.agent.control.brake = 1.0
+            self.world.tick()
+        
+        self.agent.control.brake = 0.0
+        
         # self.world.debug.draw_point(carla.Location(config.agent.goal.x,
         #                             config.agent.goal.y, config.agent.goal.z),
         #                             color=carla.Color(0, 0, 255))
@@ -281,19 +288,11 @@ class CarlaEnv(gym.Env):
         if self.closed:
             raise Exception("Env was closed")
 
-        if not self.synchronous:
-            if self.fps <= 0:
-                self.clock.tick() # Go as fast as possible
-            else:
-                self.clock.tick_busy_loop(self.fps)
-
-            if action is not None:
-                self.average_fps = self.average_fps * 0.5 + self.clock.get_fps() * 0.5
-
         if action is not None:
             steer, throttle = [float(a) for a in action]
             self.agent.control.steer = self.agent.control.steer*self.action_smoothing + steer *(1.0 - self.action_smoothing)
             self.agent.control.throttle = self.agent.control.throttle*self.action_smoothing + throttle *(1.0 - self.action_smoothing)
+            self.agent.control.brake = 0.
         if self.is_exo_vehicle:
             # Always exo agent have action
             next_wp = self.exo_vehicle.get_next_wp()
@@ -302,16 +301,6 @@ class CarlaEnv(gym.Env):
                 self.exo_vehicle.control.steer = exo_control.steer
                 self.exo_vehicle.control.throttle = exo_control.throttle
         self.world.tick()
-        # synchronous update logic
-        if self.synchronous:
-            self.clock.tick()
-            while True:
-                try:
-                    self.world.wait_for_tick(seconds=1.0/self.fps + 0.1)
-                    break
-                except:
-                    # Timeouts happen occationally for some reason, however, they seem to be fine to ignore
-                    self.world.tick()
 
         # Get most recent observation and viewer image
         if config.agent.sensor.dashboard_camera:
@@ -359,31 +348,20 @@ class CarlaEnv(gym.Env):
 
         self.agent.control.steer = float(0.0)
         self.agent.control.throttle = float(0.0)
+        self.agent.control.brake = 1.0
         self.agent.current_wp_index = 0
         # self.agent.tick() # Apply control
 
         self.agent.set_transform(self.initial_transform)
-        self.agent.set_simulate_physics(False)
-        self.agent.set_simulate_physics(True)
+        #self.agent.set_simulate_physics(False) # freeze the vehicle
+        #self.agent.set_simulate_physics(True)
 
         if self.is_exo_vehicle:
             self.exo_vehicle.set_transform(self.exo_veh_initial_transform)
         if self.is_pedestrian:
             self.pedestrian.set_transform(self.initial_transform_ped)
-        if self.synchronous:
-            ticks = 0
-            while ticks < self.fps*2:
-                self.world.tick()
-                try:
-                    # self.world.wait_for_tick(seconds=(1.0/self.fps) + 0.1)
-                    self.world.wait_for_tick()
-                    print("tick!")
-                    ticks += 1
-                except:
-                    pass
-        else:
-            self.world.tick()
-            #time.sleep(2.0)
+        
+        self.world.tick()
 
         self.terminal_state = False # Set to true when we want to end episode
         self.closed = False         # Set to True when ESC is pressed

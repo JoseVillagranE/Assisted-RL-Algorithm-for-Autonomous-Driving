@@ -72,9 +72,9 @@ config.train.episode_loading = 0
 config.train.start_to_update = 0
 config.train.optimization_steps = 1
 config.train.action_space = 2 # [steer, throttle]
-config.train.measurements_to_include = set(["steer", "throttle"])#,"speed"]) #"orientation"])
+config.train.measurements_to_include = []#set(["steer", "throttle"])#,"speed"]) #"orientation"])
 config.train.z_dim = 128
-config.train.state_dim = config.train.z_dim + 2#harcoded
+config.train.state_dim = config.train.z_dim# + 2#harcoded
 
 # Agent Defaults (Single agent)
 config.agent = edict()
@@ -176,6 +176,10 @@ config.reward_fn.weight_distance_to_goal = 5
 config.test = edict()
 config.test.every = 10
 config.test.steps = 100000
+
+# Eval Defaults
+config.eval = edict()
+config.eval.weights_path = "./models/weights/VAEBC.pt"
 
 
 # Visualisation Defaults

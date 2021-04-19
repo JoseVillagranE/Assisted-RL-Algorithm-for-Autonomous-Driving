@@ -42,8 +42,9 @@ def create_reward_fn(reward_fn):
         speed_kmh = speed*3.6
         terminal_reason = ""
         if low_speed_timer > 1.0 and speed_kmh < 1e-3: # No admite freno
-            env.terminal_state = True
-            terminal_reason = "Vehicle Stopped"
+            pass
+            #env.terminal_state = True
+            #terminal_reason = "Vehicle Stopped"
 
         # if env.distance_from_center > config.reward_fn.max_distance:
         #     env.terminal_state = True
@@ -107,8 +108,8 @@ def reward_fn(env):
         centering_factor = 1 - env.distance_from_center/config.reward_fn.max_distance
     else:
         centering_factor= -1
-        env.terminal_state = True
-        env.extra_info.append("Deviated more than 3m")
+        #env.terminal_state = True
+        #env.extra_info.append("Deviated more than 3m")
         
     
     # R(alpha)

@@ -4,7 +4,7 @@ import torch.nn as nn
 from torch.autograd import Variable
 from .ExperienceReplayMemory import SequentialDequeMemory, RandomDequeMemory, PrioritizedDequeMemory
 from .Conv_Actor_Critic import Conv_Actor, Conv_Critic
-from .VAE import VAE_Actor, VAE_Critic
+from ConvVAE import VAE_Actor, VAE_Critic
 import gym
 
     

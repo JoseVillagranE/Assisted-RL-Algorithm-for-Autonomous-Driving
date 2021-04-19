@@ -1,6 +1,7 @@
 from .DummyModel import DummyModel
 from .manual_model import Manual_Model
 from .DDPG import DDPG
+from .BC import BC
 
 def init_model(model_name, model_type, state_dim, action_space, h_image_in, w_image_in, z_dim,
             actor_lr, critic_lr, batch_size, gamma, tau, alpha, beta,
@@ -33,6 +34,12 @@ def init_model(model_name, model_type, state_dim, action_space, h_image_in, w_im
                     device=device,
                     rw_weights=rw_weights,
                     actor_linear_layers=actor_linear_layers)
+        
+    elif model_name == "BC": # for the moment is just for evaluation
+        model = BC(state_dim=state_dim,
+                   action_space=action_space,
+                   type_AC=model_type,
+                   VAE_weights_path="./models/weights/segmodel_expert_samples_sem_369.pt")
 
     else:
         raise NotImplementedError("Dont exist that model that you required")

@@ -31,14 +31,13 @@ def create_encode_state_fn(Resize_h, Resize_w, CenterCrop, mean, std,
         #transforms.CenterCrop(CenterCrop),
         transforms.ToTensor()
         ])
-        
         encoded_state = preprocess(env.observation)
         if vae_encode is not None:
             encoded_state = vae_encode(encoded_state.unsqueeze(0)).squeeze().detach().numpy()
             measurements = []
             if measure_flags[0]: measurements.append(env.agent.control.steer)
             if measure_flags[1]: measurements.append(env.agent.control.throttle)
-            if measure_flags[2]: measurements.append(env.agent.get_speed())
+            if measure_flags[2]: measurements.append(env.agent.get_speed()*3.6) # km/h
             if measure_flags[3]: measurements.extend(vector(env.agent.get_forward_vector()))
             #measurements = torch.tensor(measurements).float()
             #encoded_state = torch.cat((encoded_state, measurements))
