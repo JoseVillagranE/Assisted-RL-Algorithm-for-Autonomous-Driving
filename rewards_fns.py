@@ -108,8 +108,8 @@ def reward_fn(env):
         centering_factor = 1 - env.distance_from_center/config.reward_fn.max_distance
     else:
         centering_factor= -1
-        #env.terminal_state = True
-        #env.extra_info.append("Deviated more than 3m")
+        env.terminal_state = True
+        env.extra_info.append("Deviated more than 3m")
         
     
     # R(alpha)

@@ -50,6 +50,9 @@ reward_fn:
 
 test:
   every: 10
+  
+eval:
+    save_replay_buffer: True
 
 
 vis:

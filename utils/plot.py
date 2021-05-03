@@ -6,7 +6,7 @@ import os
 import numpy as np
 
 
-def plot_data(data, x_axis, value, condition=None, smooth=1, **kwargs):
+def plot_data(data, x_axis, value, is_test=False, condition=None, smooth=1, **kwargs):
 
     if smooth > 1:
         """
@@ -23,7 +23,10 @@ def plot_data(data, x_axis, value, condition=None, smooth=1, **kwargs):
     if isinstance(data, list):
         data = pd.concat(data, ignore_index=True)
     elif isinstance(data, np.ndarray):
-        data = pd.DataFrame({'Rewards': data, 'Episodes': range(data.shape[0])})
+        episodes = range(data.shape[0])
+        if is_test:
+            episodes = range(10, (data.shape[0]+1)*10, 10)
+        data = pd.DataFrame({'Rewards': data, 'Episodes': episodes})
 
     sns.set(style="darkgrid", font_scale=1.5)
     sns.lineplot(data=data, x=x_axis, y=value, hue=condition, err_style="band", ci=95,**kwargs)
@@ -45,11 +48,10 @@ if __name__ == "__main__":
     # sns.lineplot(data=data, x="year", y="passengers")
 
     rewards = np.load("rewards.npy")
-    avg_rewards = np.load("avg_rewards.npy")
-    plot_data(rewards, "Episodes", "Rewards", smooth=4, label="w/ mov_avg", markers=True, dashes=False)
-    plot_data(rewards, "Episodes", "Rewards", smooth=1, label="w/out mov_avg", markers=True, dashes=False)
-    plot_data(avg_rewards, "Episodes", "Rewards", smooth=1, label="avg", markers=True, dashes=False)
+    test_rewards = np.load("test_rewards.npy")
+    #plot_data(rewards, "Episodes", "Rewards", smooth=4, label="w/ mov_avg", markers=True, dashes=False)
+    plot_data(rewards, "Episodes", "Rewards", smooth=1, label="Train Reward",
+              markers=True, dashes=False)
+    plot_data(test_rewards, "Episodes", "Rewards", smooth=1, label="Test Reward",
+              is_test=True, markers=True, dashes=False)
     plt.show()
-
-    print(f"kl\t"
-            f"zacowea")

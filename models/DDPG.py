@@ -5,6 +5,7 @@ from torch.autograd import Variable
 from .ExperienceReplayMemory import SequentialDequeMemory, RandomDequeMemory, PrioritizedDequeMemory
 from .Conv_Actor_Critic import Conv_Actor, Conv_Critic
 from ConvVAE import VAE_Actor, VAE_Critic
+from utils.Network_utils import OUNoise
 import gym
 
     
@@ -46,10 +47,20 @@ class DDPG:
 
         # Networks
         if model_type == "VAE":
-            self.actor = VAE_Actor(state_dim, self.num_actions, n_channel, z_dim, beta=beta).float()
-            self.actor_target = VAE_Actor(state_dim, self.num_actions, n_channel, z_dim, beta=beta).float()
-            self.critic = VAE_critic(state_dim, self.num_actions).float()
-            self.critic_target = VAE_critic(state_dim, self.num_actions).float()
+            self.actor = VAE_Actor(state_dim,
+                                   self.num_actions,
+                                   n_channel,
+                                   z_dim,
+                                   VAE_weights_path="./models/weights/segmodel_expert_samples_sem_369.pt",
+                                   beta=beta).float()
+            self.actor_target = VAE_Actor(state_dim,
+                                   self.num_actions,
+                                   n_channel,
+                                   z_dim,
+                                   VAE_weights_path="./models/weights/segmodel_expert_samples_sem_369.pt",
+                                   beta=beta).float()
+            self.critic = VAE_Critic(state_dim, self.num_actions).float()
+            self.critic_target = VAE_Critic(state_dim, self.num_actions).float()
        
         else:
             self.actor = Actor(self.num_actions, h_image_in, w_image_in, linear_layers=actor_linear_layers)
@@ -99,6 +110,16 @@ class DDPG:
                                                      lr=critic_lr)
         else:
             raise NotImplementedError("Optimizer should be Adam or SGD")
+            
+            
+        # scheduler
+        self.actor_scheduler = torch.optim.lr_scheduler.StepLR(self.actor_optimizer,
+                                                          100,
+                                                          gamma=0.1)
+        
+        self.critic_scheduler = torch.optim.lr_scheduler.StepLR(self.critic_optimizer,
+                                                          100,
+                                                          gamma=0.1)
 
         self.critic_criterion = nn.MSELoss() # mean reduction
 
@@ -166,7 +187,7 @@ class DDPG:
         # update critic
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
-        nn.utils.clip_grad_norm_(self.critic.parameters(), 0.005)
+        # nn.utils.clip_grad_norm_(self.critic.parameters(), 0.005)
         self.critic_optimizer.step()
         
         actor_loss = -self.critic(states, self.actor(states)).mean()
@@ -174,10 +195,14 @@ class DDPG:
         # update actor
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
-        nn.utils.clip_grad_norm_(self.actor.parameters(), 0.005)
+        # nn.utils.clip_grad_norm_(self.actor.parameters(), 0.005)
         self.actor_optimizer.step()
         
-        print(actor_loss.item())
+        self.actor_scheduler.step()
+        self.critic_scheduler.step()
+        
+        print(f"Actor_loss: {actor_loss.item()}")
+        print(f"Critic_loss: {critic_loss.item()}")
         
 
         for target_param, param in zip(self.actor_target.parameters(), self.actor.parameters()):

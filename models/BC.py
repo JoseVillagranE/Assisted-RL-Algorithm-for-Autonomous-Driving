@@ -73,8 +73,9 @@ class BC:
         self.device = torch.device(device)
         self.mse = nn.MSELoss() # mean reduction
     
-    def update(self, get_loss=False):
+    def update(self, saved_file=None, get_loss=False):
         
+        if saved_file is None: saved_file = "weights/"+self.type_AC+"BC.pt"
         if get_loss: loss_history = []
         
         for epoch in range(self.epochs):
@@ -90,9 +91,9 @@ class BC:
             loss_history.append(loss.item())
             
             if (epoch+1)%self.save_epoch==0:
-                torch.save(self.actor.state_dict(), "weights/"+self.type_AC+"BC.pt")
+                torch.save(self.actor.state_dict(), saved_file)
             
-        torch.save(self.actor.state_dict(), "weights/"+self.type_AC+"BC.pt")
+        torch.save(self.actor.state_dict(), saved_file)
         if get_loss: return loss_history
         
     def predict(self, state, extract_feat=False):
@@ -107,4 +108,7 @@ class BC:
     def load_state_dict(self, weights):
         print("Loading Model weights..")
         self.actor.load_state_dict(torch.load(weights))
+        
+    def save_replay_memory(self, filename):
+        self.replay_memory.save_memory(filename)
         

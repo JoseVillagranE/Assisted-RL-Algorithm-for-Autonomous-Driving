@@ -45,17 +45,17 @@ planning_config.controller_output_folder = str(root_dir) + 'Planning/controller_
 
 # ---------------------- Simulation ----------------------------------------------
 
-planning_config.synchronous_mode = True
+planning_config.synchronous_mode = False
 
 # Simulation Defaults
 planning_config.simulation = edict()
 planning_config.simulation.map = "Town02"
-planning_config.simulation.sleep = 5.0   # game seconds (time before controller start)
+planning_config.simulation.sleep = 15.0   # game seconds (time before controller start)
 planning_config.simulation.timeout = 4.0
 planning_config.simulation.total_run_time = 100
 planning_config.simulation.action_smoothing = 0.5 # w/out action_smoothing
-planning_config.simulation.view_res = (640, 480)
-planning_config.simulation.obs_res = (640, 480)
+planning_config.simulation.view_res = (480, 240) #(w, h)
+planning_config.simulation.obs_res = (480, 240)
 planning_config.simulation.fps = 10
 planning_config.simulation.host = "localhost"
 planning_config.simulation.port = 2000 # Default of world-port CARLA
@@ -78,15 +78,15 @@ planning_config.agent.initial_position.z = 1.0
 planning_config.agent.initial_position.yaw = 0
 
 planning_config.agent.goal = edict()
-planning_config.agent.goal.x = 130#215
+planning_config.agent.goal.x = 160#130#215
 planning_config.agent.goal.y = 64
 planning_config.agent.goal.z = 1.0
 
 planning_config.agent.sensor = edict()
-planning_config.agent.sensor.spectator_camera = False
-planning_config.agent.sensor.dashboard_camera = True
-planning_config.agent.sensor.camera_type = "sensor.camera.semantic_segmentation" #"sensor.camera.rgb"
-planning_config.agent.sensor.color_converter = "CityScapesPallete"#"raw"
+planning_config.agent.sensor.spectator_camera = True
+planning_config.agent.sensor.dashboard_camera = False
+planning_config.agent.sensor.camera_type = "sensor.camera.rgb"#"sensor.camera.semantic_segmentation"
+planning_config.agent.sensor.color_converter = "raw"#"CityScapesPallete"
 
 
 # ExoAgent Defaults
@@ -117,10 +117,10 @@ planning_config.exo_agents.vehicle.PID.longitudinal_Kd = 0
 
 
 planning_config.exo_agents.vehicle.initial_position = edict()
-planning_config.exo_agents.vehicle.initial_position.x = 120#149
-planning_config.exo_agents.vehicle.initial_position.y = 58
+planning_config.exo_agents.vehicle.initial_position.x = 120#149#160
+planning_config.exo_agents.vehicle.initial_position.y = 62#58
 planning_config.exo_agents.vehicle.initial_position.z = 1.0
-planning_config.exo_agents.vehicle.initial_position.yaw = 90
+planning_config.exo_agents.vehicle.initial_position.yaw = 180#90
 
 planning_config.exo_agents.vehicle.end_position = edict()
 planning_config.exo_agents.vehicle.end_position.x = 64
@@ -131,16 +131,16 @@ planning_config.exo_agents.vehicle.end_position.z = 1.0
 # Visualisation Defaults
 planning_config.vis = edict()
 planning_config.vis.every = 0
-planning_config.vis.render = False
+planning_config.vis.render = True
 
 # Planning Constants
 planning_config.planning = edict()
 planning_config.planning.num_paths = 7
 planning_config.planning.bp_lookahed_base = 8.0 # m
-planning_config.planning.bp_lookahed_time = 2.0 # s
-planning_config.planning.path_offset = 0.5 # m
-planning_config.planning.circle_offset = [-1.0, 0.0, 1.0] # m
-planning_config.planning.circle_radii = [2.0, 2.0, 2.0]  # m
+planning_config.planning.bp_lookahed_time = 4.0 # s
+planning_config.planning.path_offset = 0.75 # m
+planning_config.planning.circle_offset = [-1.5, 0.0, 1.5] # m
+planning_config.planning.circle_radii = [1.5, 1.5, 1.5]  # m
 planning_config.planning.time_gap = 1.0 # s
 planning_config.planning.path_select_weight = 10
 planning_config.planning.a_max = 1.5 # m/s^2
@@ -154,13 +154,13 @@ planning_config.planning.lp_frequency_divisor   = 2 # Frequency divisor to make 
                                            # frequency). Must be a natural
                                            # number.
 
-planning_config.planning.sampling_resolution = 0.5
+planning_config.planning.sampling_resolution = 1.0
 
 # plots planning_config
 
 planning_config.plot = edict()
-planning_config.plot.figsize_x_inches = 8 # x figure size of feedback in inches
-planning_config.plot.figsize_y_inches = 8 # y figure size of feedback in inches
+planning_config.plot.figsize_x_inches = 6 # x figure size of feedback in inches
+planning_config.plot.figsize_y_inches = 6 # y figure size of feedback in inches
 planning_config.plot.plot_left = 0.1    # in fractions of figure width and height
 planning_config.plot.plot_bot = 0.1    
 planning_config.plot.plot_width = 0.8

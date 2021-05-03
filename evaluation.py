@@ -84,6 +84,7 @@ def evaluation():
                        actor_lr = config.train.actor_lr,
                        critic_lr = config.train.critic_lr,
                        batch_size = config.train.batch_size,
+                       optim = config.train.optimizer,
                        gamma = config.train.gamma,
                        tau = config.train.tau,
                        alpha = config.train.alpha,
@@ -92,7 +93,17 @@ def evaluation():
                        max_memory_size = config.train.max_memory_size,
                        device = config.train.device,
                        rw_weights=rw_weights if config.reward_fn.normalize else None,
-                       actor_linear_layers=config.train.actor_layers)
+                       actor_linear_layers=config.train.actor_layers,
+                       pretraining_steps=config.train.pretraining_steps,
+                       lambdas=config.train.lambdas,
+                       expert_prop=config.train.expert_prop,
+                       agent_prop=config.train.agent_prop,
+                       rm_filename=config.train.rm_filename,
+                       ou_noise_mu=config.train.ou_noise_mu,
+                       ou_noise_theta=config.train.ou_noise_theta,
+                       ou_noise_max_sigma=config.train.ou_noise_max_sigma,
+                       ou_noise_min_sigma=config.train.ou_noise_min_sigma,
+                       ou_noise_decay_period=config.train.ou_noise_decay_period)
 
     
     model.load_state_dict(config.eval.weights_path)
@@ -121,6 +132,9 @@ def evaluation():
     test_rewards = []
     episode_test = 0
     episode_reward_test = 0
+    
+    time.sleep(15)
+    
     try:
         state, terminal_state, episode_reward = env.reset(), False, []
         while not terminal_state:
@@ -130,9 +144,18 @@ def evaluation():
             next_state, reward, terminal_state, info = env.step(action)
             if info["closed"] == True:
                 exit(0)
-            weighted_rw = weighted_rw_fn(reward, rw_weights)
-            episode_reward_test += weighted_rw
+            reward = weighted_rw_fn(reward, rw_weights)
+            episode_reward_test += reward
+            
+            if config.eval.save_replay_buffer:
+                model.replay_memory.add_to_memory((state,
+                                                  action,
+                                                  reward,
+                                                  next_state,
+                                                  terminal_state))
+            
             state = next_state
+            
             if config.vis.render:
                 env.render()
 
@@ -143,10 +166,15 @@ def evaluation():
                 break
             episode_test += 1
             test_rewards.append(episode_reward_test)
+            
+        if config.eval.save_replay_buffer:
+            model.save_replay_memory(config.eval.filename_rb)
+            
     except KeyboardInterrupt:
         pass
     finally:
         env.close()
+            
 
 def main():
 

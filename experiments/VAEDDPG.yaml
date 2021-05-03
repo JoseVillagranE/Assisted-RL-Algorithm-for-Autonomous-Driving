@@ -8,7 +8,7 @@ simulation:
 
 train:
   checkpoint_every: 100000
-  episodes: 100
+  episodes: 400
   device: "cpu"
   actor_lr: 0.0001
   critic_lr: 0.001
@@ -43,8 +43,8 @@ reward_fn:
   weight_collision_other: 1000
   weight_final_goal: 500
   weight_speed_limit: 1
-  weight_route_al: 1
-  weight_centralization: 1
+  weight_route_al: 2
+  weight_centralization: 2
   weight_distance_to_goal: 1
 
 test:

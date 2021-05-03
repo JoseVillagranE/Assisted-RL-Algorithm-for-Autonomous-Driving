@@ -84,6 +84,7 @@ def train():
                        actor_lr = config.train.actor_lr,
                        critic_lr = config.train.critic_lr,
                        batch_size = config.train.batch_size,
+                       optim = config.train.optimizer,
                        gamma = config.train.gamma,
                        tau = config.train.tau,
                        alpha = config.train.alpha,
@@ -92,7 +93,17 @@ def train():
                        max_memory_size = config.train.max_memory_size,
                        device = config.train.device,
                        rw_weights=rw_weights if config.reward_fn.normalize else None,
-                       actor_linear_layers=config.train.actor_layers)
+                       actor_linear_layers=config.train.actor_layers,
+                       pretraining_steps=config.train.pretraining_steps,
+                       lambdas=config.train.lambdas,
+                       expert_prop=config.train.expert_prop,
+                       agent_prop=config.train.agent_prop,
+                       rm_filename=config.train.rm_filename,
+                       ou_noise_mu=config.train.ou_noise_mu,
+                       ou_noise_theta=config.train.ou_noise_theta,
+                       ou_noise_max_sigma=config.train.ou_noise_max_sigma,
+                       ou_noise_min_sigma=config.train.ou_noise_min_sigma,
+                       ou_noise_decay_period=config.train.ou_noise_decay_period)
 
 
     # Create state encoding fn
@@ -118,9 +129,12 @@ def train():
     test_rewards = []
 
     # load checkpoint if is necessary
-    model_dicts, optimizers_dicts, rewards, start_episode = load_checkpoint(logger,
-                                                                            config.train.load_checkpoint_name,
-                                                                            config.train.episode_loading)
+    model_dicts, \
+    optimizers_dicts, \
+    rewards, \
+    start_episode = load_checkpoint(logger,
+                                    config.train.load_checkpoint_name,
+                                    config.train.episode_loading)
 
 
     if len(model_dicts) > 0: # And the experience of Replay buffer ?
@@ -143,9 +157,10 @@ def train():
                     weighted_rw = weighted_rw_fn(reward, rw_weights)
                     if not config.reward_fn.normalize:
                         reward = weighted_rw # rw is only a scalar value
-
-                    if config.run_type=="DDPG":  # Because exist manual and straight control also
-                        model.replay_memory.add_to_memory((state, action, reward, next_state, terminal_state))
+                    # Because exist manual and straight control also
+                    if config.run_type in ["DDPG", "CoL"]:
+                        model.replay_memory.add_to_memory((state, action, reward,
+                                                           next_state, terminal_state))
 
                     episode_reward.append(reward)
                     state = next_state
@@ -164,10 +179,10 @@ def train():
                             logger.info(f"episode: {episode} || step: {step} || reward: {np.round(episode_reward, decimals=2)}, terminal reason: {env.extra_info[-1]}")
                         break
 
-            if episode > config.train.start_to_update and config.run_type=="DDPG":
+            if episode > config.train.start_to_update and config.run_type in ["DDPG", "CoL"]:
                 for _ in range(config.train.optimization_steps):
                     model.update()
-            if config.train.type_RM == "sequential" and config.run.type=="DDPG":
+            if config.train.type_RM == "sequential" and config.run.type in ["DDPG", "CoL"]:
                 model.replay_memory.delete_memory()
 
 
@@ -177,7 +192,7 @@ def train():
                 for step in range(config.test.steps):
                     if env.controller.parse_events():
                         return
-                    action = model.predict(state, step, mode="testing") # return a np. action
+                    action = model.predict(state, episode, mode="testing")
                     next_state, reward, terminal_state, info = env.step(action)
                     if info["closed"] == True:
                         exit(0)
@@ -190,6 +205,7 @@ def train():
                     if terminal_state:
                         if len(env.extra_info) > 0:
                             print(f"episode_test: {episode_test}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}")# print the most recent terminal reason
+                            
                             logger.info(f"episode_test: {episode_test}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}")
                         break
                 episode_test += 1
@@ -206,7 +222,8 @@ def train():
                           model.critic_target.state_dict())
                 optimizers_dicts = (model.actor_optimizer.state_dict(),
                               model.critic_optimizer.state_dict())
-                save_checkpoint(models_dicts, optimizers_dicts, rewards, episode, exp_name, particular_save_path)
+                save_checkpoint(models_dicts, optimizers_dicts, rewards,
+                                episode, exp_name, particular_save_path)
 
     except KeyboardInterrupt:
         pass
@@ -222,7 +239,8 @@ def train():
         optimizers_dicts = (model.actor_optimizer.state_dict(),
                       model.critic_optimizer.state_dict())
 
-        save_checkpoint(models_dicts, optimizers_dicts, rewards, episode, exp_name, particular_save_path)
+        save_checkpoint(models_dicts, optimizers_dicts, rewards, episode, exp_name,
+                        particular_save_path)
         env.close()
 
 def main():

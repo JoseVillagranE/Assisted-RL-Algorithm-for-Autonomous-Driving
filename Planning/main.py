@@ -45,12 +45,13 @@ except IndexError:
 
 # Script level imports
 sys.path.append(os.path.abspath(sys.path[0] + '/..'))
-import utils.live_plotter as lv   # Custom live plotting library
+import utils.live_plotter_2 as lv   # Custom live plotting library
 
 import carla
 import pygame
 from pygame.locals import *
 from Env.wrapper import *
+from agents.navigation.behavior_agent import BehaviorAgent 
 
 OTHER_OBJECTS = ["Building",
                  "Fence",
@@ -66,6 +67,7 @@ COLLISION_OTHER = False
 COLLISION_PEDESTRIAN = False
 COLLISION_CAR = False
 OBSERVATION_BUFFER = None
+VIEWER_BUFFER = None
 NUM_SAVED_OBS = 2930
 EXPERT_SAMPLES_PATH = "./Expert_samples_sem/"
 CONTROL_FILE = "control_samples_6.npy"
@@ -87,6 +89,11 @@ def on_collision(e):
 def _set_observation_image(image):
     global OBSERVATION_BUFFER
     OBSERVATION_BUFFER = image
+    
+def _set_viewer_image(image):
+    global VIEWER_BUFFER
+    VIEWER_BUFFER = image
+
         
 def _get_observation_image():
     global OBSERVATION_BUFFER
@@ -96,6 +103,36 @@ def _get_observation_image():
     OBSERVATION_BUFFER = None
     return image
 
+def _get_viewer_image():
+    global VIEWER_BUFFER
+    while VIEWER_BUFFER is None:
+        pass
+    image = VIEWER_BUFFER.copy()
+    VIEWER_BUFFER = None
+    return image
+
+
+def render(spec_display=None, dash_display=None, espc_cam=True, dash_cam=False, mode="human"):
+
+    view_h, view_w = 10, 0
+    if espc_cam:
+        view_h, view_w = VIEWER_BUFFER.shape[:2]
+        spec_display.blit(pygame.surfarray.make_surface(VIEWER_BUFFER.swapaxes(0,1)), (0, 0)) # Draw the image on the surface
+
+
+    if dash_cam:
+        # Superimpose current observation into top-right corner
+        obs_h, obs_w = OBSERVATION_BUFFER.shape[:2]
+        pos = (view_w - obs_w - 10, 10)
+        dash_display.blit(pygame.surfarray.make_surface(OBSERVATION_BUFFER.swapaxes(0,1)), pos)
+
+
+    # Render to screen
+    pygame.display.flip() # Will update the contents of entire display
+    pygame.event.pump()
+
+    if mode == "rgb_array_no_hud":
+        return VIEWER_BUFFER
 
 class Timer(object):
     """ Timer Class
@@ -187,6 +224,7 @@ def exec_waypoint_nav_demo(world):
     """
     global NUM_SAVED_OBS
     global OBSERVATION_BUFFER
+    global VIEWER_BUFFER 
     control_commands_history = []
     
     # Initial location
@@ -222,6 +260,16 @@ def exec_waypoint_nav_demo(world):
                          color_converter=carla.ColorConverter.Raw if planning_config.agent.sensor.color_converter=="raw" else \
                                             carla.ColorConverter.CityScapesPalette, 
                          sensor_tick=0.05) #if planning_config.synchronous_mode else 1.0/self.fps)
+            
+    if planning_config.agent.sensor.spectator_camera:
+        camera = Camera(world, planning_config.simulation.view_res[0],
+                                    planning_config.simulation.view_res[1],
+                                    transform = camera_transforms["spectator"],
+                                    attach_to=agent, on_recv_image = lambda e: _set_viewer_image(e),
+                                    sensor_tick=0.0) #if config.synchronous_mode else 1.0/self.fps)
+            
+            
+            
     
     # exo-agent
     exo_initial_location = carla.Location(x=planning_config.exo_agents.vehicle.initial_position.x,
@@ -238,6 +286,25 @@ def exec_waypoint_nav_demo(world):
                             transform=exo_initial_transform,
                             vehicle_type=planning_config.exo_agents.vehicle.vehicle_type)
         
+        send_control_command(exo_agent,
+                              throttle=0.3,
+                              steer=0,
+                              brake=0)
+        
+        
+        
+        
+    spec_display=None
+    dash_display=None
+        
+    if planning_config.agent.sensor.spectator_camera:
+        spec_display = pygame.display.set_mode(planning_config.simulation.view_res,
+                                          pygame.HWSURFACE | pygame.DOUBLEBUF)
+        
+    if planning_config.agent.sensor.dashboard_camera:
+        dash_display = pygame.display.set_mode(planning_config.simulation.obs_res,
+                                          pygame.HWSURFACE | pygame.DOUBLEBUF)
+        
 
     #############################################
     # Load Configurations
@@ -250,13 +317,36 @@ def exec_waypoint_nav_demo(world):
     live_plot_timer = Timer(live_plot_period)
 
     #############################################
-    # Load parked vehicle parameters
     # Convert to input params for LP
     #############################################
     parkedcar_box_pts = []
     if planning_config.exo_agents.vehicle.spawn:
-        parkedcar_box_pts.append([planning_config.exo_agents.vehicle.initial_position.x, 
-                                  planning_config.exo_agents.vehicle.initial_position.y])
+        
+        x = planning_config.exo_agents.vehicle.initial_position.x
+        y = planning_config.exo_agents.vehicle.initial_position.y
+        yaw = planning_config.exo_agents.vehicle.initial_position.yaw
+        xrad = exo_agent.bounding_box.extent.x
+        yrad = exo_agent.bounding_box.extent.y
+        zrad = exo_agent.bounding_box.extent.z
+        
+        cpos = np.array([
+                        [-xrad, -xrad, -xrad, 0,    xrad, xrad, xrad,  0    ],
+                        [-yrad, 0,     yrad,  yrad, yrad, 0,    -yrad, -yrad]])
+        rotyaw = np.array([
+                [np.cos(yaw), np.sin(yaw)],
+                [-np.sin(yaw), np.cos(yaw)]])
+        cpos_shift = np.array([
+                [x, x, x, x, x, x, x, x],
+                [y, y, y, y, y, y, y, y]])
+        cpos = np.add(np.matmul(rotyaw, cpos), cpos_shift)
+        for j in range(cpos.shape[1]):
+            parkedcar_box_pts.append([cpos[0,j], cpos[1,j]])
+    
+    
+    # parkedcar_box_pts = []
+    # if planning_config.exo_agents.vehicle.spawn:
+    #     parkedcar_box_pts.append([planning_config.exo_agents.vehicle.initial_position.x, 
+    #                               planning_config.exo_agents.vehicle.initial_position.y])
 
     #############################################
     # Load Waypoints
@@ -331,10 +421,77 @@ def exec_waypoint_nav_demo(world):
     speed_history = [0]
     num_saved_obs_history = [NUM_SAVED_OBS]
     collided_flag_history = [False]  # assume player starts off non-collided
-
-
-    # # Load parked car points
+    
+    
+    #############################################
+    # Vehicle Trajectory Live Plotting Setup
+    #############################################
+    
+    lp_traj = lv.LivePlotter2()
+    lp_1d = lv.LivePlotter2()
+    trajectory_fig = lp_traj.plot_new_dynamic_2d_figure(
+                title='Vehicle Trajectory',
+                figsize=(planning_config.plot.figsize_x_inches,
+                         planning_config.plot.figsize_y_inches),
+                edgecolor="black",
+                rect=[planning_config.plot.plot_left,
+                      planning_config.plot.plot_bot,
+                      planning_config.plot.plot_width,
+                      planning_config.plot.plot_height],
+                ylim=[60, 66])
+    
+    trajectory_fig.set_invert_y_axis()
+    
+    
+    # Add waypoint markers
+    trajectory_fig.add_graph("waypoints", window_size=waypoints_np.shape[0],
+                             x0=waypoints_np[:,0], y0=waypoints_np[:,1],
+                             linestyle="-", marker="", color='g')
+    # Add trajectory markers
+    trajectory_fig.add_graph("trajectory", window_size=total_episode_frames,
+                             x0=[start_x]*total_episode_frames, 
+                             y0=[start_y]*total_episode_frames,
+                             color=[1, 0.5, 0])
+    # Add starting position marker
+    trajectory_fig.add_graph("start_pos", window_size=1, 
+                             x0=[start_x], y0=[start_y],
+                             marker=11, color=[1, 0.5, 0], 
+                             markertext="Start", marker_text_offset=1)
+    # Add end position marker
+    trajectory_fig.add_graph("end_pos", window_size=1, 
+                             x0=[waypoints_np[-1, 0]], 
+                             y0=[waypoints_np[-1, 1]],
+                             marker="D", color='r', 
+                             markertext="End", marker_text_offset=1)
+    # Add car marker
+    trajectory_fig.add_graph("car", window_size=1, 
+                             marker="s", color='b', markertext="Car",
+                             marker_text_offset=1)
+    
+    # Load parked car points
     parkedcar_box_pts_np = np.array(parkedcar_box_pts)
+    if planning_config.exo_agents.vehicle.spawn:
+        trajectory_fig.add_graph("parkedcar_pts", window_size=parkedcar_box_pts_np.shape[0],
+                                 x0=parkedcar_box_pts_np[:,0], y0=parkedcar_box_pts_np[:,1],
+                                 linestyle="", marker="+", color='red')
+    
+    # Add lookahead path
+    trajectory_fig.add_graph("selected_path", 
+                             window_size=planning_config.plot.interp_max_points_plot,
+                             x0=[start_x]*planning_config.plot.interp_max_points_plot, 
+                             y0=[start_y]*planning_config.plot.interp_max_points_plot,
+                             color=[1, 0.5, 0.0],
+                             linewidth=3)
+    
+    
+    
+     # Add local path proposals
+    for i in range(planning_config.planning.num_paths):
+        trajectory_fig.add_graph("local_path " + str(i), window_size=200,
+                                 x0=None, y0=None, color=[0.0, 0.0, 1.0])
+    plt.show(block=False)
+    
+    time.sleep(planning_config.simulation.sleep)
     # #############################################
     # # Local Planner Variables
     # #############################################
@@ -542,11 +699,46 @@ def exec_waypoint_nav_demo(world):
         elif local_waypoints == None:
             pass
         else:
+            
+            # Update live plotter with new feedback
+            # trajectory_fig.roll("trajectory", current_x, current_y)
+            trajectory_fig.roll("car", current_x, current_y)
+            # Local path plotter update
+            if frame % planning_config.planning.lp_frequency_divisor == 0:
+                path_counter = 0
+                for i in range(planning_config.planning.num_paths):
+                    # If a path was invalid in the set, there is no path to plot.
+                    if path_validity[i]:
+                        # Colour paths according to collision checking.
+                        if not collision_check_array[path_counter]:
+                            colour = 'r'
+                        elif i == best_index:
+                            colour = 'k'
+                        else:
+                            colour = 'b'
+                        trajectory_fig.update("local_path " + str(i), paths[path_counter][0], paths[path_counter][1], colour)
+                        path_counter += 1
+                    else:
+                        trajectory_fig.update("local_path " + str(i), [ego_state[0]], [ego_state[1]], 'r')
+            
             wp_interp_np = np.array(wp_interp)
             path_indices = np.floor(np.linspace(0, 
                                                 wp_interp_np.shape[0]-1,
                                                 planning_config.plot.interp_max_points_plot))
 
+            trajectory_fig.update("selected_path", 
+                        wp_interp_np[path_indices.astype(int), 0],
+                        wp_interp_np[path_indices.astype(int), 1],
+                        new_colour=[1, 0.5, 0.0])
+            
+        # Refresh the live plot based on the refresh rate 
+        # set by the options
+        if enable_live_plot and \
+           live_plot_timer.has_exceeded_lap_period():
+            lp_traj.refresh()
+            lp_1d.refresh()
+            live_plot_timer.lap()
+        
         # Output controller command to CARLA server
         send_control_command(agent,
                               throttle=cmd_throttle,
@@ -558,12 +750,21 @@ def exec_waypoint_nav_demo(world):
                                          NUM_SAVED_OBS])
         world.tick()
         
-        if planning_config.agent.sensor.dashboard_camera:
-            observation = _get_observation_image()
-            img = Image.fromarray(observation)
-            img.save(EXPERT_SAMPLES_PATH+str(NUM_SAVED_OBS)+".png")
-            NUM_SAVED_OBS += 1
-
+        # if planning_config.agent.sensor.dashboard_camera:
+        #     OBSERVATION_BUFFER = _get_observation_image()
+            # img = Image.fromarray(observation)
+            # img.save(EXPERT_SAMPLES_PATH+str(NUM_SAVED_OBS)+".png")
+            # NUM_SAVED_OBS += 1
+        
+        # if planning_config.agent.sensor.spectator_camera:
+        #     VIEWER_BUFFER = _get_viewer_image()
+        
+        if planning_config.vis.render:
+            render(spec_display,
+                   dash_display,
+                   planning_config.agent.sensor.spectator_camera,
+                   planning_config.agent.sensor.dashboard_camera)
+        
         # Find if reached the end of waypoint. If the car is within
         # DIST_THRESHOLD_TO_LAST_WAYPOINT to the last waypoint,
         # the simulation will end.
@@ -575,7 +776,7 @@ def exec_waypoint_nav_demo(world):
         if reached_the_end:
             break
     
-    np.save(EXPERT_SAMPLES_PATH+CONTROL_FILE, np.array(control_commands_history))
+    # np.save(EXPERT_SAMPLES_PATH+CONTROL_FILE, np.array(control_commands_history))
     x_history = np.array(x_history)[:, np.newaxis]
     y_history = np.array(y_history)[:, np.newaxis]
     yaw_history = np.array(yaw_history)[:, np.newaxis]
@@ -586,13 +787,75 @@ def exec_waypoint_nav_demo(world):
                           yaw_history,
                           speed_history,
                           num_saved_obs_history))
-    np.save(EXPERT_SAMPLES_PATH+VEH_INFO_FILE, veh_info)
+    # np.save(EXPERT_SAMPLES_PATH+VEH_INFO_FILE, veh_info)
+    
+def autopilot_test(world):
+         # Initial location
+    initial_location = carla.Location(x=planning_config.agent.initial_position.x,
+                                    y=planning_config.agent.initial_position.y,
+                                    z=planning_config.agent.initial_position.z)
+
+    end_location = carla.Location(x = planning_config.agent.goal.x,
+                                  y = planning_config.agent.goal.y,
+                                  z = planning_config.agent.goal.z)
+    distance_to_drive = initial_location.distance(end_location)
+    print(f"Distance to drive: {distance_to_drive}")
+
+    initial_transform = carla.Transform(initial_location,
+                                        carla.Rotation(yaw=\
+                                        planning_config.agent.initial_position.yaw))
+    # Create a agent vehicle
+    player = Vehicle(world,
+                    transform=initial_transform,
+                    vehicle_type=planning_config.agent.vehicle_type,
+                    on_collision_fn=lambda e: on_collision(e),
+                    end_location=end_location)
+    
+    # exo-agent
+    exo_initial_location = carla.Location(x=planning_config.exo_agents.vehicle.initial_position.x,
+                                          y=planning_config.exo_agents.vehicle.initial_position.y,
+                                          z=planning_config.exo_agents.vehicle.initial_position.z)
+    
+    exo_initial_transform = carla.Transform(exo_initial_location,
+                                            carla.Rotation(yaw=\
+                                            planning_config.exo_agents.vehicle.initial_position.yaw))
+        
+    
+    if planning_config.exo_agents.vehicle.spawn:
+        exo_agent = Vehicle(world,
+                            transform=exo_initial_transform,
+                            vehicle_type=planning_config.exo_agents.vehicle.vehicle_type)
+        
+        # send_control_command(exo_agent,
+        #                       throttle=0.3,
+        #                       steer=0,
+        #                       brake=0)
+    world.tick()
+    
+    agent = BehaviorAgent(player, behavior="aggressive")
+    agent.set_destination(initial_location, end_location, clean=True)
+    
+    while True:
+        
+        agent.update_information()
+        world.tick()
+        # Set new destination when target has been reached
+        if len(agent.get_local_planner().waypoints_queue) == 0:
+            print("Target reached, mission accomplished...")
+            break
+
+        speed_limit = player.get_speed_limit()
+        agent.get_local_planner().set_speed(speed_limit)
+
+        control = agent.run_step()
+        player.control = control
     
 def main(world):
     # Execute when server connection is established
     while True:
         try:
-            exec_waypoint_nav_demo(world)
+            # exec_waypoint_nav_demo(world)
+            autopilot_test(world)
             print('Done.')
             return
         except Exception as e:
@@ -629,8 +892,9 @@ if __name__ == '__main__':
             world.apply_settings(settings)
         
         main(world)
-    #except KeyboardInterrupt:
-    finally:   
+    # except KeyboardInterrupt:
+    #     pass
+    finally:
         pygame.quit()
         world.destroy()
         os.killpg(os.getpgid(carla_process.pid), signal.SIGTERM) 

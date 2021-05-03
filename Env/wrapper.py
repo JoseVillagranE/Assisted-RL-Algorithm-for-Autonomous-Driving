@@ -373,7 +373,6 @@ class World():
         for actor in list(self.actor_list):
             actor.tick()
         self.world.tick()
-
     def destroy(self):
         print("Destroying all spawned actors")
         for actor in list(self.actor_list):

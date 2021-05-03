@@ -5,9 +5,43 @@ import os
 
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.backends.tkagg as tkagg
+import matplotlib.backends.backend_tkagg as tkagg
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 import pygame
+import time
+
+class Timer(object):
+    """ Timer Class
+    
+    The steps are used to calculate FPS, while the lap or seconds since lap is
+    used to compute elapsed time.
+    """
+    def __init__(self, period):
+        self.step = 0
+        self._lap_step = 0
+        self._lap_time = time.time()
+        self._period_for_lap = period
+
+    def tick(self):
+        self.step += 1
+
+    def has_exceeded_lap_period(self):
+        if self.elapsed_seconds_since_lap() >= self._period_for_lap:
+            return True
+        else:
+            return False
+
+    def lap(self):
+        self._lap_step = self.step
+        self._lap_time = time.time()
+
+    def ticks_per_second(self):
+        return float(self.step - self._lap_step) /\
+                     self.elapsed_seconds_since_lap()
+
+    def elapsed_seconds_since_lap(self):
+        return time.time() - self._lap_time
+
 
 class Dynamic2DFigure():
     def __init__(self,
@@ -17,9 +51,9 @@ class Dynamic2DFigure():
                  *args, **kwargs):
         self.graphs = {}
         self.texts = {}
-        self.fig = plt.Figure(figsize=figsize, edgecolor=edgecolor)
+        self.fig = plt.figure(figsize=figsize, edgecolor=edgecolor)
         self.ax = self.fig.add_axes(rect)
-        self.fig.tight_layout()
+        # self.fig.tight_layout()
         self.marker_text_offset = 0
         if kwargs["title"] is not None:
             self.fig.suptitle(kwargs["title"])
@@ -187,12 +221,12 @@ class LivePlotter():
         if tk_title is not None:
             self._root.title(tk_title)
 
-        self._canvas = tk.Canvas(self._root, width=self._default_w, height=self._default_h)
-        self._canvas.config(bg="#6A6A6A")
-        self._text_id = self._canvas.create_text(
-            (self._default_w/2, self._default_h/2),
-            text="No live plots\ncreated yet.")
-        self._canvas.grid(row=0, column=0)
+        # self._canvas = tk.Canvas(self._root, width=self._default_w, height=self._default_h)
+        # self._canvas.config(bg="#6A6A6A")
+        # self._text_id = self._canvas.create_text(
+        #     (self._default_w/2, self._default_h/2),
+        #     text="No live plots\ncreated yet.")
+        # self._canvas.grid(row=0, column=0)
 
         self._display = None
         self._game_frame = None
@@ -200,11 +234,12 @@ class LivePlotter():
 
         self._surfs = []
         self._surf_coords = {}
+        # self._root.mainloop()
 
     def plot_figure(self, fig):
         if self._empty:
             self._empty = False
-            self._canvas.delete(self._text_id)
+            # self._canvas.delete(self._text_id)
 
         f_w = fig.get_window_extent().width
         f_h = fig.get_window_extent().height
@@ -219,17 +254,18 @@ class LivePlotter():
 
         self._graph_h += f_h
         self._graph_w = max(self._graph_w, f_w)
-        self._canvas.config(width=self._graph_w, height=self._graph_h)
-        self._canvas.grid(row=0, column=0)
+        # self._canvas.config(width=self._graph_w, height=self._graph_h)
+        # self._canvas.grid(row=0, column=0)
 
-        photo = tk.PhotoImage(master=self._canvas, width=f_w, height=f_h)
-        self._canvas.create_image(f_w/2, self._graph_h-f_h/2, image=photo)
-        tkagg.blit(photo, fca.get_renderer()._renderer, colormode=2)
+        # photo = tk.PhotoImage(master=self._canvas, width=f_w, height=f_h)
+        # self._canvas.create_image(f_w/2, self._graph_h-f_h/2, image=photo)
+        # tkagg.FigureCanvasTkAgg.blit(photo, fca.get_renderer()._renderer)
+        tkagg.FigureCanvasTkAgg(fig, master=self._root).draw()
         self._root.update()
 
         self._figs.append(fig)
         self._fcas[fig] = fca
-        self._photos[fig] = photo
+        # self._photos[fig] = photo
 
     def plot_new_figure(self):
         fig = plt.Figure(figsize=(3, 2), edgecolor="black")
@@ -258,10 +294,7 @@ class LivePlotter():
         self._fcas[fig].flush_events()
         fig.canvas.draw()
         fig.canvas.flush_events()
-        tkagg.blit(
-            self._photos[fig],
-            self._fcas[fig].get_renderer()._renderer,
-            colormode=2)
+        tkagg.FigureCanvasTkAgg(fig, master=self._root).draw()
         self._root.update()
 
     def init_pygame(self):
@@ -303,3 +336,41 @@ class LivePlotter():
         if not self._display is None:
             self._display.blits(list(self._surf_coords.items()))
             pygame.display.flip()
+            
+            
+if __name__ == "__main__":
+    
+    live_plot_timer = Timer(1.0)
+    lp = LivePlotter(tk_title="Test")
+    
+    try:
+        fig = lp.plot_new_dynamic_2d_figure(
+                    title='Trajectory',
+                    figsize=(6, 6),
+                    edgecolor="black",
+                    rect=[.1, .1, .8, .8])
+        num_points = 200
+        x = np.arange(num_points)
+        y = np.sin(x)
+        x0 = x[0]
+        y0 = np.sin(x0)
+        
+        fig.add_graph("waypoints", window_size=num_points, x0=x, y0=y,
+                      linestyle="-", marker="", color='g')
+        
+        fig.add_graph("agent", window_size=num_points, x0=[x0]*num_points,
+                      y0=[y0]*num_points,
+                      linestyle="-", marker="", color=[1, 0.5, 0])
+        
+        
+        
+        for i in range(num_points):
+            cx = x[i+1]
+            cy = np.sin(cx)
+            fig.roll("agent", cx, cy)
+            lp.refresh()
+            live_plot_timer.lap()
+    
+    finally:
+        lp._root.destroy()
+        # lp._root.withdraw()

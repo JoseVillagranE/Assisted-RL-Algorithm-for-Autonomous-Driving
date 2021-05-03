@@ -15,8 +15,13 @@ def conv2d_size_out(size, kernels_size, strides, paddings, dilations):
 
 class OUNoise(object):
 
-    def __init__(self, action_space, mu=0.0, theta=0.6, max_sigma=0.4, min_sigma=0,
-                decay_period=100):
+    def __init__(self, 
+                 action_space,
+                 mu=0.0,
+                 theta=0.6,
+                 max_sigma=0.4,
+                 min_sigma=0,
+                 decay_period=250):
 
         self.mu = mu
         self.theta = theta
@@ -51,10 +56,10 @@ if __name__ == "__main__":
     
     action_space = 2 
     mu = 0.0
-    theta = 0.3
+    theta = 0.6
     max_sigma = 0.4
     min_sigma = 0.0
-    decay_period = 50
+    decay_period = 100
     noise = OUNoise(action_space, mu=mu, theta=theta, max_sigma=max_sigma, min_sigma=min_sigma,
                     decay_period=decay_period)
     
@@ -65,3 +70,4 @@ if __name__ == "__main__":
         a.append(ou_state)
         
     plt.plot(a)
+    plt.ylim([-2, 2])

@@ -265,12 +265,6 @@ class CarlaEnv(gym.Env):
         
         self.num_saved_obs = 5435
         
-        for i in range(100):
-            self.agent.control.steer = -1.
-            self.agent.control.throttle = 0.
-            self.agent.control.brake = 1.0
-            self.world.tick()
-        
         self.agent.control.brake = 0.0
         
         # self.world.debug.draw_point(carla.Location(config.agent.goal.x,
@@ -350,11 +344,11 @@ class CarlaEnv(gym.Env):
         self.agent.control.throttle = float(0.0)
         self.agent.control.brake = 1.0
         self.agent.current_wp_index = 0
-        # self.agent.tick() # Apply control
 
         self.agent.set_transform(self.initial_transform)
-        #self.agent.set_simulate_physics(False) # freeze the vehicle
-        #self.agent.set_simulate_physics(True)
+        self.agent.set_simulate_physics(False) # freeze the vehicle
+        self.world.tick()
+        self.agent.set_simulate_physics(True)
 
         if self.is_exo_vehicle:
             self.exo_vehicle.set_transform(self.exo_veh_initial_transform)

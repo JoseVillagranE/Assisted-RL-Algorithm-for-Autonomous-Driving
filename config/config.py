@@ -1,3 +1,4 @@
+
 import yaml
 import numpy as np
 from easydict import EasyDict as edict
@@ -55,7 +56,7 @@ config.train = edict()
 config.train.checkpoint_every = 0
 config.train.batch_size = 10
 config.train.episodes = 100
-config.train.steps = 10000
+config.train.steps = 300 # es una especie de time-out
 config.train.optimizer = 'Adam'
 config.train.actor_lr = 1e-4
 config.train.critic_lr = 1e-3
@@ -72,9 +73,20 @@ config.train.episode_loading = 0
 config.train.start_to_update = 0
 config.train.optimization_steps = 1
 config.train.action_space = 2 # [steer, throttle]
-config.train.measurements_to_include = []#set(["steer", "throttle"])#,"speed"]) #"orientation"])
+config.train.measurements_to_include = []#set(["steer", "throttle"])#,"speed", "orientation"])
 config.train.z_dim = 128
-config.train.state_dim = config.train.z_dim# + 2#harcoded
+config.train.state_dim = config.train.z_dim#harcoded
+config.train.pretraining_steps = 100 # CoL
+config.train.lambdas = [1,1,1]
+config.train.expert_prop = 0.25
+config.train.agent_prop = 0.75
+config.train.rm_filename = "BC-1.npy"
+config.train.ou_noise_mu = 0.0
+config.train.ou_noise_theta = 0.6
+config.train.ou_noise_max_sigma = 0.4
+config.train.ou_noise_min_sigma = 0.0
+config.train.ou_noise_decay_period = 250
+
 
 # Agent Defaults (Single agent)
 config.agent = edict()
@@ -103,7 +115,7 @@ config.agent.sensor.color_converter = "raw"
 # ExoAgent Defaults
 config.exo_agents = edict()
 config.exo_agents.pedestrian = edict()
-config.exo_agents.pedestrian.spawn = True
+config.exo_agents.pedestrian.spawn = False
 
 config.exo_agents.pedestrian.initial_position = edict()
 config.exo_agents.pedestrian.initial_position.x = 191
@@ -112,7 +124,7 @@ config.exo_agents.pedestrian.initial_position.z = 1.0
 config.exo_agents.pedestrian.initial_position.yaw = 0
 
 config.exo_agents.vehicle = edict()
-config.exo_agents.vehicle.spawn = True
+config.exo_agents.vehicle.spawn = False
 config.exo_agents.vehicle.vehicle_type = "vehicle.audi.a2"
 config.exo_agents.vehicle.target_speed = 20.0 # Km/h
 config.exo_agents.vehicle.controller = "None" # How control the exo vehicle ?
@@ -128,8 +140,8 @@ config.exo_agents.vehicle.PID.longitudinal_Kd = 0
 
 
 config.exo_agents.vehicle.initial_position = edict()
-config.exo_agents.vehicle.initial_position.x = 221
-config.exo_agents.vehicle.initial_position.y = 57
+config.exo_agents.vehicle.initial_position.x = 149#221
+config.exo_agents.vehicle.initial_position.y = 63#57
 config.exo_agents.vehicle.initial_position.z = 1.0
 config.exo_agents.vehicle.initial_position.yaw = 180
 
@@ -179,7 +191,9 @@ config.test.steps = 100000
 
 # Eval Defaults
 config.eval = edict()
-config.eval.weights_path = "./models/weights/VAEBC.pt"
+config.eval.weights_path = "./models/weights/VAEBC-1.pt"
+config.eval.save_replay_buffer = False
+config.eval.filename_rb = "BC-1.npy" # 1rst cinematic
 
 
 # Visualisation Defaults

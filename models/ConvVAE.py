@@ -28,11 +28,15 @@ class VAE_Actor(nn.Module):
                  z_dim,
                  beta=1.0,
                  VAE_weights_path="",
-                 is_freeze_params=False):
+                 is_freeze_params=True):
         super().__init__()        
         self.num_actions = num_actions
         self.vae = ConvVAE(n_channel, z_dim, beta=beta)
-        self.linear = nn.Linear(state_dim, num_actions)
+        self.linear = nn.Sequential(nn.Linear(state_dim, 32), 
+                                    nn.Tanh(),
+                                    nn.Linear(32, num_actions))
+                                    #nn.Tanh(),
+                                    #nn.Linear(64, num_actions))
         if len(VAE_weights_path) > 0:
             print("Loading VAE weights..")
             self.vae.load_state_dict(torch.load(VAE_weights_path))
@@ -42,7 +46,7 @@ class VAE_Actor(nn.Module):
         
     def forward(self, state):
         x = self.linear(state)
-        action = torch.tanh(x) 
+        action = torch.tanh(x)
         return action
     
     def feat_ext(self, x):
