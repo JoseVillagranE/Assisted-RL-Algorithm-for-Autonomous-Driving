@@ -168,16 +168,17 @@ def train():
                     if config.vis.render:
                         env.render()
 
-                    if terminal_state:
+                    if terminal_state or step == config.train.steps-1:
+                        episode_reward = sum(episode_reward)
                         if len(env.extra_info) > 0:
-                            #episode_reward = list(zip(*episode_reward)) # normalize in type order
-                            #episode_reward = [list(map(lambda y: (y - min(x)) / (max(x) - min(x) + 1e-30), x)) for x in episode_reward]
-                            #episode_reward = list(zip(*episode_reward)) # get-back
-                            #episode_reward = np.multiply(np.array(episode_reward), rw_weights).sum(axis=1).sum()
-                            episode_reward = sum(episode_reward)
                             print(f"episode: {episode} || step: {step} || reward: {np.round(episode_reward, decimals=2)} || terminal reason: {env.extra_info[-1]}")# print the most recent terminal reason
                             logger.info(f"episode: {episode} || step: {step} || reward: {np.round(episode_reward, decimals=2)}, terminal reason: {env.extra_info[-1]}")
+                        else:
+                            print(f"episode: {episode} || step: {step} || reward: {np.round(episode_reward, decimals=2)} || terminal reason: TimeOut")
+                            logger.info(f"episode: {episode} || step: {step} || reward: {np.round(episode_reward, decimals=2)}, terminal reason: TimeOut")
                         break
+                    
+            rewards.append(episode_reward)
 
             if episode > config.train.start_to_update and config.run_type in ["DDPG", "CoL"]:
                 for _ in range(config.train.optimization_steps):
@@ -202,18 +203,17 @@ def train():
                     if config.vis.render:
                         env.render()
 
-                    if terminal_state:
+                    if terminal_state or step==config.test.steps:
                         if len(env.extra_info) > 0:
-                            print(f"episode_test: {episode_test}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}")# print the most recent terminal reason
-                            
+                            print(f"episode_test: {episode_test}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}")
                             logger.info(f"episode_test: {episode_test}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}")
+                        else:
+                            print(f"episode_test: {episode_test}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: TimeOut")
+                            logger.info(f"episode_test: {episode_test}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: TimeOut")
                         break
                 episode_test += 1
 
                 test_rewards.append(episode_reward_test)
-
-
-            rewards.append(episode_reward)
 
             if config.train.checkpoint_every > 0 and (episode + 1)%config.train.checkpoint_every==0:
                 models_dicts = (model.actor.state_dict(),

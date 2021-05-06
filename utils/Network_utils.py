@@ -56,15 +56,15 @@ if __name__ == "__main__":
     
     action_space = 2 
     mu = 0.0
-    theta = 0.6
-    max_sigma = 0.4
+    theta = 0.4
+    max_sigma = 0.1
     min_sigma = 0.0
-    decay_period = 100
+    decay_period = 500
     noise = OUNoise(action_space, mu=mu, theta=theta, max_sigma=max_sigma, min_sigma=min_sigma,
                     decay_period=decay_period)
     
     a = []
-    for i in range(100):
+    for i in range(500):
         ou_state = noise.evolve_state()
         noise.update_sigma(i)
         a.append(ou_state)

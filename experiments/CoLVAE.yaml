@@ -8,7 +8,7 @@ simulation:
 
 train:
   checkpoint_every: 100000
-  episodes: 400
+  episodes: 500
   device: "cpu"
   actor_lr: 0.0001
   critic_lr: 0.001
@@ -17,14 +17,14 @@ train:
   batch_size: 64
   start_to_update: 0
   optimization_steps: 1
-  lambdas: [0.5, 0.5, 1]
-  expert_prop: 0.5
-  agent_prop: 0.5
+  lambdas: [1, 1, 1]
+  expert_prop: 0.25
+  agent_prop: 0.75
   ou_noise_mu: 0.0
-  ou_noise_theta: 0.3
-  ou_noise_max_sigma: 0.15
+  ou_noise_theta: 0.4
+  ou_noise_max_sigma: 0.1
   ou_noise_min_sigma: 0.0
-  ou_noise_decay_period: 400
+  ou_noise_decay_period: 500
   pretraining_steps: 1000
 
 agent:
@@ -59,6 +59,7 @@ reward_fn:
 
 test:
   every: 10
+  steps: 300
 
 
 vis:
