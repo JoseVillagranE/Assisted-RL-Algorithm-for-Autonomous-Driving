@@ -29,6 +29,7 @@ def init_model(model_name,
                expert_prop=0.25,
                agent_prop=0.75,
                rm_filename="BC-1.npy",
+               VAE_weights_path="./models/weights/segmodel_expert_samples_sem_all.pt",
                ou_noise_mu=0.0,
                ou_noise_theta=0.6,
                ou_noise_max_sigma=0.4,
@@ -43,7 +44,9 @@ def init_model(model_name,
         model = DummyModel(action_space)
 
     elif model_name == "manual_model":
-        model = Manual_Model(2)
+        model = Manual_Model(2,
+                             wp_encode=wp_encode,
+                             wp_encoder_size=wp_encoder_size)
 
     elif model_name == "DDPG":
         model = DDPG(state_dim,
@@ -70,7 +73,7 @@ def init_model(model_name,
         model = BC(state_dim=state_dim,
                    action_space=action_space,
                    type_AC=model_type,
-                   VAE_weights_path="./models/weights/segmodel_expert_samples_sem_369.pt")
+                   VAE_weights_path=VAE_weights_path)
         
     elif model_name=="CoL":
         model = CoL(pretraining_steps=pretraining_steps,

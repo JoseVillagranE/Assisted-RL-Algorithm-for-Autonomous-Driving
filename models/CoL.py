@@ -34,6 +34,7 @@ class CoL:
                  type_RM="random",
                  max_memory_size=10000,
                  rm_filename=None,
+                 VAE_weights_path="./models/weights/segmodel_expert_samples_sem_all.pt",
                  ou_noise_mu=0.0,
                  ou_noise_theta=0.6,
                  ou_noise_max_sigma=0.4,
@@ -64,7 +65,7 @@ class CoL:
                                    action_space,
                                    n_channel,
                                    z_dim,
-                                   VAE_weights_path="./models/weights/segmodel_expert_samples_sem_369.pt",
+                                   VAE_weights_path=VAE_weights_path,
                                    beta=beta,
                                    wp_encode=wp_encode,
                                    wp_encoder_size=wp_encoder_size).float()
@@ -72,7 +73,7 @@ class CoL:
                                    action_space,
                                    n_channel,
                                    z_dim,
-                                   VAE_weights_path="./models/weights/segmodel_expert_samples_sem_369.pt",
+                                   VAE_weights_path=VAE_weights_path,
                                    beta=beta,
                                    wp_encode=wp_encode,
                                    wp_encoder_size=wp_encoder_size).float()

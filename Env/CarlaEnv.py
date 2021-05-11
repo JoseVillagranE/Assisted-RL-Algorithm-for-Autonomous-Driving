@@ -371,16 +371,17 @@ class CarlaEnv(gym.Env):
     def render(self, mode="human"):
 
         view_h, view_w = 10, 0
-        if config.agent.sensor.spectator_camera:
-            view_h, view_w = self.viewer_image.shape[:2]
-            self.display.blit(pygame.surfarray.make_surface(self.viewer_image.swapaxes(0,1)), (0, 0)) # Draw the image on the surface
-
-
+        
         if config.agent.sensor.dashboard_camera:
             # Superimpose current observation into top-right corner
             obs_h, obs_w = self.observation.shape[:2]
-            pos = (view_w - obs_w - 10, 10)
+            # pos = (view_w - obs_w - 10, 10)
+            pos = (0, 0)
             self.display.blit(pygame.surfarray.make_surface(self.observation.swapaxes(0,1)), pos)
+        
+        if config.agent.sensor.spectator_camera:
+            view_h, view_w = self.viewer_image.shape[:2]
+            self.display.blit(pygame.surfarray.make_surface(self.viewer_image.swapaxes(0,1)), (0, 0)) # Draw the image on the surface
 
 
         # Render to screen

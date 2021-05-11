@@ -99,11 +99,14 @@ def evaluation():
                        expert_prop=config.train.expert_prop,
                        agent_prop=config.train.agent_prop,
                        rm_filename=config.train.rm_filename,
+                       VAE_weights_path=config.train.VAE_weights_path,
                        ou_noise_mu=config.train.ou_noise_mu,
                        ou_noise_theta=config.train.ou_noise_theta,
                        ou_noise_max_sigma=config.train.ou_noise_max_sigma,
                        ou_noise_min_sigma=config.train.ou_noise_min_sigma,
-                       ou_noise_decay_period=config.train.ou_noise_decay_period)
+                       ou_noise_decay_period=config.train.ou_noise_decay_period,
+                       wp_encode=config.train.wp_encode,
+                       wp_encoder_size=config.train.wp_encoder_size)
 
     
     model.load_state_dict(config.eval.weights_path)
@@ -115,7 +118,10 @@ def evaluation():
                                              config.preprocess.mean,
                                              config.preprocess.std,
                                              config.train.measurements_to_include,
-                                             vae_encode=model.feat_ext if config.model.type=="VAE" else None)
+                                             vae_encode=model.feat_ext \
+                                                 if config.model.type=="VAE" else None,
+                                            feat_wp_encode=model.wp_encode_fn \
+                                                if config.train.wp_encode else None)
 
     print("Creating Environment..")
     env = NormalizedEnv(CarlaEnv(reward_fn=reward_functions[reward_fn],
@@ -141,6 +147,7 @@ def evaluation():
             if env.controller.parse_events():
                     return
             action = model.predict(state) # return a np. action
+            print(f"action: {action}")
             next_state, reward, terminal_state, info = env.step(action)
             if info["closed"] == True:
                 exit(0)

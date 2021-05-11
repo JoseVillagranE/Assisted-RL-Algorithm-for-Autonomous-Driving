@@ -19,19 +19,24 @@ class Manual_Model:
                  type_RM="random",
                  max_memory_size=10000,
                  rw_weights=[],
-                 batch_size=64):
+                 batch_size=64,
+                 wp_encode=False,
+                 wp_encoder_size=64,
+                 VAE_weights_path="./models/weights/segmodel_expert_samples_sem_all.pt"):
 
         self.action_space = action_space
         self.action = np.zeros(self.action_space)        
         self.type_RM = type_RM
         
         
-        self.vae = VAE_Actor(state_dim,
+        self.actor = VAE_Actor(state_dim,
                                action_space,
                                n_channel,
                                z_dim,
-                               VAE_weights_path="./models/weights/segmodel_expert_samples_sem_369.pt",
-                               beta=beta).float()
+                               VAE_weights_path=VAE_weights_path,
+                               beta=beta,
+                               wp_encode=wp_encode,
+                               wp_encoder_size=wp_encoder_size).float()
         
         
         if type_RM == "sequential":
@@ -78,5 +83,8 @@ class Manual_Model:
         pass
     
     def feat_ext(self, image):
-        return self.vae.feat_ext(image)
+        return self.actor.feat_ext(image)
+    
+    def wp_encode_fn(self, wp):
+        return self.actor.wp_encode_fn(wp)
         

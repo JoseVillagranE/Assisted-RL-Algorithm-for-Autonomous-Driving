@@ -1,24 +1,58 @@
-run_type: 'Test_2'
+run_type: 'manual_model'
 run_id: 'Test_2'
 seed: 1
 
 train:
-  checkpoint_every: 0
+  checkpoint_every: 100000000
   episodes: 10
-  steps: 200
+  steps: 20000000000000
+  wp_encode: True
+  wp_encoder_size: 64
 
 agent:
   sensor:
-    dashboard_camera: False
+    dashboard_camera: True
+    spectator_camera: False
+    camera_type: "sensor.camera.semantic_segmentation"
+    color_converter: "CityScapesPallete"
 
 
 exo_agents:
   pedestrian:
     spawn: False
+    initial_position: 
+        x: 152
+        y: 40
+        z: 1
 
   vehicle:
     spawn: False
+    initial_position:
+        x: 149
+        y: 65
+        z: 1
+        yaw: 0
 
 model:
-  type: "manual_model"
+  type: "VAE"
   id: '0'
+
+
+reward_fn:
+  normalize: False
+  weight_collision_pedestrian: 1000
+  weight_collision_vehicle: 1000
+  weight_collision_other: 1000
+  weight_final_goal: 500
+  weight_speed_limit: 1
+  weight_route_al: 2
+  weight_centralization: 2
+  weight_distance_to_goal: 1
+
+
+vis:
+  render: True
+
+eval:
+    save_replay_buffer: True
+    filename_rb: "MCw-1.npy"

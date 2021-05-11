@@ -85,6 +85,7 @@ config.train.lambdas = [1,1,1]
 config.train.expert_prop = 0.25
 config.train.agent_prop = 0.75
 config.train.rm_filename = "BC-1.npy"
+config.train.VAE_weights_path = "./models/weights/segmodel_expert_samples_sem_all.pt"
 config.train.ou_noise_mu = 0.0
 config.train.ou_noise_theta = 0.6
 config.train.ou_noise_max_sigma = 0.4

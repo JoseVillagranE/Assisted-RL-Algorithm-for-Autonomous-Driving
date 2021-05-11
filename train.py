@@ -99,6 +99,7 @@ def train():
                        expert_prop=config.train.expert_prop,
                        agent_prop=config.train.agent_prop,
                        rm_filename=config.train.rm_filename,
+                       VAE_weights_path=config.train.VAE_weights_path,
                        ou_noise_mu=config.train.ou_noise_mu,
                        ou_noise_theta=config.train.ou_noise_theta,
                        ou_noise_max_sigma=config.train.ou_noise_max_sigma,

@@ -30,6 +30,7 @@ train:
   gamma: 0.99
   wp_encode: True
   wp_encoder_size: 64
+  rm_filename: "MCw-1.npy"
 
 agent:
   sensor:

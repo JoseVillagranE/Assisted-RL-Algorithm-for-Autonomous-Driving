@@ -151,7 +151,7 @@ class RandomDequeMemory(ExperienceReplayMemory):
         
     def load_rm(self, filename):
         print("Load Replay memory")
-        experiences = np.load("./models/replay_folder/"+filename, allow_pickle=True)
+        experiences = np.load("./replay_folder/"+filename, allow_pickle=True)
         self.memory = deque(experiences.tolist(), maxlen=self.queue_capacity)
         
     def set_batch_size(self, batch_size):
