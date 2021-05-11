@@ -410,17 +410,15 @@ class CarlaEnv(gym.Env):
                 return True
 
         if self.collision_other:
-            print("Collision w/ other")
             return True
 
         self.distance_to_goal = self.agent.get_carla_actor().get_transform().location.distance(self.goal_location)
         if self.distance_to_goal < self.margin_to_goal:
-            print("Arrive to the goal!")
             self.final_goal = True
             return True
         
         if self.agent.get_carla_actor().get_transform().location.x > config.agent.goal.x:
-            print("cross de finish line")
+            env.extra_info.append("Cross Finish Line")
             return True
         return False
 

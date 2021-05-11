@@ -38,7 +38,12 @@ class CoL:
                  ou_noise_theta=0.6,
                  ou_noise_max_sigma=0.4,
                  ou_noise_min_sigma=0.0,
-                 ou_noise_decay_period=250):
+                 ou_noise_decay_period=250,
+                 enable_scheduler_lr=False,
+                 scheduler_gamma=0.1,
+                 scheduler_step_size=1000,
+                 wp_encode=False,
+                 wp_encoder_size=64):
         
         
         self.state_dim = state_dim
@@ -50,7 +55,8 @@ class CoL:
         self.critic_lr = critic_lr
         self.gamma = gamma
         self.tau = tau
-        self.lambdas = [1, 0, 1] # Only BC in the beginning
+        self.lambdas = lambdas
+        self.enable_scheduler_lr = enable_scheduler_lr
         
         # Networks
         if model_type == "VAE":
@@ -59,13 +65,17 @@ class CoL:
                                    n_channel,
                                    z_dim,
                                    VAE_weights_path="./models/weights/segmodel_expert_samples_sem_369.pt",
-                                   beta=beta).float()
+                                   beta=beta,
+                                   wp_encode=wp_encode,
+                                   wp_encoder_size=wp_encoder_size).float()
             self.actor_target = VAE_Actor(state_dim,
                                    action_space,
                                    n_channel,
                                    z_dim,
                                    VAE_weights_path="./models/weights/segmodel_expert_samples_sem_369.pt",
-                                   beta=beta).float()
+                                   beta=beta,
+                                   wp_encode=wp_encode,
+                                   wp_encoder_size=wp_encoder_size).float()
             self.critic = VAE_Critic(state_dim, action_space).float()
             self.critic_target = VAE_Critic(state_dim, action_space).float()
        
@@ -116,29 +126,34 @@ class CoL:
         if optim == "SGD":
             self.actor_optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad,
                                                           self.actor.parameters()),
-                                                    lr=actor_lr)
+                                                    lr=actor_lr,
+                                                    weight_decay=0)
             self.critic_optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad,
                                                            self.critic.parameters()),
-                                                     lr=critic_lr)
+                                                     lr=critic_lr,
+                                                     weight_decay=0)
         elif optim == "Adam":
             self.actor_optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad,
                                                            self.actor.parameters()),
-                                                    lr=actor_lr)
+                                                    lr=actor_lr,
+                                                    weight_decay=0)
             self.critic_optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad,
                                                             self.critic.parameters()),
-                                                     lr=critic_lr)
+                                                     lr=critic_lr,
+                                                     weight_decay=0)
         else:
             raise NotImplementedError("Optimizer should be Adam or SGD")
             
             
         # scheduler
-        self.actor_scheduler = torch.optim.lr_scheduler.StepLR(self.actor_optimizer,
-                                                          150,
-                                                          gamma=0.1)
-        
-        self.critic_scheduler = torch.optim.lr_scheduler.StepLR(self.critic_optimizer,
-                                                          150,
-                                                          gamma=0.1)
+        if self.enable_scheduler_lr:
+            self.actor_scheduler = torch.optim.lr_scheduler.StepLR(self.actor_optimizer,
+                                                                   scheduler_step_size,
+                                                                   gamma=scheduler_gamma)
+            
+            self.critic_scheduler = torch.optim.lr_scheduler.StepLR(self.critic_optimizer,
+                                                                    scheduler_step_size,
+                                                                    gamma=scheduler_gamma)
 
         # Noise
         self.ounoise = OUNoise(action_space,
@@ -158,17 +173,11 @@ class CoL:
         # load semi-expert experience
         if rm_filename:
             self.replay_memory_e.load_rm(rm_filename)
+            print(f"samples of expert rm: {self.replay_memory_e.get_memory_size()}")
             
         # pretraining steps
         for l in range(pretraining_steps):
             self.update(is_pretraining=True)
-            
-        # set batch size of the expert and the agent
-        self.replay_memory.set_batch_size(round(batch_size*agent_prop))
-        self.replay_memory_e.set_batch_size(round(batch_size*expert_prop))
-        
-        # set lambdas
-        self.set_lambdas(lambdas)
         
     
     def predict(self, state, step, mode="training"):
@@ -262,7 +271,7 @@ class CoL:
         # nn.utils.clip_grad_norm_(self.critic.parameters(), 0.005)
         self.critic_optimizer.step()
         
-        if not is_pretraining:
+        if not is_pretraining and self.enable_scheduler_lr:
             self.actor_scheduler.step()
             self.critic_scheduler.step()
 
@@ -278,6 +287,9 @@ class CoL:
         
     def feat_ext(self, image):
         return self.actor.feat_ext(image)
+    
+    def wp_encode_fn(self, wp):
+        return self.actor.wp_encode_fn(wp)
     
     
 

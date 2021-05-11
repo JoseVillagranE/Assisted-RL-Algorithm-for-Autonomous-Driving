@@ -130,10 +130,10 @@ def evaluation():
     # Stats
     rewards = []
     test_rewards = []
-    episode_test = 0
+    episode_step = 0
     episode_reward_test = 0
     
-    time.sleep(15)
+    # time.sleep(15)
     
     try:
         state, terminal_state, episode_reward = env.reset(), False, []
@@ -161,14 +161,14 @@ def evaluation():
 
             if terminal_state:
                 if len(env.extra_info) > 0:
-                    print(f"episode_test: {episode_test}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}")# print the most recent terminal reason
-                    logger.info(f"episode_test: {episode_test}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}")
+                    print(f"episode step: {episode_step}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}")# print the most recent terminal reason
+                    logger.info(f"episode step: {episode_step}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}")
                 break
-            episode_test += 1
+            episode_step += 1
             test_rewards.append(episode_reward_test)
             
         if config.eval.save_replay_buffer:
-            model.save_replay_memory(config.eval.filename_rb)
+            model.replay_memory.save_memory(config.eval.filename_rb)
             
     except KeyboardInterrupt:
         pass

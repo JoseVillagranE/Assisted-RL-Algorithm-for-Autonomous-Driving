@@ -1,5 +1,5 @@
 import numpy as np
-from utils.utils import angle_diff, vector, distance_to_lane
+from utils.utils import vehicle_angle_calculation, vector, distance_to_lane
 from config.config import config
 
 
@@ -61,13 +61,13 @@ def create_reward_fn(reward_fn):
         if env.terminal_state:
             low_speed_timer = 0.0
             if env.final_goal:
-                terminal_reason = "goal!"
+                terminal_reason = "Goal"
             elif env.collision_vehicle:
-                terminal_reason = "Collision w/ exo-vehicle"
+                terminal_reason = "Collision Veh"
             elif env.collision_pedestrian:
-                terminal_reason = "Collision w/ pedestrian"
+                terminal_reason = "Collision Ped"
             elif env.collision_other:
-                terminal_reason = "Collision w/ other"
+                terminal_reason = "Collision Other"
 
 
             if len(terminal_reason) > 0:
@@ -86,9 +86,8 @@ def reward_fn(env):
     """
     reward =
     """
-    fwd = vector(env.agent.get_velocity())
-    wp_fwd = vector(env.agent.get_current_wp().transform.rotation.get_forward_vector())
-    angle = angle_diff(fwd, wp_fwd)
+    angle = vehicle_angle_calculation(vector(env.agent.get_velocity()),
+                                      env.agent.get_current_wp())
 
     speed_kmh = 3.6*env.agent.get_speed()
     
@@ -108,8 +107,8 @@ def reward_fn(env):
         centering_factor = 1 - env.distance_from_center/config.reward_fn.max_distance
     else:
         centering_factor= -1
-        env.terminal_state = True
-        env.extra_info.append("Deviated more than 3m")
+        # env.terminal_state = True
+        # env.extra_info.append("Deviated more than 3m")
         
     
     # R(alpha)

@@ -8,7 +8,7 @@ simulation:
 
 train:
   checkpoint_every: 100000
-  episodes: 500
+  episodes: 12
   device: "cpu"
   actor_lr: 0.0001
   critic_lr: 0.001
@@ -24,8 +24,12 @@ train:
   ou_noise_theta: 0.4
   ou_noise_max_sigma: 0.1
   ou_noise_min_sigma: 0.0
-  ou_noise_decay_period: 500
-  pretraining_steps: 1000
+  ou_noise_decay_period: 750
+  pretraining_steps: 100
+  tau: 0.001
+  gamma: 0.99
+  wp_encode: True
+  wp_encoder_size: 64
 
 agent:
   sensor:

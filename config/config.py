@@ -74,8 +74,12 @@ config.train.start_to_update = 0
 config.train.optimization_steps = 1
 config.train.action_space = 2 # [steer, throttle]
 config.train.measurements_to_include = []#set(["steer", "throttle"])#,"speed", "orientation"])
+config.train.wp_encode = True # harcoded
+config.train.wp_encoder_size = 64 if config.train.wp_encode else 0
 config.train.z_dim = 128
-config.train.state_dim = config.train.z_dim#harcoded
+config.train.state_dim = config.train.z_dim + \
+                            len(config.train.measurements_to_include) + \
+                                config.train.wp_encoder_size
 config.train.pretraining_steps = 100 # CoL
 config.train.lambdas = [1,1,1]
 config.train.expert_prop = 0.25
@@ -88,6 +92,7 @@ config.train.ou_noise_min_sigma = 0.0
 config.train.ou_noise_decay_period = 250
 
 
+
 # Agent Defaults (Single agent)
 config.agent = edict()
 config.agent.vehicle_type = "vehicle.tesla.model3"
@@ -96,7 +101,7 @@ config.agent.margin_to_goal = 3.0
 
 config.agent.initial_position = edict()
 config.agent.initial_position.x = 100
-config.agent.initial_position.y = 63
+config.agent.initial_position.y = 64
 config.agent.initial_position.z = 1.0
 config.agent.initial_position.yaw = 0
 
@@ -193,7 +198,7 @@ config.test.steps = 100000
 config.eval = edict()
 config.eval.weights_path = "./models/weights/VAEBC-1.pt"
 config.eval.save_replay_buffer = False
-config.eval.filename_rb = "BC-1.npy" # 1rst cinematic
+config.eval.filename_rb = "MC-1.npy"#"BC-1.npy" # 1rst cinematic
 
 
 # Visualisation Defaults

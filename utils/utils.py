@@ -21,6 +21,20 @@ def get_actor_display_name(actor, truncate=250):
     name = " ".join(actor.type_id.replace("_", ".").title().split(".")[1:])
     return (name[:truncate-1] + u"\u2026") if len(name) > truncate else name
 
+def wp_features_function(agent_fwd, list_wp):
+    orientations = [vehicle_angle_calculation(agent_fwd, wp) for wp in list_wp]
+    return sum(orientations)/len(orientations)
+
+def vehicle_angle_calculation(agent_fwd, wp):
+    """
+    agent_fwd: Agent's forwarding vector
+    wp: waypoint
+    """
+    wp_fwd = vector(wp.transform.rotation.get_forward_vector())
+    angle = angle_diff(agent_fwd, wp_fwd)
+    return angle
+
+
 def angle_diff(v0, v1):
     """
     Calculates the signed angle difference (-pi, pi] between 2D vector v0 and v1

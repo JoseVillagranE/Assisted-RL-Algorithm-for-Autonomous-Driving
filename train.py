@@ -103,7 +103,9 @@ def train():
                        ou_noise_theta=config.train.ou_noise_theta,
                        ou_noise_max_sigma=config.train.ou_noise_max_sigma,
                        ou_noise_min_sigma=config.train.ou_noise_min_sigma,
-                       ou_noise_decay_period=config.train.ou_noise_decay_period)
+                       ou_noise_decay_period=config.train.ou_noise_decay_period,
+                       wp_encode=config.train.wp_encode,
+                       wp_encoder_size=config.train.wp_encoder_size)
 
 
     # Create state encoding fn
@@ -113,7 +115,10 @@ def train():
                                              config.preprocess.mean,
                                              config.preprocess.std,
                                              config.train.measurements_to_include,
-                                             vae_encode=model.feat_ext if config.model.type=="VAE" else None)
+                                             vae_encode=model.feat_ext \
+                                                 if config.model.type=="VAE" else None,
+                                             feat_wp_encode=model.wp_encode_fn \
+                                                 if config.train.wp_encode else None)
 
     print("Creating Environment..")
     env = NormalizedEnv(CarlaEnv(reward_fn=reward_functions[reward_fn],
@@ -127,6 +132,8 @@ def train():
     # Stats
     rewards = []
     test_rewards = []
+    info_finals_state = []
+    test_info_finals_state = []
 
     # load checkpoint if is necessary
     model_dicts, \
@@ -144,6 +151,7 @@ def train():
     try:
         for episode in range(start_episode, config.train.episodes):
             state, terminal_state, episode_reward = env.reset(), False, []
+            terminal_state_info = ""
             while not terminal_state:
                 for step in range(config.train.steps):
                     if env.controller.parse_events():
@@ -170,15 +178,19 @@ def train():
 
                     if terminal_state or step == config.train.steps-1:
                         episode_reward = sum(episode_reward)
+                        terminal_state = True
                         if len(env.extra_info) > 0:
+                            terminal_state_info = env.extra_info[-1]
                             print(f"episode: {episode} || step: {step} || reward: {np.round(episode_reward, decimals=2)} || terminal reason: {env.extra_info[-1]}")# print the most recent terminal reason
                             logger.info(f"episode: {episode} || step: {step} || reward: {np.round(episode_reward, decimals=2)}, terminal reason: {env.extra_info[-1]}")
                         else:
+                            terminal_state_info = "Time Out"
                             print(f"episode: {episode} || step: {step} || reward: {np.round(episode_reward, decimals=2)} || terminal reason: TimeOut")
                             logger.info(f"episode: {episode} || step: {step} || reward: {np.round(episode_reward, decimals=2)}, terminal reason: TimeOut")
                         break
                     
             rewards.append(episode_reward)
+            info_finals_state.append((episode, terminal_state_info))
 
             if episode > config.train.start_to_update and config.run_type in ["DDPG", "CoL"]:
                 for _ in range(config.train.optimization_steps):
@@ -189,6 +201,7 @@ def train():
 
             if episode % config.test.every == 0 and episode > 0:
                 state, terminal_state, episode_reward_test = env.reset(), False, 0
+                terminal_state_info = ""
                 print("Running a test episode")
                 for step in range(config.test.steps):
                     if env.controller.parse_events():
@@ -205,16 +218,19 @@ def train():
 
                     if terminal_state or step==config.test.steps:
                         if len(env.extra_info) > 0:
+                            terminal_state_info = env.extra_info[-1]
                             print(f"episode_test: {episode_test}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}")
                             logger.info(f"episode_test: {episode_test}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}")
                         else:
+                            terminal_state_info = "Time Out"
                             print(f"episode_test: {episode_test}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: TimeOut")
                             logger.info(f"episode_test: {episode_test}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: TimeOut")
                         break
                 episode_test += 1
 
                 test_rewards.append(episode_reward_test)
-
+                test_info_finals_state.append((episode, terminal_state_info))
+                
             if config.train.checkpoint_every > 0 and (episode + 1)%config.train.checkpoint_every==0:
                 models_dicts = (model.actor.state_dict(),
                           model.actor_target.state_dict(),
@@ -230,6 +246,8 @@ def train():
     finally:
         np.save(os.path.join(particular_save_path, "rewards.npy"), np.array(rewards))
         np.save(os.path.join(particular_save_path, "test_rewards.npy"), np.array(test_rewards))
+        np.save(os.path.join(particular_save_path, "info_finals_state.npy"), np.array(info_finals_state))
+        np.save(os.path.join(particular_save_path, "test_info_finals_state.npy"), np.array(test_info_finals_state))
 
         # Last checkpoint to save
         models_dicts = (model.actor.state_dict(),

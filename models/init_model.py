@@ -33,7 +33,9 @@ def init_model(model_name,
                ou_noise_theta=0.6,
                ou_noise_max_sigma=0.4,
                ou_noise_min_sigma=0.0,
-               ou_noise_decay_period=250):
+               ou_noise_decay_period=250,
+               wp_encode=False,
+               wp_encoder_size=64):
 
     model = None
     
@@ -94,7 +96,9 @@ def init_model(model_name,
                     ou_noise_theta=ou_noise_theta,
                     ou_noise_max_sigma=ou_noise_max_sigma,
                     ou_noise_min_sigma=ou_noise_min_sigma,
-                    ou_noise_decay_period=ou_noise_decay_period)
+                    ou_noise_decay_period=ou_noise_decay_period,
+                    wp_encode=wp_encode,
+                    wp_encoder_size=wp_encoder_size)
     else:
         raise NotImplementedError("Dont exist that model that you required")
     return model

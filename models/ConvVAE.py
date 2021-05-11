@@ -28,15 +28,21 @@ class VAE_Actor(nn.Module):
                  z_dim,
                  beta=1.0,
                  VAE_weights_path="",
-                 is_freeze_params=True):
+                 is_freeze_params=True,
+                 wp_encode=False,
+                 wp_encoder_size=64):
         super().__init__()        
         self.num_actions = num_actions
         self.vae = ConvVAE(n_channel, z_dim, beta=beta)
-        self.linear = nn.Sequential(nn.Linear(state_dim, 32), 
+        self.linear = nn.Sequential(nn.Linear(state_dim, 64), 
                                     nn.Tanh(),
-                                    nn.Linear(32, num_actions))
+                                    nn.Linear(64, num_actions))
                                     #nn.Tanh(),
                                     #nn.Linear(64, num_actions))
+        
+        if wp_encode:
+            self.wp_encoder = nn.Linear(1, wp_encoder_size)
+        
         if len(VAE_weights_path) > 0:
             print("Loading VAE weights..")
             self.vae.load_state_dict(torch.load(VAE_weights_path))
@@ -62,9 +68,15 @@ class VAE_Actor(nn.Module):
         mu, logvar = self.vae.encode(x)
         return self.vae.reparametrize(mu, logvar)
     
+    def wp_encode_fn(self, wp):
+        wp = torch.tensor(wp).unsqueeze(0).float()
+        return self.wp_encoder(wp).detach().numpy()
+    
 class VAE_Critic(nn.Module):
     
-    def __init__(self, state_dim, num_actions):
+    def __init__(self, 
+                 state_dim,
+                 num_actions):
         super().__init__()
         self.num_actions = num_actions
         self.linear = nn.Linear(state_dim+num_actions, 1)
@@ -96,8 +108,10 @@ class ConvVAE(nn.Module):
         self.mu = nn.Linear(256*24, z_dim)
         self.logvar = nn.Linear(256*24, z_dim)
         
-        self.recons_loss = nn.BCELoss(reduction=reduction) if recons_loss=="bce" \
-                                                            else nn.MSELoss(reduction=reduction)
+        if recons_loss=="bce":
+            self.recons_loss = nn.BCELoss(reduction=reduction)
+        else:
+            self.recons_loss = nn.MSELoss(reduction=reduction)
         
     def forward(self, x):
         mu, logvar = self.encode(x)
