@@ -30,7 +30,9 @@ class BC:
                  linear_layers=[],
                  max_memory_size=100,
                  rw_weights=None,
-                 device="cpu"):
+                 device="cpu",
+                 wp_encode=False,
+                 wp_encoder_size=64,):
         
         self.state_dim = state_dim
         self.action_space = action_space
@@ -46,7 +48,9 @@ class BC:
                                    z_dim,
                                    beta=beta,
                                    VAE_weights_path=VAE_weights_path,
-                                   is_freeze_params=freeze_params).float()
+                                   is_freeze_params=freeze_params,
+                                   wp_encode=wp_encode,
+                                   wp_encoder_size=wp_encoder_size).float()
         
         elif type_AC == "Conv":
             self.actor = Conv_Actor(action_space,
@@ -111,4 +115,7 @@ class BC:
         
     def save_replay_memory(self, filename):
         self.replay_memory.save_memory(filename)
+        
+    def wp_encode_fn(self, wp):
+        return self.actor.wp_encode_fn(wp)
         

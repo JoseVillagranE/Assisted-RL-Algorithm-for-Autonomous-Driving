@@ -16,6 +16,9 @@ def print_transform(transform):
     print(f"Location: (x: {transform.location.x:.2f}, y: {transforma.location.y:.2f}, z: {transform.location.z:.2f}) " +
             f"Rotation: (pitch: {transform.rotation.pitch:.2f}, yaw: {transform.rotation.yaw:.2f}, roll: {transform.rotation.roll:.2f})")
 
+def get_actor_display_type(actor):
+    name = actor.type_id.replace("_", ".").split(".")[0]
+    return name 
 
 def get_actor_display_name(actor, truncate=250):
     name = " ".join(actor.type_id.replace("_", ".").title().split(".")[1:])

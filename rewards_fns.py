@@ -135,6 +135,15 @@ def reward_fn(env):
         final_goal = 1
     if env.collision_other:
         collision_other = -1
+        
+    # print(f"speed_reward: {speed_reward}")
+    # print(f"centering factor: {centering_factor}")
+    # print(f"angle factor: {angle_factor}")
+    # print(f"collision vehicle: {collision_vehicle}")
+    # print(f"collision pedestrian: {collision_pedestrian}")
+    # print(f"collision other: {collision_other}")
+    # print(f"final goal: {final_goal}")
+    # print(f"rdtg: {rdtg}")
 
     # Final reward
     return (speed_reward,

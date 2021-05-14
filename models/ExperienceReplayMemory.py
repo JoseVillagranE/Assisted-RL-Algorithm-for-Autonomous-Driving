@@ -102,6 +102,7 @@ class SequentialDequeMemory:
 class RandomDequeMemory(ExperienceReplayMemory):
 
     def __init__(self, queue_capacity=2000, rw_weights=None, batch_size=64):
+        super().__init__()
 
         self.queue_capacity = queue_capacity
         self.memory = deque(maxlen=self.queue_capacity)
@@ -110,19 +111,23 @@ class RandomDequeMemory(ExperienceReplayMemory):
 
     def add_to_memory(self, experience_tuple):
         self.memory.append(experience_tuple)
+        
 
     def get_batch_for_replay(self):
 
-        state_batch, action_batch, reward_batch, next_state_batch, done_batch = [], [], [], [], []
-
+        state_batch = [] 
+        action_batch = []
+        reward_batch = []
+        next_state_batch = []
+        done_batch = []
         batch = random.sample(self.memory, self.batch_size) # without replacement
         for experience in batch:
             state, action, reward, next_state, done = experience
             state_batch.append(state)
             action_batch.append(action)
+            reward_batch.append(reward)
             next_state_batch.append(next_state)
             done_batch.append(done)
-            reward_batch.append(reward)
 
 
         if isinstance(reward_batch[0], tuple):
@@ -147,11 +152,13 @@ class RandomDequeMemory(ExperienceReplayMemory):
             self.memory.append((states[i, :], actions[i, :], 0, 0, 0))
             
     def save_memory(self, filename):
+        self.set_batch_size(self.get_memory_size())
+        _, actions, rew, _, _ = self.get_batch_for_replay()
         np.save("./models/replay_folder/" + filename, self.memory)
         
     def load_rm(self, filename):
         print("Load Replay memory")
-        experiences = np.load("./replay_folder/"+filename, allow_pickle=True)
+        experiences = np.load("./models/replay_folder/"+filename, allow_pickle=True)
         self.memory = deque(experiences.tolist(), maxlen=self.queue_capacity)
         
     def set_batch_size(self, batch_size):
@@ -225,7 +232,7 @@ class PrioritizedDequeMemory(ExperienceReplayMemory):
 
 if __name__ == "__main__":
 
-    rw_weights = [1, 2, 3, 4]
+    # rw_weights = [1, 2, 3, 4]
 
     # RB = RandomDequeMemory(10, rw_weights=rw_weights, batch_size=4)
     # RB.add_to_memory((1, 1, (1,2,3,4), 2, False))
@@ -235,6 +242,20 @@ if __name__ == "__main__":
 
     # state, action, reward, next_state, done = RB.get_batch_for_replay()
     # print(reward)
+    
+    ################################
+    
+    RB = RandomDequeMemory(10, rw_weights=None, batch_size=4)
+    RB.add_to_memory((1, np.array([1, 2]), 1, 2, False))
+    RB.add_to_memory((2, np.array([4, 1]), 0.11, 3, False))
+    RB.add_to_memory((3, np.array([1, 7]), 0.4, 2, False))
+    RB.add_to_memory((2, np.array([3, 0]), 5.6, 1, True))
+
+    batch = RB.get_batch_for_replay()
+    # print(reward)
+    # print(action)
+    
+    
 
     ##################################################
 
@@ -256,11 +277,11 @@ if __name__ == "__main__":
     
     ####################################################
     
-    RB = RandomDequeMemory(1000, rw_weights=rw_weights, batch_size=4)
-    RB.load_rm("BC-1.npy")
-    state, action, reward, next_state, done = RB.get_batch_for_replay()
-    state_e, action_e, reward_e, next_state_e, done_e = RB.get_batch_for_replay()
-    actions = np.vstack((np.array(action),
-                         np.array(action_e)))
-    print(actions)
+    # RB = RandomDequeMemory(1000, rw_weights=rw_weights, batch_size=4)
+    # RB.load_rm("BC-1.npy")
+    # state, action, reward, next_state, done = RB.get_batch_for_replay()
+    # state_e, action_e, reward_e, next_state_e, done_e = RB.get_batch_for_replay()
+    # actions = np.vstack((np.array(action),
+    #                      np.array(action_e)))
+    # print(actions)
     

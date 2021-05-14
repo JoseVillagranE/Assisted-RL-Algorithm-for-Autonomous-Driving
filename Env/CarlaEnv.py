@@ -24,7 +24,7 @@ from .wrapper import *
 import signal
 from collections import deque
 from agents.navigation.controller import VehiclePIDController
-from utils.utils import vector, distance_to_lane, get_actor_display_name
+from utils.utils import vector, distance_to_lane, get_actor_display_name, get_actor_display_type
 from PIL import Image
 
 class KeyboardControl(object):
@@ -255,6 +255,7 @@ class CarlaEnv(gym.Env):
                                             transform = camera_transforms["spectator"],
                                             attach_to=self.agent, on_recv_image = lambda e: self._set_viewer_image(e),
                                             sensor_tick=0.0 if config.synchronous_mode else 1.0/self.fps)
+                
 
         except Exception as e:
             self.close()
@@ -395,21 +396,27 @@ class CarlaEnv(gym.Env):
             Check for crashes or arrive to goal
             output: True if crash or goal
         '''
-        # print(self.world.exo_actor_list)
-        for exo_agent in self.world.exo_actor_list:
+        # # print(self.world.exo_actor_list)
+        # for exo_agent in self.world.exo_actor_list:
 
-            distance = self.agent.get_carla_actor().get_transform().location.distance(
-                        exo_agent.get_carla_actor().get_transform().location)
+        #     distance = self.agent.get_carla_actor().get_transform().location.distance(
+        #                 exo_agent.get_carla_actor().get_transform().location)
 
-            # print(f"Distance : {distance} || Exo-Agent: {exo_agent.type_of_agent}\n")
-            if distance < self.safe_distance:
-                print(f"Collision w/ {exo_agent.type_of_agent}")
-                if exo_agent.type_of_agent == "pedestrian":
-                    self.collision_pedestrian = True
-                elif exo_agent.type_of_agent == "vehicle":
-                    self.collision_vehicle = True
-                return True
-
+        #     # print(f"Distance : {distance} || Exo-Agent: {exo_agent.type_of_agent}\n")
+        #     if distance < self.safe_distance:
+        #         print(f"Collision w/ {exo_agent.type_of_agent}")
+        #         if exo_agent.type_of_agent == "pedestrian":
+        #             self.collision_pedestrian = True
+        #         elif exo_agent.type_of_agent == "vehicle":
+        #             self.collision_vehicle = True
+        #         return True
+        
+        if self.collision_vehicle:
+            return True
+        
+        if self.collision_pedestrian:
+            return True
+        
         if self.collision_other:
             return True
 
@@ -438,9 +445,14 @@ class CarlaEnv(gym.Env):
         return image
 
     def _on_collision(self, event):
-        name = get_actor_display_name(event.other_actor)
-        if name in self.collision_other_objects:
+        name = get_actor_display_type(event.other_actor)
+        if name == "vehicle":
+            self.collision_vehicle = True
+        elif name == "pedestrian":
+            self.collision_pedestrian = True
+        else:
             self.collision_other = True
+            
 
     def _set_observation_image(self, image):
         self.observation_buffer = image

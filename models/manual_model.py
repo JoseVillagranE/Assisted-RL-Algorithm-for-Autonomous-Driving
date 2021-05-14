@@ -18,7 +18,7 @@ class Manual_Model:
                  beta=1,
                  type_RM="random",
                  max_memory_size=10000,
-                 rw_weights=[],
+                 rw_weights=None,
                  batch_size=64,
                  wp_encode=False,
                  wp_encoder_size=64,

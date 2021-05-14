@@ -73,7 +73,9 @@ def init_model(model_name,
         model = BC(state_dim=state_dim,
                    action_space=action_space,
                    type_AC=model_type,
-                   VAE_weights_path=VAE_weights_path)
+                   VAE_weights_path=VAE_weights_path,
+                   wp_encode=wp_encode,
+                   wp_encoder_size=wp_encoder_size)
         
     elif model_name=="CoL":
         model = CoL(pretraining_steps=pretraining_steps,

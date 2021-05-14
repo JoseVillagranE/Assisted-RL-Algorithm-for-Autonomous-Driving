@@ -1,12 +1,13 @@
 run_type: 'manual_model'
 run_id: 'Test_2'
 seed: 1
+synchronous_mode: True
 
 train:
   checkpoint_every: 100000000
   episodes: 10
   steps: 20000000000000
-  wp_encode: True
+  wp_encode: False
   wp_encoder_size: 64
 
 agent:
@@ -22,13 +23,13 @@ exo_agents:
     spawn: False
     initial_position: 
         x: 152
-        y: 40
+        y: 65
         z: 1
 
   vehicle:
-    spawn: False
+    spawn: True
     initial_position:
-        x: 149
+        x: 120
         y: 65
         z: 1
         yaw: 0
@@ -54,5 +55,5 @@ vis:
   render: True
 
 eval:
-    save_replay_buffer: True
-    filename_rb: "MCw-1.npy"
+    save_replay_buffer: False
+    filename_rb: "MC-2.npy"

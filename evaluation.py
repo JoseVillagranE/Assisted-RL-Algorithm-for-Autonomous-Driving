@@ -147,7 +147,6 @@ def evaluation():
             if env.controller.parse_events():
                     return
             action = model.predict(state) # return a np. action
-            print(f"action: {action}")
             next_state, reward, terminal_state, info = env.step(action)
             if info["closed"] == True:
                 exit(0)
@@ -155,10 +154,10 @@ def evaluation():
             episode_reward_test += reward
             
             if config.eval.save_replay_buffer:
-                model.replay_memory.add_to_memory((state,
-                                                  action,
+                model.replay_memory.add_to_memory((state.copy(),
+                                                  action.copy(),
                                                   reward,
-                                                  next_state,
+                                                  next_state.copy(),
                                                   terminal_state))
             
             state = next_state
@@ -191,10 +190,10 @@ def main():
 
     args = parse_args()
 
-    print("Called w/ arguments: ", args)
-
     update_config(args.cfg)
     check_config(config)
+
+    print("Called w/ arguments: ", args)
 
     # check some condition and variables
     assert config.train.episodes > 0, "episodes should be more than zero"

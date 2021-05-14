@@ -21,7 +21,7 @@ train:
 agent:
   sensor:
     dashboard_camera: True
-    spectator_camera: True
+    spectator_camera: False
     camera_type: "sensor.camera.semantic_segmentation"
     color_converter: "CityScapesPallete"
 
@@ -32,6 +32,11 @@ exo_agents:
 
   vehicle:
     spawn: False
+    initial_position:
+        x: 149
+        y: 65
+        z: 1
+        yaw: 0
 
 model:
   type: "VAE"
@@ -52,8 +57,9 @@ test:
   every: 10
   
 eval:
-    save_replay_buffer: True
-
-
+    save_replay_buffer: False
+    weights_path: "./models/weights/VAEBC-2.pt"
+    filename_rb: "MC-2.npy"
+    
 vis:
   render: True

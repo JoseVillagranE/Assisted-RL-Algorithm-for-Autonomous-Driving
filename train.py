@@ -168,8 +168,11 @@ def train():
                         reward = weighted_rw # rw is only a scalar value
                     # Because exist manual and straight control also
                     if config.run_type in ["DDPG", "CoL"]:
-                        model.replay_memory.add_to_memory((state, action, reward,
-                                                           next_state, terminal_state))
+                        model.replay_memory.add_to_memory((state.copy(),
+                                                           action.copy(),
+                                                           reward,
+                                                           next_state.copy(),
+                                                           terminal_state))
 
                     episode_reward.append(reward)
                     state = next_state
