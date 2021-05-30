@@ -182,6 +182,7 @@ class CarlaEnv(gym.Env):
             self.agent.set_automatic_wp() # I need for orientation reward
 
             self.exo_veh_initial_transform = None
+            
             if self.is_exo_vehicle:
                 # Create a exo-vehicle
                 exo_veh_initial_location = carla.Location(x=config.exo_agents.vehicle.initial_position.x,
@@ -339,7 +340,8 @@ class CarlaEnv(gym.Env):
 
         return encode_state, reward, self.terminal_state, {"closed": self.closed}
 
-    def reset(self, is_training=False):
+    def reset(self, is_training=False, 
+              exo_veh_initial_transform=None, ped_initial_transform=None):
 
         self.agent.control.steer = float(0.0)
         self.agent.control.throttle = float(0.0)
@@ -352,9 +354,15 @@ class CarlaEnv(gym.Env):
         self.agent.set_simulate_physics(True)
 
         if self.is_exo_vehicle:
+            if exo_veh_initial_transform:
+                self.exo_veh_initial_transform = exo_veh_initial_transform
             self.exo_vehicle.set_transform(self.exo_veh_initial_transform)
+            self.exo_vehicle.control.brake = 1.0
+            self.exo_vehicle.control.throttle = 0.0
         if self.is_pedestrian:
-            self.pedestrian.set_transform(self.initial_transform_ped)
+            if initial_transform_ped:
+                self.initial_transform_ped = initial_transform_ped
+            self.pedestrian.set_transform(self.initial_transform)
         
         self.world.tick()
 
@@ -426,7 +434,7 @@ class CarlaEnv(gym.Env):
             return True
         
         if self.agent.get_carla_actor().get_transform().location.x > config.agent.goal.x:
-            env.extra_info.append("Cross Finish Line")
+            self.extra_info.append("Cross Finish Line")
             return True
         return False
 

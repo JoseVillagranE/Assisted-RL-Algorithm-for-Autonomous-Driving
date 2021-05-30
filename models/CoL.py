@@ -40,9 +40,9 @@ class CoL:
                  ou_noise_max_sigma=0.4,
                  ou_noise_min_sigma=0.0,
                  ou_noise_decay_period=250,
-                 enable_scheduler_lr=False,
+                 enable_scheduler_lr=True,
                  scheduler_gamma=0.1,
-                 scheduler_step_size=1000,
+                 scheduler_step_size=300,
                  wp_encode=False,
                  wp_encoder_size=64):
         
@@ -89,10 +89,12 @@ class CoL:
             self.critic_target = Critic(self.num_actions, h_image_in, w_image_in)
 
         # Copy weights
-        for target_param, param in zip(self.actor_target.parameters(), self.actor.parameters()):
+        for target_param, param in zip(self.actor_target.parameters(),
+                                       self.actor.parameters()):
             target_param.data.copy_(param)
 
-        for target_param, param in zip(self.critic_target.parameters(), self.critic.parameters()):
+        for target_param, param in zip(self.critic_target.parameters(),
+                                       self.critic.parameters()):
             target_param.data.copy_(param)
 
 
@@ -128,20 +130,20 @@ class CoL:
             self.actor_optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad,
                                                           self.actor.parameters()),
                                                     lr=actor_lr,
-                                                    weight_decay=0)
+                                                    weight_decay=1e-5)
             self.critic_optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad,
                                                            self.critic.parameters()),
                                                      lr=critic_lr,
-                                                     weight_decay=0)
+                                                     weight_decay=1e-5)
         elif optim == "Adam":
             self.actor_optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad,
                                                            self.actor.parameters()),
                                                     lr=actor_lr,
-                                                    weight_decay=0)
+                                                    weight_decay=1e-5)
             self.critic_optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad,
                                                             self.critic.parameters()),
                                                      lr=critic_lr,
-                                                     weight_decay=0)
+                                                     weight_decay=1e-5)
         else:
             raise NotImplementedError("Optimizer should be Adam or SGD")
             
@@ -176,6 +178,7 @@ class CoL:
             self.replay_memory_e.load_rm(rm_filename)
             print(f"samples of expert rm: {self.replay_memory_e.get_memory_size()}")
             
+        
         # pretraining steps
         for l in range(pretraining_steps):
             self.update(is_pretraining=True)
@@ -264,12 +267,12 @@ class CoL:
 
         self.actor_optimizer.zero_grad()
         L_col_actor.backward()
-        # nn.utils.clip_grad_norm_(self.actor.parameters(), 0.005)
+        nn.utils.clip_grad_norm_(self.actor.parameters(), 0.05)
         self.actor_optimizer.step()
         
         self.critic_optimizer.zero_grad()
         L_col_critic.backward()
-        # nn.utils.clip_grad_norm_(self.critic.parameters(), 0.005)
+        nn.utils.clip_grad_norm_(self.critic.parameters(), 0.05)
         self.critic_optimizer.step()
         
         if not is_pretraining and self.enable_scheduler_lr:
@@ -291,6 +294,9 @@ class CoL:
     
     def wp_encode_fn(self, wp):
         return self.actor.wp_encode_fn(wp)
+    
+    def lambda_decay(self, rd, n_lambda):
+        self.lambdas[n_lambda] -= rd
     
     
 

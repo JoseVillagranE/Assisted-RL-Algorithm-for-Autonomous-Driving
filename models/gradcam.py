@@ -103,6 +103,7 @@ class GradCAM(PropBase):
 
         self.weights.volatile = False
         self.activiation = self.activiation[None, :, :, :, :]
+        print(self.activiation.shape)
         self.weights = self.weights[:, None, :, :, :]
         gcam = F.conv3d(self.activiation, (self.weights.to(self.device)), padding=0, groups=len(self.weights))
         gcam = gcam.squeeze(dim=0)

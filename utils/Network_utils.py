@@ -56,7 +56,7 @@ if __name__ == "__main__":
     
     action_space = 2 
     mu = 0.0
-    theta = 0.4
+    theta = 0.6
     max_sigma = 0.1
     min_sigma = 0.0
     decay_period = 500

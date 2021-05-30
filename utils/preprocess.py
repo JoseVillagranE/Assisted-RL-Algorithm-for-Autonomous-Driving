@@ -44,6 +44,9 @@ def create_encode_state_fn(Resize_h, Resize_w, CenterCrop, mean, std,
             #encoded_state = torch.cat((encoded_state, measurements))
             encoded_state = np.append(encoded_state, measurements).astype(float)
             
+        else:
+            encoded_state = encoded_state.numpy() 
+            
         if feat_wp_encode:
             feat_angle = wp_features_function(vector(env.agent.get_velocity()),
                                               env.agent.get_list_next_wps(n=5))

@@ -152,12 +152,11 @@ def evaluation():
                 exit(0)
             reward = weighted_rw_fn(reward, rw_weights)
             episode_reward_test += reward
-            
             if config.eval.save_replay_buffer:
-                model.replay_memory.add_to_memory((state.copy(),
+                model.replay_memory.add_to_memory((state,
                                                   action.copy(),
                                                   reward,
-                                                  next_state.copy(),
+                                                  next_state,
                                                   terminal_state))
             
             state = next_state

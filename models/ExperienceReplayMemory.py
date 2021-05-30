@@ -153,7 +153,7 @@ class RandomDequeMemory(ExperienceReplayMemory):
             
     def save_memory(self, filename):
         self.set_batch_size(self.get_memory_size())
-        _, actions, rew, _, _ = self.get_batch_for_replay()
+        s, actions, rew, ns, d = self.get_batch_for_replay()
         np.save("./models/replay_folder/" + filename, self.memory)
         
     def load_rm(self, filename):

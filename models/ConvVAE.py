@@ -34,9 +34,9 @@ class VAE_Actor(nn.Module):
         super().__init__()        
         self.num_actions = num_actions
         self.vae = ConvVAE(n_channel, z_dim, beta=beta)
-        self.linear = nn.Sequential(nn.Linear(state_dim, 64), 
+        self.linear = nn.Sequential(nn.Linear(state_dim, 16),
                                     nn.Tanh(),
-                                    nn.Linear(64, num_actions))
+                                    nn.Linear(16, num_actions))
                                     #nn.Tanh(),
                                     #nn.Linear(64, num_actions))
         

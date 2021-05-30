@@ -6,6 +6,7 @@ import pprint
 import signal
 import sys
 import time
+import copy
 import torch
 
 from config.config import config, update_config, check_config
@@ -168,10 +169,10 @@ def train():
                         reward = weighted_rw # rw is only a scalar value
                     # Because exist manual and straight control also
                     if config.run_type in ["DDPG", "CoL"]:
-                        model.replay_memory.add_to_memory((state.copy(),
+                        model.replay_memory.add_to_memory((state,
                                                            action.copy(),
                                                            reward,
-                                                           next_state.copy(),
+                                                           next_state,
                                                            terminal_state))
 
                     episode_reward.append(reward)
