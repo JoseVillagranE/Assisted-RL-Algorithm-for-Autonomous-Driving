@@ -79,13 +79,25 @@ def generate_samples():
     
     try:
         for roll in range(rollouts):
-            exo_veh_x = random.randint(98, 219)
-            exo_veh_y = random.randint(53, 65)
-            exo_veh_yaw = random.randint(0, 359)
-            veh_initial_transform = carla.Transform(carla.Location(x=exo_veh_x,
-                                                                   y=exo_veh_y,
-                                                                   z=1),
-                                                    carla.Rotation(yaw=exo_veh_yaw))
+            n = random.randint(0, 5)
+            exo_vehs_ipos = []
+            peds_ipos = []
+            for i in range(n):
+                exo_veh_x = random.randint(98, 219)
+                exo_veh_y = random.randint(53, 65)
+                exo_veh_yaw = random.randint(0, 359)
+                ped_x = random.randint(98, 219)
+                ped_y = random.randint(53, 65)
+                ped_yaw = random.randint(0, 359)
+                pos = [exo_veh_x, exo_veh_y, exo_veh_yaw]
+                exo_vehs_ipos.append(pos)
+                pos = [ped_x, ped_y, ped_yaw]
+                # peds_ipos.append(pos)
+                
+            # veh_initial_transform = carla.Transform(carla.Location(x=exo_veh_x,
+            #                                                        y=exo_veh_y,
+            #                                                        z=1),
+            #                                         carla.Rotation(yaw=exo_veh_yaw))
             
             terminal_state = False
             episode_reward_test = 0
@@ -95,8 +107,8 @@ def generate_samples():
             s1_rollout = []
             d_rollout = []
             
-            state = env.reset(exo_veh_initial_transform=veh_initial_transform,
-                              ped_initial_transform=None)
+            state = env.reset(exo_vehs_ipos=exo_vehs_ipos,
+                              peds_ipos=peds_ipos)
             
             while not terminal_state:
                 if env.controller.parse_events():
