@@ -199,6 +199,9 @@ class Vehicle(CarlaActorBase):
                                    sampling_resolution=sampling_resolution)
         self.route_wp = [ wp_list[i][0] for i in range(len(wp_list))] # carla.waypoint
         self.waypoints_queue = deque(self.route_wp)
+        
+    def set_wps(self, wps):
+        self.waypoints_queue = deque(wps)
 
 
 
@@ -252,7 +255,15 @@ class Vehicle(CarlaActorBase):
         max_index = -1
 
         for i, waypoint in enumerate(self.waypoint_buffer):
-            if waypoint.transform.location.distance(self.actor.get_transform().location) < self.min_distance:
+            if type(waypoint) == np.ndarray:
+                location_actor = np.array([self.actor.get_transform().location.x,
+                                           self.actor.get_transform().location.y])
+                # print(waypoint)
+                # print(location_actor)
+                distance = np.linalg.norm(waypoint - location_actor)
+            else:
+                distance = waypoint.transform.location.distance(self.actor.get_transform().location)
+            if distance < self.min_distance:
                 max_index = i
         if max_index >= 0:
             for i in range(max_index + 1):

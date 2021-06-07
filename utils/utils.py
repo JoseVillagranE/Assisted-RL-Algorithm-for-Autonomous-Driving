@@ -9,11 +9,12 @@ except IndexError:
 
 import carla
 import numpy as np
+from agents.navigation.controller import VehiclePIDController
 
 # https://github.com/bitsauce/Carla-ppo
 def print_transform(transform):
 
-    print(f"Location: (x: {transform.location.x:.2f}, y: {transforma.location.y:.2f}, z: {transform.location.z:.2f}) " +
+    print(f"Location: (x: {transform.location.x:.2f}, y: {transform.location.y:.2f}, z: {transform.location.z:.2f}) " +
             f"Rotation: (pitch: {transform.rotation.pitch:.2f}, yaw: {transform.rotation.yaw:.2f}, roll: {transform.rotation.roll:.2f})")
 
 def get_actor_display_type(actor):
@@ -92,7 +93,14 @@ def write_file_w_wp(list_wp, file):
         f.write(f"{wp.x} {wp.y} {wp.z}\n")
 
     f.close()
-
+    
+def PID_assign(actor, kp, kd, ki, dt):
+    args_lateral_dict = {'K_P': kp, 'K_D': kd, 'K_I': ki, 'dt': dt}
+    args_longitudinal_dict = {'K_P': kp, 'K_D': kd, 'K_I': ki, 'dt': dt}
+    controller = VehiclePIDController(actor,
+                                      args_lateral=args_lateral_dict,
+                                      args_longitudinal=args_longitudinal_dict)
+    return controller
 
 if __name__ == "__main__":
 

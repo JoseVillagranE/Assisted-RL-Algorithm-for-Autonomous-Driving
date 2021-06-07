@@ -73,13 +73,14 @@ config.train.episode_loading = 0
 config.train.start_to_update = 0
 config.train.optimization_steps = 1
 config.train.action_space = 2 # [steer, throttle]
-config.train.measurements_to_include = []#set(["steer", "throttle"])#,"speed", "orientation"])
+config.train.measurements_to_include = []#set(["steer", "throttle", "speed", "orientation"])
 config.train.wp_encode = False # harcoded
 config.train.wp_encoder_size = 64 if config.train.wp_encode else 0
 config.train.z_dim = 128
-config.train.state_dim = config.train.z_dim + \
-                            len(config.train.measurements_to_include) + \
-                                config.train.wp_encoder_size
+config.train.state_dim = config.train.z_dim
+                            # len(config.train.measurements_to_include) + \
+                            # 2 if "orientation" in config.train.measurements_to_include else 0 + \
+                                # config.train.wp_encoder_size
 config.train.pretraining_steps = 100 # CoL
 config.train.lambdas = [1,1,1]
 config.train.expert_prop = 0.25
@@ -121,7 +122,7 @@ config.agent.sensor.color_converter = "raw"
 # ExoAgent Defaults
 config.exo_agents = edict()
 config.exo_agents.pedestrian = edict()
-config.exo_agents.pedestrian.spawn = False
+config.exo_agents.pedestrian.n = 0
 
 config.exo_agents.pedestrian.initial_position = edict()
 config.exo_agents.pedestrian.initial_position.x = 191
@@ -130,7 +131,7 @@ config.exo_agents.pedestrian.initial_position.z = 1.0
 config.exo_agents.pedestrian.initial_position.yaw = 0
 
 config.exo_agents.vehicle = edict()
-config.exo_agents.vehicle.spawn = False
+config.exo_agents.vehicle.n = 0
 config.exo_agents.vehicle.vehicle_type = "vehicle.audi.a2"
 config.exo_agents.vehicle.target_speed = 20.0 # Km/h
 config.exo_agents.vehicle.controller = "None" # How control the exo vehicle ?

@@ -25,7 +25,11 @@ from .wrapper import *
 import signal
 from collections import deque
 from agents.navigation.controller import VehiclePIDController
-from utils.utils import vector, distance_to_lane, get_actor_display_name, get_actor_display_type
+from utils.utils import vector, \
+                        distance_to_lane, \
+                        get_actor_display_name, \
+                        get_actor_display_type, \
+                        PID_assign
 from PIL import Image
 
 class KeyboardControl(object):
@@ -69,7 +73,8 @@ class CarlaEnv(gym.Env):
                  n_vehs=0,
                  exo_vehs_ipos=[],
                  n_peds=0,
-                 peds_ipos=[]):
+                 peds_ipos=[],
+                 exo_driving=False):
         """
         reward_fn (function): Custom reward function is called every step. If none, no reward function is used
         """
@@ -107,6 +112,7 @@ class CarlaEnv(gym.Env):
         self.action_smoothing = config.simulation.action_smoothing
         self.world = None
         self._dt = 1.0 / 20.0
+        self.exo_driving = exo_driving
 
         self.terminal_state = False
         self.extra_info = [] # List of extra info shown of the HUD
@@ -211,25 +217,18 @@ class CarlaEnv(gym.Env):
                 self.exo_veh_initial_transform.append(exo_veh_initial_transform)
                 self.exo_vehs.append(self.exo_vehicle)
                 
-                self.exo_vehicle.set_automatic_wp()
-
-                if config.exo_agents.vehicle.controller == "PID":
-                    args_lateral_dict = {
-                        'K_P': config.exo_agents.vehicle.PID.lateral_Kp,
-                        'K_D': config.exo_agents.vehicle.PID.lateral_Kd,
-                        'K_I': config.exo_agents.vehicle.PID.lateral_Ki,
-                        'dt': self._dt}
-                    args_longitudinal_dict = {
-                        'K_P': config.exo_agents.vehicle.PID.longitudinal_Kp,
-                        'K_D': config.exo_agents.vehicle.PID.longitudinal_Kd,
-                        'K_I': config.exo_agents.vehicle.PID.longitudinal_Ki,
-                        'dt': self._dt}
-                    self.exo_vehicle_controller = VehiclePIDController(self.exo_vehicle,
-                                                                args_lateral=args_lateral_dict,
-                                                                args_longitudinal=args_longitudinal_dict)
-
-                else:
-                    self.exo_vehicle.is_static = True
+                # self.exo_vehicle.set_automatic_wp()
+                if exo_driving:
+                    PID_assign(self.exo_vehicle,
+                               config.exo_agents.vehicle.PID.lateral_Kp,
+                               config.exo_agents.vehicle.PID.lateral_Kd,
+                               config.exo_agents.vehicle.PID.lateral_Ki,
+                               self._dt)
+                
+                self.exo_vehicle.is_static = True
+                    
+                
+                
             self.initial_transform_ped = None
             self.peds_initial_transforms = []
             self.peds = []
@@ -304,13 +303,15 @@ class CarlaEnv(gym.Env):
             self.agent.control.steer = self.agent.control.steer*self.action_smoothing + steer *(1.0 - self.action_smoothing)
             self.agent.control.throttle = self.agent.control.throttle*self.action_smoothing + throttle *(1.0 - self.action_smoothing)
             self.agent.control.brake = 0.
-        # if self.is_exo_vehicle:
-        #     # Always exo agent have action
-        #     next_wp = self.exo_vehicle.get_next_wp()
-        #     if not self.exo_vehicle.autopilot_mode and not self.exo_vehicle.is_static:
-        #         exo_control = self.exo_vehicle_controller.run_step(self.speed, next_wp)
-        #         self.exo_vehicle.control.steer = exo_control.steer
-        #         self.exo_vehicle.control.throttle = exo_control.throttle
+        if self.exo_driving:
+            # Always exo agent have action
+            next_wp = self.exo_vehs[0].get_next_wp() # np.array -> coor
+            if not self.exo_vehs[0].autopilot_mode:
+                exo_control = self.exo_veh_controller.run_step(self.speed,
+                                                               next_wp)
+                self.exo_vehs[0].control.steer = exo_control.steer
+                self.exo_vehs[0].control.throttle = exo_control.throttle
+                self.exo_vehs[0].control.brake = 0.0
         self.world.tick()
 
         # Get most recent observation and viewer image
@@ -357,7 +358,8 @@ class CarlaEnv(gym.Env):
 
     def reset(self, is_training=False, 
               exo_vehs_ipos=[], 
-              peds_ipos=[]):
+              peds_ipos=[],
+              exo_wps=None):
 
         self.agent.control.steer = float(0.0)
         self.agent.control.throttle = float(0.0)
@@ -393,6 +395,13 @@ class CarlaEnv(gym.Env):
                                   vehicle_type=config.exo_agents.vehicle.vehicle_type)
                 self.exo_vehs.append(exo_veh)
                 self.exo_vehs_initial_transforms.append(transform)
+                if self.exo_driving:
+                    self.exo_veh_controller = PID_assign(exo_veh,
+                               config.exo_agents.vehicle.PID.lateral_Kp,
+                               config.exo_agents.vehicle.PID.lateral_Kd,
+                               config.exo_agents.vehicle.PID.lateral_Ki,
+                               self._dt)
+                
             
         for exo_veh, exo_veh_ipos in zip(self.exo_vehs, exo_vehs_ipos):
             exo_veh_location = carla.Location(x=exo_veh_ipos[0],
@@ -406,16 +415,9 @@ class CarlaEnv(gym.Env):
             exo_veh.control.brake = 1.0
             exo_veh.control.throttle = 0.0
             
-        
-        
-        
-
-        # for exov_it in exo_vehs_initial_transforms:
-        #     self.exo_veh_initial_transform = exov_it
+            # set wps if it's neccesary
+            if exo_wps is not None: exo_veh.set_wps(exo_wps)
             
-        # self.exo_vehicle.set_transform(self.exo_veh_initial_transform)
-        # self.exo_vehicle.control.brake = 1.0
-        # self.exo_vehicle.control.throttle = 0.0
         diff = len(self.peds_initial_transforms)-len(peds_ipos)
         
         if diff > 0:
@@ -447,10 +449,6 @@ class CarlaEnv(gym.Env):
             ped_transform = carla.Transform(ped_location,
                                             ped_rotation)
             ped.set_transform(ped_transform)
-        # if self.is_pedestrian:
-        #     for exop_it in peds_initial_transforms:
-        #         self.initial_transform_ped = exop_it
-        #     self.pedestrian.set_transform(self.initial_transform)
         
         self.world.tick()
 
@@ -492,21 +490,6 @@ class CarlaEnv(gym.Env):
             Check for crashes or arrive to goal
             output: True if crash or goal
         '''
-        # # print(self.world.exo_actor_list)
-        # for exo_agent in self.world.exo_actor_list:
-
-        #     distance = self.agent.get_carla_actor().get_transform().location.distance(
-        #                 exo_agent.get_carla_actor().get_transform().location)
-
-        #     # print(f"Distance : {distance} || Exo-Agent: {exo_agent.type_of_agent}\n")
-        #     if distance < self.safe_distance:
-        #         print(f"Collision w/ {exo_agent.type_of_agent}")
-        #         if exo_agent.type_of_agent == "pedestrian":
-        #             self.collision_pedestrian = True
-        #         elif exo_agent.type_of_agent == "vehicle":
-        #             self.collision_vehicle = True
-        #         return True
-        
         if self.collision_vehicle:
             return True
         
@@ -577,6 +560,14 @@ class CarlaEnv(gym.Env):
         if self.world is not None:
             self.world.destroy()
         self.closed = True
+        
+    def get_agent_extra_info(self):
+        speed = self.agent.get_speed()*3.6 # [km/h]
+        steer = self.agent.control.steer
+        throttle = self.agent.control.throttle
+        orientation = vector(self.agent.get_forward_vector())
+        extra_info = np.array([steer, throttle, speed, *orientation])
+        return extra_info
 
 
 def game_loop():

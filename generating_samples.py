@@ -15,6 +15,7 @@ from manual_model import Manual_Model
 from rewards_fns import reward_functions, weighted_rw_fn
 from utils.preprocess import create_encode_state_fn
 from utils.checkpointing import save_checkpoint, load_checkpoint
+from utils.SamplePoints import sample_points
 import carla
 
 def signal_handler(sig, frame):
@@ -30,7 +31,9 @@ def parse_args():
     return args
 
 
-def generate_samples():
+def generate_samples(global_sample=46, 
+                     rollouts = 30,
+                     exo_driving = False):
 
 
     if isinstance(config.seed, int):
@@ -68,36 +71,44 @@ def generate_samples():
 
     print("Creating Environment..")
     env = NormalizedEnv(CarlaEnv(reward_fn=reward_functions[reward_fn],
-                    encode_state_fn=encode_state_fn))
+                    encode_state_fn=encode_state_fn,
+                    exo_driving=exo_driving))
 
     # normalize actions
 
     if isinstance(config.seed, int):
         env.seed(config.seed)
-        
-    rollouts = 30
     
     try:
+        
+        x_limits = [98, 219]
+        y_limits = [53, 65]
+        yaw_limits = [0, 359]
+        exo_goal = [config.exo_agents.vehicle.end_position.x,
+                    config.exo_agents.vehicle.end_position.y]
+        
         for roll in range(rollouts):
-            n = random.randint(0, 5)
+            n = 1 if exo_driving else random.randint(0, 5)
             exo_vehs_ipos = []
             peds_ipos = []
             for i in range(n):
-                exo_veh_x = random.randint(98, 219)
-                exo_veh_y = random.randint(53, 65)
-                exo_veh_yaw = random.randint(0, 359)
-                ped_x = random.randint(98, 219)
-                ped_y = random.randint(53, 65)
-                ped_yaw = random.randint(0, 359)
+                exo_veh_x = random.randint(*x_limits)
+                exo_veh_y = random.randint(*y_limits)
+                exo_veh_yaw = random.randint(*yaw_limits)
+                ped_x = random.randint(*x_limits)
+                ped_y = random.randint(*y_limits)
+                ped_yaw = random.randint(*yaw_limits)
                 pos = [exo_veh_x, exo_veh_y, exo_veh_yaw]
                 exo_vehs_ipos.append(pos)
                 pos = [ped_x, ped_y, ped_yaw]
                 # peds_ipos.append(pos)
                 
-            # veh_initial_transform = carla.Transform(carla.Location(x=exo_veh_x,
-            #                                                        y=exo_veh_y,
-            #                                                        z=1),
-            #                                         carla.Rotation(yaw=exo_veh_yaw))
+            if exo_driving: wps = sample_points(pos[:2], 
+                                                exo_goal,
+                                                x_limits,
+                                                y_limits,
+                                                direction=0,
+                                                n=20)
             
             terminal_state = False
             episode_reward_test = 0
@@ -106,23 +117,31 @@ def generate_samples():
             r_rollout = []
             s1_rollout = []
             d_rollout = []
+            cs_rollout = [] # complementary state
+            cs1_rollout = []
             
             state = env.reset(exo_vehs_ipos=exo_vehs_ipos,
-                              peds_ipos=peds_ipos)
+                              peds_ipos=peds_ipos,
+                              exo_wps=wps if exo_driving else None)
+            
+            cs = env.get_agent_extra_info()
             
             while not terminal_state:
                 if env.controller.parse_events():
                         return
                 action = model.predict(state) # return a np.action
                 next_state, reward, terminal_state, info = env.step(action)
+                cs1 = env.get_agent_extra_info()
                 reward = weighted_rw_fn(reward, rw_weights)
                 episode_reward_test += reward
                 
                 s_rollout.append(state)
-                a_rollout.append(action)
+                a_rollout.append(action.copy())
                 r_rollout.append(reward)
                 s1_rollout.append(next_state)
                 d_rollout.append(terminal_state)
+                cs_rollout.append(cs)
+                cs1_rollout.append(cs1)
                 
                 state = next_state
                 
@@ -133,12 +152,17 @@ def generate_samples():
                     env.render()
     
                 if terminal_state:
-                    np.savez('./Rollouts/rollout_{}'.format(roll),
+                    finish_reason = "g" if env.extra_info[-1] == "Goal" else "c"
+                    np.savez('./S_Rollouts/rollout_{}_{}_{}'.format(global_sample + roll,
+                                                                 n,
+                                                                 finish_reason),
                          states=np.array(s_rollout),
                          actions=np.array(a_rollout),
                          rewards=np.array(r_rollout),
                          next_states=np.array(s1_rollout),
-                         terminals=np.array(d_rollout))
+                         terminals=np.array(d_rollout),
+                         complementary_states=np.array(cs_rollout),
+                         next_complementary_states=np.array(cs1_rollout))
                     
                     if len(env.extra_info) > 0:
                         print(f"reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}")# print the most recent terminal reason
@@ -168,7 +192,7 @@ def main():
     assert config.train.checkpoint_every != 0, "checkpoint_every variable cant be zero"
 
     try:
-        generate_samples()
+        generate_samples(exo_driving=False)
     except KeyboardInterrupt:
         print('\nCancelled by user. Bye!')
 
