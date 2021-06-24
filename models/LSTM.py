@@ -45,7 +45,7 @@ class MDN_RNN(nn.Module):
                              latent_states.shape[1],
                              self.gaussians,
                              latent_states.shape[-1])
-        sigma = torch.exp(sigmas)
+        sigmas = torch.exp(sigmas)
         
         pi = gmm_out[:, :, 2*stride:2*stride+self.gaussians]
         pi = pi.view(latent_states.shape[0],
