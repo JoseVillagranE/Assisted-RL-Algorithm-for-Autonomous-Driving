@@ -21,9 +21,7 @@ def to_latent(vae_model, states, next_states, complt_states=None, next_complt_st
         next_zs.append(next_z)
     states = torch.cat(zs, axis=1) # (B, S, Z_dim)
     next_states = torch.cat(next_zs, axis=1) # (B, S, Z_dim)
-    if complt_states:
-        complt_states = torch.from_numpy(complt_states)
-        next_complt_states = torch.from_numpy(next_complt_states)
+    if complt_states is not None:
         states = torch.cat((states, complt_states), axis=2) # (B, S, Z_dim+compl_dim)
         next_states = torch.cat((next_states, next_complt_states), axis=2) # (B, S, Z_dim+compl_dim)
     return states, next_states
@@ -31,7 +29,7 @@ def to_latent(vae_model, states, next_states, complt_states=None, next_complt_st
 class Rollout_Dataset(Dataset):
     
     
-    def __init__(self, path, idxs, seq_len, buffer_size, is_complt_states, transform=None):
+    def __init__(self, path, idxs, seq_len, buffer_size, complt_states=[], transform=None):
         
         self._files = glob.glob(os.path.join(path, "*.npz"))
         self._files = sorted(self._files, key=lambda name: int(name.split('_')[-3]))
@@ -39,7 +37,7 @@ class Rollout_Dataset(Dataset):
         self._buffer_size = buffer_size
         self._seq_len = seq_len
         self._transform = transform
-        self.is_complt_states = is_complt_states
+        self.complt_states = complt_states
         
         self._buffer = None
         self._buffer_fnames = None
@@ -84,12 +82,15 @@ class Rollout_Dataset(Dataset):
         action = data['actions'][seq_index+1:seq_index+self._seq_len+1].astype(np.float32)
         reward = data["rewards"][seq_index+1:seq_index+self._seq_len+1].astype(np.float32)
         terminal = data["terminals"][seq_index+1:seq_index+self._seq_len+1]
-        if self.is_complt_states: 
+        if len(self.complt_states) > 0: 
             complt_states = data['complementary_states'][seq_index:seq_index+self._seq_len+1]
+            idxs = list(set(list(range(6))) - set(self.complt_states))
+            complt_states = np.delete(complt_states, idxs, axis=1)
             complt_states = complt_states.astype(np.float32)
             complt_states, next_complt_states = complt_states[:-1], complt_states[1:]
+            return obs, action, reward, next_obs, terminal, complt_states, next_complt_states
         # obs -> [B, S, C, H, W]
-        return obs, action, reward, next_obs, terminal, complt_states, next_complt_states
+        return obs, action, reward, next_obs, terminal
     
     def _data_per_seq(self, data_length):
         return data_length - self._seq_len

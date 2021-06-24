@@ -31,8 +31,8 @@ def parse_args():
     return args
 
 
-def generate_samples(global_sample=46, 
-                     rollouts = 30,
+def generate_samples(global_sample=75, 
+                     rollouts=25,
                      exo_driving = False):
 
 
@@ -153,16 +153,16 @@ def generate_samples(global_sample=46,
     
                 if terminal_state:
                     finish_reason = "g" if env.extra_info[-1] == "Goal" else "c"
-                    np.savez('./S_Rollouts/rollout_{}_{}_{}'.format(global_sample + roll,
-                                                                 n,
-                                                                 finish_reason),
-                         states=np.array(s_rollout),
-                         actions=np.array(a_rollout),
-                         rewards=np.array(r_rollout),
-                         next_states=np.array(s1_rollout),
-                         terminals=np.array(d_rollout),
-                         complementary_states=np.array(cs_rollout),
-                         next_complementary_states=np.array(cs1_rollout))
+                    np.savez('./D_Rollouts_11_rgb/rollout_{}_{}_{}'.format(global_sample + roll,
+                                                                  n,
+                                                                  finish_reason),
+                            states=np.array(s_rollout),
+                            actions=np.array(a_rollout),
+                            rewards=np.array(r_rollout),
+                            next_states=np.array(s1_rollout),
+                            terminals=np.array(d_rollout),
+                            complementary_states=np.array(cs_rollout),
+                            next_complementary_states=np.array(cs1_rollout))
                     
                     if len(env.extra_info) > 0:
                         print(f"reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}")# print the most recent terminal reason
@@ -192,7 +192,7 @@ def main():
     assert config.train.checkpoint_every != 0, "checkpoint_every variable cant be zero"
 
     try:
-        generate_samples(exo_driving=False)
+        generate_samples(exo_driving=True)
     except KeyboardInterrupt:
         print('\nCancelled by user. Bye!')
 
