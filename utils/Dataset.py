@@ -42,10 +42,11 @@ class Rollout_Dataset(Dataset):
         self._buffer = None
         self._buffer_fnames = None
         self._buffer_index = 0
-        self._cum_size = [0]
-    
+        self._cum_size = None
+        
+        
     def __len__(self):
-        if self._cum_size:
+        if not self._cum_size:
             self.load_next_data_buffer()
         return self._cum_size[-1]
     
