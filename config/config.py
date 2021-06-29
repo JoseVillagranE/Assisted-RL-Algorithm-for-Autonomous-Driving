@@ -83,15 +83,29 @@ config.train.state_dim = config.train.z_dim
                                 # config.train.wp_encoder_size
 config.train.pretraining_steps = 100 # CoL
 config.train.lambdas = [1,1,1]
-config.train.expert_prop = 0.25
+config.train.expert_prop = 0.25 # CoL
 config.train.agent_prop = 0.75
 config.train.rm_filename = "BC-1.npy"
 config.train.VAE_weights_path = "./models/weights/segmodel_expert_samples_sem_all.pt"
+# RNN
+config.train.temporal_mech = False
+config.train.rnn_type = "mdn_rnn"
+config.train.rnn_input_size = 0 # ??
+config.train.rnn_hidden_size = 512
+config.train.gaussians = 3
+config.train.rnn_num_layers = 1
+config.train.RNN_weights_path= "./models/weights/rnn_st_samples_all.pt"
+config.train.rnn_nsteps = 2
+
 config.train.ou_noise_mu = 0.0
 config.train.ou_noise_theta = 0.6
 config.train.ou_noise_max_sigma = 0.4
 config.train.ou_noise_min_sigma = 0.0
 config.train.ou_noise_decay_period = 250
+
+config.train.enable_scheduler_lr = False
+config.train.scheduler_step_size = 100 # epochs
+config.train.scheduler_gamma = 0.1
 
 
 

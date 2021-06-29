@@ -7,6 +7,7 @@ import signal
 import sys
 import time
 import copy
+from collections import deque
 import torch
 
 from config.config import config, update_config, check_config
@@ -29,6 +30,13 @@ def parse_args():
 
     return args
 
+
+# TODO: # take action from a N-step state 
+        # save N-step tuples of experience
+        # how make a decision from N initial steps??
+        # create a new replay buffer ??
+        # samples chunks of experiences tuples
+        # adapt training if is necesary
 
 def train():
 
@@ -64,52 +72,9 @@ def train():
     reward_fn = "reward_fn"
 
     best_eval_rew = -float("inf")
-
-    rw_weights = [config.reward_fn.weight_speed_limit,
-                  config.reward_fn.weight_centralization,
-                  config.reward_fn.weight_route_al,
-                  config.reward_fn.weight_collision_vehicle,
-                  config.reward_fn.weight_collision_pedestrian,
-                  config.reward_fn.weight_collision_other,
-                  config.reward_fn.weight_final_goal,
-                  config.reward_fn.weight_distance_to_goal]
-
+    
     print("Creating model..")
-    model = init_model(config.run_type,
-                       config.model.type,
-                       config.train.state_dim,
-                       config.train.action_space,
-                       config.preprocess.CenterCrop,
-                       config.preprocess.CenterCrop,
-                       z_dim=config.train.z_dim,
-                       actor_lr = config.train.actor_lr,
-                       critic_lr = config.train.critic_lr,
-                       batch_size = config.train.batch_size,
-                       optim = config.train.optimizer,
-                       gamma = config.train.gamma,
-                       tau = config.train.tau,
-                       alpha = config.train.alpha,
-                       beta = config.train.beta,
-                       type_RM = config.train.type_RM,
-                       max_memory_size = config.train.max_memory_size,
-                       device = config.train.device,
-                       rw_weights=rw_weights if config.reward_fn.normalize else None,
-                       actor_linear_layers=config.train.actor_layers,
-                       pretraining_steps=config.train.pretraining_steps,
-                       lambdas=config.train.lambdas,
-                       expert_prop=config.train.expert_prop,
-                       agent_prop=config.train.agent_prop,
-                       rm_filename=config.train.rm_filename,
-                       VAE_weights_path=config.train.VAE_weights_path,
-                       ou_noise_mu=config.train.ou_noise_mu,
-                       ou_noise_theta=config.train.ou_noise_theta,
-                       ou_noise_max_sigma=config.train.ou_noise_max_sigma,
-                       ou_noise_min_sigma=config.train.ou_noise_min_sigma,
-                       ou_noise_decay_period=config.train.ou_noise_decay_period,
-                       wp_encode=config.train.wp_encode,
-                       wp_encoder_size=config.train.wp_encoder_size)
-
-
+    model = init_model(config)
     # Create state encoding fn
     encode_state_fn = create_encode_state_fn(config.preprocess.Resize_h,
                                              config.preprocess.Resize_w,
@@ -121,7 +86,6 @@ def train():
                                                  if config.model.type=="VAE" else None,
                                              feat_wp_encode=model.wp_encode_fn \
                                                  if config.train.wp_encode else None)
-
     print("Creating Environment..")
     env = NormalizedEnv(CarlaEnv(reward_fn=reward_functions[reward_fn],
                     encode_state_fn=encode_state_fn))
@@ -154,11 +118,16 @@ def train():
         for episode in range(start_episode, config.train.episodes):
             state, terminal_state, episode_reward = env.reset(), False, []
             terminal_state_info = ""
+            states_deque = deque(maxlen=n_steps) # TODO: define n_steps
+            states_deque.append(state)
             while not terminal_state:
                 for step in range(config.train.steps):
                     if env.controller.parse_events():
                         return
                     
+                    if config.temporal.temp_mech:
+                        state = torch.tensor(list(states_deque)) # (S, Z_dim)
+                        
                     action = model.predict(state, episode) # return a np. action
                     next_state, reward, terminal_state, info = env.step(action)
                     if info["closed"] == True:

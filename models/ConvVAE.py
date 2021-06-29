@@ -19,6 +19,8 @@ import torchvision.datasets as datasets
 
 from utils.Network_utils import freeze_params
 
+from LSTM import LSTM, MDN_RNN
+
 class VAE_Actor(nn.Module):
         
     def __init__(self, 
@@ -28,17 +30,50 @@ class VAE_Actor(nn.Module):
                  z_dim,
                  beta=1.0,
                  VAE_weights_path="",
+                 temporal_mech=False,
+                 rnn_config=None,
+                 linear_layers= None,
                  is_freeze_params=True,
                  wp_encode=False,
                  wp_encoder_size=64):
+        
+        
         super().__init__()        
         self.num_actions = num_actions
         self.vae = ConvVAE(n_channel, z_dim, beta=beta)
-        self.linear = nn.Sequential(nn.Linear(state_dim, 16),
-                                    nn.Tanh(),
-                                    nn.Linear(16, num_actions))
-                                    #nn.Tanh(),
-                                    #nn.Linear(64, num_actions))
+        
+        self.lstm = None
+        if rnn_config["rnn_type"]=="lstm":
+            self.lstm = LSTM(input_size=rnn_config["input_size"], 
+                             hidden_size=rnn_config["hidden_size"], 
+                             num_layers=rnn_config["num_layers"])
+        elif rnn_config["nn_type"]=="mdn_rnn":
+            self.lstm = MDN_RNN(input_size=rnn_config["input_size"],
+                               hidden_size=rnn_config["hidden_size"],
+                               action_size=num_actions,
+                               num_layers=rnn_config["num_layers"],
+                               gaussians=rnn_config["gaussians"],
+                               mode = "inference")
+        else:
+            raise NotImplementedError("Only lstm and mdn_rnn type of recurrent models at moment")
+        
+        if self.lstm:
+            input_linear_layer_dim = state_dim*rnn_config["n_steps"]
+        else:
+            input_linear_layer_dim = state_dim
+            
+        self.mlp = nn.ModuleList()
+        
+        if linear_layers is not None:
+            for i, dim_layer in linear_layers:
+                if i==0:
+                    self.mlp.append(nn.Linear(input_linear_layer_dim, dim_layer))
+                else:
+                    self.mlp.append(nn.Linear(linear_layers[i-1], dim_layer))
+            self.mlp.append(nn.Linear(linear_layers[-1], num_actions))
+            
+        else:
+            self.mlp.append(nn.Linear(input_linear_layer_dim, num_actions))
         
         if wp_encode:
             self.wp_encoder = nn.Linear(1, wp_encoder_size)
@@ -48,12 +83,32 @@ class VAE_Actor(nn.Module):
             self.vae.load_state_dict(torch.load(VAE_weights_path))
             if is_freeze_params:
                 freeze_params(self.vae)
+                
+        if len(rnn_config["weights_path"]) > 0:
+            print("Loading RNN weights..")
+            self.lstm.load_state_dict(torch.load(rnn_config["weights_path"]))
+            if is_freeze_params:
+                freeze_params(self.lstm)
         
         
     def forward(self, state):
-        x = self.linear(state)
-        action = torch.tanh(x)
+        
+        """
+        state: (B, 1, Z_dim) # Seq_len = 1
+        if lstm: state : (B, n_steps, Z_dim+Act) # Seq_len = n_steps
+        """
+        input_linear = state
+        if self.lstm:
+            next_state = self.lstm(state) # hidden_state is a inner param of rnn class
+            input_linear = torch.cat((state, next_state))  # TODO: admit more than 2 steps ??
+        action = self.linear_forward(input_linear)
         return action
+    
+    
+    def linear_forward(self, x):
+        for i, layer in self.mlp:
+            x = nn.Tanh(layer(x))
+        return x
     
     def feat_ext(self, x):
         """
@@ -72,7 +127,7 @@ class VAE_Actor(nn.Module):
         wp = torch.tensor(wp).unsqueeze(0).float()
         return self.wp_encoder(wp).detach().numpy()
     
-class VAE_Critic(nn.Module):
+class VAE_Critic(nn.Module): # No needed temporal mechanism
     
     def __init__(self, 
                  state_dim,

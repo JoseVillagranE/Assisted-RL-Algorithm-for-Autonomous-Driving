@@ -11,82 +11,101 @@ from ConvVAE import VAE_Actor, VAE_Critic
 from Conv_Actor_Critic import Conv_Actor, Conv_Critic
 from utils.Network_utils import OUNoise
 
+from LSTM import MDN_RNN, LSTM
+
 class CoL:
     
     def __init__(self,
-                 pretraining_steps=100,
-                 state_dim=128,
-                 action_space=2,
-                 n_channel=3,
-                 batch_size=64,
-                 expert_prop=0.25,
-                 agent_prop=0.75,
-                 actor_lr=1e-3,
-                 critic_lr=1e-3,
-                 gamma=0.99,
-                 tau=0.01,
-                 optim="Adam",
-                 rw_weights=[],
-                 lambdas=[1,1,1],
-                 model_type="VAE",
-                 z_dim=128,
-                 beta=1.0,
-                 type_RM="random",
-                 max_memory_size=10000,
-                 rm_filename=None,
-                 VAE_weights_path="./models/weights/segmodel_expert_samples_sem_all.pt",
-                 ou_noise_mu=0.0,
-                 ou_noise_theta=0.6,
-                 ou_noise_max_sigma=0.4,
-                 ou_noise_min_sigma=0.0,
-                 ou_noise_decay_period=250,
-                 enable_scheduler_lr=True,
-                 scheduler_gamma=0.1,
-                 scheduler_step_size=300,
-                 wp_encode=False,
-                 wp_encoder_size=64):
+                 config,
+                 rw_weights=[]):
         
         
-        self.state_dim = state_dim
-        self.action_space = action_space
-        self.batch_size = batch_size
-        self.expert_prop = expert_prop
-        self.agent_prop = agent_prop
-        self.actor_lr = actor_lr
-        self.critic_lr = critic_lr
-        self.gamma = gamma
-        self.tau = tau
-        self.lambdas = lambdas
-        self.enable_scheduler_lr = enable_scheduler_lr
+        self.state_dim = config.train.state_dim
+        self.action_space = config.train.action_space
+        self.batch_size = config.train.batch_size
+        self.expert_prop = config.train.expert_prop
+        self.agent_prop = config.train.agent_prop
+        self.actor_lr = config.train.actor_lr
+        self.critic_lr = config.train.critic_lr
+        self.gamma = config.train.gamma
+        self.tau = config.train.tau
+        self.lambdas = config.train.lambdas
+        self.enable_scheduler_lr = config.train.enable_scheduler_lr
+        n_channel = 3
         
         # Networks
-        if model_type == "VAE":
-            self.actor = VAE_Actor(state_dim,
-                                   action_space,
+        
+        # Create RNN network config
+        # harcoded for vae
+        
+        input_size = config.train.z_dim + \
+                    len(config.train.measurements_to_include) + \
+                    2 if "orientation" in config.train.measurements_to_include else 0
+        
+        rnn_config = {
+                    "rnn_type": config.train.rnn_type, 
+                    "input_size": input_size,
+                    "hidden_size": config.train.rnn_hidden_size,
+                    "num_layers": config.train.rnn_num_layers,
+                    "n_steps": config.train.rnn_nsteps,
+                    "gaussians": config.train.gaussians,
+                    "weights_path": config.train.RNN_weights_path 
+        }
+        
+        if config.reward_fn.normalize:
+            rw_weights = [config.reward_fn.weight_speed_limit,
+                          config.reward_fn.weight_centralization,
+                          config.reward_fn.weight_route_al,
+                          config.reward_fn.weight_collision_vehicle,
+                          config.reward_fn.weight_collision_pedestrian,
+                          config.reward_fn.weight_collision_other,
+                          config.reward_fn.weight_final_goal,
+                          config.reward_fn.weight_distance_to_goal]
+        else:
+            rw_weights = None
+        
+        # TODO: Is a good name VAE if that include temporal mechanism in it?
+        
+        if config.run_type == "VAE":
+            self.actor = VAE_Actor(self.state_dim,
+                                   self.action_space,
                                    n_channel,
-                                   z_dim,
-                                   VAE_weights_path=VAE_weights_path,
-                                   beta=beta,
-                                   wp_encode=wp_encode,
-                                   wp_encoder_size=wp_encoder_size).float()
-            self.actor_target = VAE_Actor(state_dim,
-                                   action_space,
-                                   n_channel,
-                                   z_dim,
-                                   VAE_weights_path=VAE_weights_path,
-                                   beta=beta,
-                                   wp_encode=wp_encode,
-                                   wp_encoder_size=wp_encoder_size).float()
-            self.critic = VAE_Critic(state_dim, action_space).float()
-            self.critic_target = VAE_Critic(state_dim, action_space).float()
+                                   config.train.z_dim,
+                                   VAE_weights_path=config.train.VAE_weights_path,
+                                   temporal_mech=config.train.temporal_mech,
+                                   rnn_config=rnn_config,
+                                   linear_layers=config.train.linear_layers,
+                                   beta=config.train.beta,
+                                   wp_encode=config.train.wp_encode,
+                                   wp_encoder_size=config.train.wp_encoder_size).float()
+            
+            self.actor_target = VAE_Actor(self.state_dim,
+                                          self.action_space,
+                                          n_channel,
+                                          config.train.z_dim,
+                                          VAE_weights_path=config.train.VAE_weights_path,
+                                          temporal_mech=config.train.temporal_mech,
+                                          rnn_config=rnn_config,
+                                          linear_layers=config.train.linear_layers,
+                                          beta=config.train.beta,
+                                          wp_encode=config.train.wp_encode,
+                                          wp_encoder_size=config.train.wp_encoder_size).float()
+            
+            self.critic = VAE_Critic(config.train.state_dim,
+                                     config.train.action_space).float()
+            self.critic_target = VAE_Critic(config.train.state_dim,
+                                            config.train.action_space).float()
        
         else:
-            self.actor = Actor(self.num_actions, h_image_in, w_image_in,
-                               linear_layers=actor_linear_layers)
-            self.actor_target = Actor(self.num_actions, h_image_in, w_image_in,
-                                      linear_layers=actor_linear_layers)        
-            self.critic = Critic(self.num_actions, h_image_in, w_image_in)
-            self.critic_target = Critic(self.num_actions, h_image_in, w_image_in)
+            h_image_in, w_image_in = (80, 160)
+            actor_linear_layers = [32]
+            
+            self.actor = Conv_Actor(self.num_actions, h_image_in, w_image_in,
+                               linear_layers=config.train.actor_linear_layers)
+            self.actor_target = Conv_Actor(self.num_actions, h_image_in, w_image_in,
+                                      linear_layers=config.train.actor_linear_layers)       
+            self.critic = Conv_Critic(self.num_actions, h_image_in, w_image_in)
+            self.critic_target = Conv_Critic(self.num_actions, h_image_in, w_image_in)
 
         # Copy weights
         for target_param, param in zip(self.actor_target.parameters(),
@@ -99,50 +118,51 @@ class CoL:
 
 
         # Training
-        self.type_RM = type_RM
-        if type_RM == "sequential":
+        self.type_RM = config.train.type_RM
+        self.optim = config.train.optimizer
+        
+        if self.type_RM == "sequential":
             self.replay_memory = SequentialDequeMemory(rw_weights)
             self.replay_memory_e = SequentialDequeMemory(rw_weights)
-        elif type_RM == "random":
-            self.replay_memory = RandomDequeMemory(queue_capacity=max_memory_size,
+        elif self.type_RM == "random":
+            self.replay_memory = RandomDequeMemory(queue_capacity=config.train.max_memory_size,
                                                     rw_weights=rw_weights,
-                                                    batch_size=batch_size)
-            self.replay_memory_e = RandomDequeMemory(queue_capacity=max_memory_size,
+                                                    batch_size=config.train.batch_size)
+            self.replay_memory_e = RandomDequeMemory(queue_capacity=config.train.max_memory_size,
                                                     rw_weights=rw_weights,
-                                                    batch_size=batch_size)
+                                                    batch_size=config.train.batch_size)
             
-        elif type_RM == "prioritized":
-            self.replay_memory = PrioritizedDequeMemory(queue_capacity=max_memory_size,
-                                                        alpha = alpha,
-                                                        beta = beta,
-                                                        rw_weights=rw_weights,
-                                                        batch_size=batch_size)
-            self.replay_memory_e = PrioritizedDequeMemory(queue_capacity=max_memory_size,
-                                                        alpha = alpha,
-                                                        beta = beta,
-                                                        rw_weights=rw_weights,
-                                                        batch_size=batch_size)
+        elif self.type_RM == "prioritized":
             
+            alpha = 1
+            self.replay_memory = PrioritizedDequeMemory(queue_capacity=config.train.max_memory_size,
+                                                        alpha = config.train.alpha,
+                                                        beta = config.train.beta,
+                                                        rw_weights=rw_weights,
+                                                        batch_size=config.train.batch_size)
+            self.replay_memory_e = PrioritizedDequeMemory(queue_capacity=config.train.max_memory_size,
+                                                        alpha = config.train.alpha,
+                                                        beta = config.train.beta,
+                                                        rw_weights=rw_weights,
+                                                        batch_size=config.train.batch_size)
 
-
-
-        if optim == "SGD":
+        if self.optim == "SGD":
             self.actor_optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad,
                                                           self.actor.parameters()),
-                                                    lr=actor_lr,
+                                                    lr=config.train.actor_lr,
                                                     weight_decay=1e-5)
             self.critic_optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad,
                                                            self.critic.parameters()),
-                                                     lr=critic_lr,
+                                                     lr=config.train.critic_lr,
                                                      weight_decay=1e-5)
-        elif optim == "Adam":
+        elif self.optim == "Adam":
             self.actor_optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad,
                                                            self.actor.parameters()),
-                                                    lr=actor_lr,
+                                                    lr=config.train.actor_lr,
                                                     weight_decay=1e-5)
             self.critic_optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad,
                                                             self.critic.parameters()),
-                                                     lr=critic_lr,
+                                                     lr=config.train.critic_lr,
                                                      weight_decay=1e-5)
         else:
             raise NotImplementedError("Optimizer should be Adam or SGD")
@@ -151,40 +171,44 @@ class CoL:
         # scheduler
         if self.enable_scheduler_lr:
             self.actor_scheduler = torch.optim.lr_scheduler.StepLR(self.actor_optimizer,
-                                                                   scheduler_step_size,
-                                                                   gamma=scheduler_gamma)
+                                                                   config.train.scheduler_step_size,
+                                                                   gamma=config.train.scheduler_gamma)
             
             self.critic_scheduler = torch.optim.lr_scheduler.StepLR(self.critic_optimizer,
-                                                                    scheduler_step_size,
-                                                                    gamma=scheduler_gamma)
+                                                                    config.train.scheduler_step_size,
+                                                                    gamma=config.train.scheduler_gamma)
 
         # Noise
-        self.ounoise = OUNoise(action_space,
-                               mu=ou_noise_mu,
-                               theta=ou_noise_theta,
-                               max_sigma=ou_noise_max_sigma,
-                               min_sigma=ou_noise_min_sigma,
-                               decay_period=ou_noise_decay_period)
+        self.ounoise = OUNoise(self.action_space,
+                               mu=config.train.ou_noise_mu,
+                               theta=config.train.ou_noise_theta,
+                               max_sigma=config.train.ou_noise_max_sigma,
+                               min_sigma=config.train.ou_noise_min_sigma,
+                               decay_period=config.train.ou_noise_decay_period)
         
         # mse
         self.mse = nn.MSELoss() # mean reduction
 
         # Device
-        device = "cuda:0" if torch.cuda.is_available() else "cpu"
-        self.device = torch.device(device)
-        
+        self.device = torch.device(config.train.device)
         # load semi-expert experience
-        if rm_filename:
-            self.replay_memory_e.load_rm(rm_filename)
+        if config.train.rm_filename:
+            self.replay_memory_e.load_rm(config.train.rm_filename)
             print(f"samples of expert rm: {self.replay_memory_e.get_memory_size()}")
             
         
         # pretraining steps
-        for l in range(pretraining_steps):
+        for l in range(config.train.pretraining_steps):
             self.update(is_pretraining=True)
         
     
     def predict(self, state, step, mode="training"):
+        
+        # if temp_mech ==True
+            # state -> (B, S, Z_dim+actions)
+        # else
+            # state -> (B, Z_dim+actions)
+        
         state = torch.from_numpy(state).float()
         action = self.actor(state)
         action = action.detach().numpy()[0] # [steer, throttle]
@@ -297,9 +321,7 @@ class CoL:
     
     def lambda_decay(self, rd, n_lambda):
         self.lambdas[n_lambda] -= rd
-    
-    
-
+        
 if __name__ == "__main__":
     
     col = CoL(rm_filename="BC-1.npy")

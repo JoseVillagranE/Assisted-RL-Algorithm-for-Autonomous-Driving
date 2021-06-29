@@ -12,7 +12,8 @@ class MDN_RNN(nn.Module):
                  hidden_size,
                  action_size=2,
                  num_layers=1,
-                 gaussians=3):
+                 gaussians=3,
+                 mode="inference"):
         """
         input_size -> z_dim
         """
@@ -29,7 +30,7 @@ class MDN_RNN(nn.Module):
         actions: (B, S, a_size)
         """
         inp = torch.cat([latent_states, actions], axis=-1)
-        outp, (h_n, c_n) = self.lstm(inp)
+        outp = self.lstm(inp)
         gmm_out = self.mdn(outp) 
         stride = self.gaussians*latent_states.shape[2]
         mus = gmm_out[:, :, :stride]
@@ -121,14 +122,20 @@ class LSTM(nn.Module):
         self.c_0 = nn.Linear(input_size, hidden_size) # (D -> hidden)
         self.h_0 = nn.Linear(input_size, hidden_size)
         
+        self.h_n = None
+        self.c_n = None
+        
     def forward(self, input):
         """
         :param input: (Tensor: [B, S, input_size])
         :param hidden_state: (Tensor: [B, S, Hidden_size])
         :return h_n: (Tensor: [B, Bidirectional*Num_layers, Hidden_size])
         """
-        outp, (h_n, c_n) = self.lstm(input)
-        return outp, (h_n, c_n)
+        hx = (self.h_n, self.c_n) if self.h_n else (self.h_0, self.c_0)
+        outp, (h_n, c_n) = self.lstm(input, hx)
+        self.h_n = h_n # update hidden_state 
+        self.c_n = c_n 
+        return outp
         
     def init_hidden_state(self, x_0):
         """

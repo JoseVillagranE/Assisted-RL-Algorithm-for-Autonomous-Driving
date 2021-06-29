@@ -12,61 +12,98 @@ import gym
 class DDPG:
 
     def __init__(self, 
-                 state_dim,
-                 action_space,
-                 h_image_in=0,
-                 w_image_in=0,
-                 actor_lr = 1e-3,
-                 critic_lr=1e-3,
-                 optim="Adam",
-                 batch_size=10,
-                 gamma=0.99,
-                 tau=1e-2,
-                 alpha=0.7,
-                 beta=0.5,
-                 model_type="Conv",
-                 n_channel=3, 
-                 z_dim=0,
-                 type_RM="random",
-                 max_memory_size=50000,
-                 device='cpu',
-                 rw_weights=None,
-                 actor_linear_layers=[]):
+                 config,
+                 rw_weights=None):
 
-        #self.num_actions = action_space.shape[0]
-        self.num_actions = action_space
-        self.state_dim = state_dim
-        #self.action_min, self.action_max = action_space.low, action_space.high
-        self.gamma = gamma
-        self.tau = tau
-        self.max_memory_size = max_memory_size
-        self.batch_size = batch_size
+        self.num_actions = config.train.action_space
+        self.state_dim = config.train.state_dim
+        self.gamma = config.train.gamma
+        self.tau = config.train.tau
+        self.max_memory_size = config.train.max_memory_size
+        self.batch_size = config.train.batch_size
         self.std = 0.1
         self.rw_weights = rw_weights
-        self.model_type = model_type
+        self.model_type = config.run_type
+        n_channel = 3
+        
+        input_size = config.train.z_dim + \
+                    len(config.train.measurements_to_include) + \
+                    2 if "orientation" in config.train.measurements_to_include else 0
+        
+        
+        # Create RNN network config
+        rnn_config = {
+                    "rnn_type": config.train.rnn_type,    
+                    "input_size": input_size,
+                    "hidden_size": config.train.rnn_hidden_size,
+                    "num_layers": config.train.rnn_num_layers,
+                    "n_steps": config.train.rnn_nsteps,
+                    "gaussians": config.train.gaussians,
+                    "weights_path": config.train.RNN_weights_path
+        }
+        
+        if config.reward_fn.normalize:
+            rw_weights = [config.reward_fn.weight_speed_limit,
+                          config.reward_fn.weight_centralization,
+                          config.reward_fn.weight_route_al,
+                          config.reward_fn.weight_collision_vehicle,
+                          config.reward_fn.weight_collision_pedestrian,
+                          config.reward_fn.weight_collision_other,
+                          config.reward_fn.weight_final_goal,
+                          config.reward_fn.weight_distance_to_goal]
+        else:
+            rw_weights = None
 
         # Networks
-        if model_type == "VAE":
-            self.actor = VAE_Actor(state_dim,
-                                   self.num_actions,
+        if self.model_type == "VAE":
+            self.actor = VAE_Actor(self.state_dim,
+                                   self.action_space,
                                    n_channel,
-                                   z_dim,
-                                   VAE_weights_path="./models/weights/segmodel_expert_samples_sem_369.pt",
-                                   beta=beta).float()
-            self.actor_target = VAE_Actor(state_dim,
-                                   self.num_actions,
-                                   n_channel,
-                                   z_dim,
-                                   VAE_weights_path="./models/weights/segmodel_expert_samples_sem_369.pt",
-                                   beta=beta).float()
-            self.critic = VAE_Critic(state_dim, self.num_actions).float()
-            self.critic_target = VAE_Critic(state_dim, self.num_actions).float()
+                                   config.train.z_dim,
+                                   VAE_weights_path=config.train.VAE_weights_path,
+                                   temporal_mech=config.train.temporal_mech,
+                                   rnn_config=rnn_config,
+                                   linear_layers=config.train.linear_layers,
+                                   beta=config.train.beta,
+                                   wp_encode=config.train.wp_encode,
+                                   wp_encoder_size=config.train.wp_encoder_size).float()
+            
+            self.actor_target = VAE_Actor(self.state_dim,
+                                          self.action_space,
+                                          n_channel,
+                                          config.train.z_dim,
+                                          VAE_weights_path=config.train.VAE_weights_path,
+                                          temporal_mech=config.train.temporal_mech,
+                                          rnn_config=rnn_config,
+                                          linear_layers=config.train.linear_layers,
+                                          beta=config.train.beta,
+                                          wp_encode=config.train.wp_encode,
+                                          wp_encoder_size=config.train.wp_encoder_size).float()
+            
+            self.critic = VAE_Critic(config.train.state_dim,
+                                     config.train.action_space).float()
+            
+            self.critic_target = VAE_Critic(config.train.state_dim,
+                                            config.train.action_space).float()
        
         else:
-            self.actor = Actor(self.num_actions, h_image_in, w_image_in, linear_layers=actor_linear_layers)
-            self.actor_target = Actor(self.num_actions, h_image_in, w_image_in, linear_layers=actor_linear_layers)        
-            self.critic = Critic(self.num_actions, h_image_in, w_image_in)
-            self.critic_target = Critic(self.num_actions, h_image_in, w_image_in)
+            self.actor = Conv_Actor(self.num_actions,
+                               config.preprocess.Resize_h,
+                               config.preprocess.Resize_w,
+                               linear_layers=config.train.linear_layers)
+            
+            self.actor_target = Conv_Actor(self.num_actions,
+                                           config.preprocess.Resize_h,
+                                           config.preprocess.Resize_w,
+                                           linear_layers=config.train.linear_layers)
+            
+            self.critic = Conv_Critic(self.num_actions,
+                                      config.preprocess.Resize_h,
+                                      config.preprocess.Resize_w)
+            
+            self.critic_target = Conv_Critic(self.num_actions,
+                                             config.preprocess.Resize_h,
+                                             config.preprocess.Resize_w)
 
         # Copy weights
         for target_param, param in zip(self.actor_target.parameters(), self.actor.parameters()):
@@ -78,56 +115,62 @@ class DDPG:
 
         # Training
 
-        self.type_RM = type_RM
-        if type_RM == "sequential":
+        self.type_RM = config.train.type_RM
+        self.optim = config.train.optimizer
+        if self.type_RM == "sequential":
             self.replay_memory = SequentialDequeMemory(rw_weights)
-        elif type_RM == "random":
-            self.replay_memory = RandomDequeMemory(queue_capacity=max_memory_size,
+        elif self.type_RM == "random":
+            self.replay_memory = RandomDequeMemory(queue_capacity=config.train.max_memory_size,
                                                     rw_weights=rw_weights,
-                                                    batch_size=batch_size)
-        elif type_RM == "prioritized":
-            self.replay_memory = PrioritizedDequeMemory(queue_capacity=max_memory_size,
-                                                        alpha = alpha,
-                                                        beta = beta,
+                                                    batch_size=config.train.batch_size)
+        elif self.type_RM == "prioritized":
+            self.replay_memory = PrioritizedDequeMemory(queue_capacity=config.train.max_memory_size,
+                                                        alpha = config.train.alpha,
+                                                        beta = config.train.beta,
                                                         rw_weights=rw_weights,
-                                                        batch_size=batch_size)
+                                                        batch_size=config.train.batch_size)
 
 
 
-        if optim == "SGD":
+        if self.optim == "SGD":
             self.actor_optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad,
                                                           self.actor.parameters()),
-                                                    lr=actor_lr)
+                                                    lr=config.train.actor_lr)
             self.critic_optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad,
                                                            self.critic.parameters()),
-                                                     lr=critic_lr)
-        elif optim == "Adam":
+                                                     lr=config.train.critic_lr)
+        elif self.optim == "Adam":
             self.actor_optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad,
                                                            self.actor.parameters()),
-                                                    lr=actor_lr)
+                                                    lr=config.train.actor_lr)
             self.critic_optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad,
                                                             self.critic.parameters()),
-                                                     lr=critic_lr)
+                                                     lr=config.train.critic_lr)
         else:
             raise NotImplementedError("Optimizer should be Adam or SGD")
             
             
         # scheduler
         self.actor_scheduler = torch.optim.lr_scheduler.StepLR(self.actor_optimizer,
-                                                          100,
-                                                          gamma=0.1)
+                                                          config.train.scheduler_step_size,
+                                                          gamma=config.train.scheduler_gamma)
         
         self.critic_scheduler = torch.optim.lr_scheduler.StepLR(self.critic_optimizer,
-                                                          100,
-                                                          gamma=0.1)
+                                                          config.train.scheduler_step_size,
+                                                          gamma=config.train.scheduler_gamma)
 
         self.critic_criterion = nn.MSELoss() # mean reduction
 
         # Noise
-        self.ounoise = OUNoise(action_space)
+        self.ounoise = OUNoise(self.action_space,
+                               mu=config.train.ou_noise_mu,
+                               theta=config.train.ou_noise_theta,
+                               max_sigma=config.train.ou_noise_max_sigma,
+                               min_sigma=config.train.ou_noise_min_sigma,
+                               decay_period=config.train.ou_noise_decay_period)
 
         # Device
-        self.device = torch.device(device)
+        self.device = torch.device(config.train.device)
 
     def predict(self, state, step, mode="training"):
         #if self.model_type != "VAE": state = Variable(state.unsqueeze(0)) # [1, C, H, W]
