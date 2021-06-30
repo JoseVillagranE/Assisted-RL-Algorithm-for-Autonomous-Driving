@@ -10,10 +10,11 @@ class MDN_RNN(nn.Module):
     def __init__(self, 
                  input_size,
                  hidden_size,
-                 action_size=2,
-                 seq_len=2,
-                 batch_size=64,
+                 seq_len,
+                 batch_size,
+                 device,
                  num_layers=1,
+                 action_size=2,
                  gaussians=3,
                  mode="inference"):
         """
@@ -29,6 +30,7 @@ class MDN_RNN(nn.Module):
                          hidden_size,
                          seq_len=self.seq_len,
                          batch_size=self.batch_size,
+                         device=device,
                          num_layers=num_layers)
         self.mdn = nn.Linear(hidden_size, (2*input_size+1)*gaussians + 2)
     
@@ -121,8 +123,9 @@ class LSTM(nn.Module):
     def __init__(self,
                  input_size,
                  hidden_size,
-                 seq_len=2,
-                 batch_size=64,
+                 seq_len,
+                 batch_size,
+                 device,
                  num_layers=1):
         
         super().__init__()
@@ -131,6 +134,8 @@ class LSTM(nn.Module):
         self.seq_len = seq_len
         self.batch_size = batch_size
         self.num_layers = num_layers
+        if not device: self.device = "cuda:0" if torch.cuda.is_available() else "cpu" 
+        else: self.device = device
         self.lstm = nn.LSTM(input_size=input_size,
                             hidden_size=hidden_size,
                             num_layers=num_layers,
@@ -142,6 +147,9 @@ class LSTM(nn.Module):
                                requires_grad=True)
         nn.init.xavier_normal_(self.h_0)
         nn.init.xavier_normal_(self.c_0)
+        
+        self.c_0 = self.c_0.to(self.device)
+        self.h_0 = self.h_0.to(self.device)
         
         self.h_n, self.c_n = None, None
         
@@ -166,6 +174,7 @@ if __name__ == "__main__":
                 hidden_size=12,
                 seq_len=2,
                 batch_size=4,
+                device="cpu",
                 num_layers=1)
     
     input = torch.rand((4, 2, 8))
