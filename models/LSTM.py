@@ -134,8 +134,7 @@ class LSTM(nn.Module):
         self.seq_len = seq_len
         self.batch_size = batch_size
         self.num_layers = num_layers
-        if not device: self.device = "cuda:0" if torch.cuda.is_available() else "cpu" 
-        else: self.device = device
+        self.device = device
         self.lstm = nn.LSTM(input_size=input_size,
                             hidden_size=hidden_size,
                             num_layers=num_layers,
