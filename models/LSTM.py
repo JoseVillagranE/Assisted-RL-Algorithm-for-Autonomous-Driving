@@ -158,7 +158,7 @@ class LSTM(nn.Module):
         :param hidden_state: (Tensor: [B, S, Hidden_size])
         :return h_n: (Tensor: [B, Bidirectional*Num_layers, Hidden_size])
         """
-        hx = (self.h_n, self.c_n) if self.h_n else (self.h_0, self.c_0)
+        hx = (self.h_n, self.c_n) if self.h_n is not None else (self.h_0, self.c_0)
         outp, (h_n, c_n) = self.lstm(input, hx)
         self.h_n = h_n # update hidden_state 
         self.c_n = c_n
