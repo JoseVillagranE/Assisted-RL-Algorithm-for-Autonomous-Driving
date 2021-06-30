@@ -118,7 +118,7 @@ def train():
         for episode in range(start_episode, config.train.episodes):
             state, terminal_state, episode_reward = env.reset(), False, []
             terminal_state_info = ""
-            states_deque = deque(maxlen=n_steps) # TODO: define n_steps
+            states_deque = deque(maxlen=config.train.rnn_nsteps) # TODO: define n_steps
             states_deque.append(state)
             while not terminal_state:
                 for step in range(config.train.steps):
@@ -126,7 +126,8 @@ def train():
                         return
                     
                     if config.temporal.temp_mech:
-                        state = torch.tensor(list(states_deque)) # (S, Z_dim)
+                        # what happen in the first N steps ??
+                        state = torch.tensor(list(states_deque)) # (S, Z_dim+Compl)
                         
                     action = model.predict(state, episode) # return a np. action
                     next_state, reward, terminal_state, info = env.step(action)

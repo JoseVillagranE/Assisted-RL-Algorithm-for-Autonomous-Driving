@@ -11,6 +11,8 @@ class MDN_RNN(nn.Module):
                  input_size,
                  hidden_size,
                  action_size=2,
+                 seq_len=2,
+                 batch_size=64,
                  num_layers=1,
                  gaussians=3,
                  mode="inference"):
@@ -20,8 +22,14 @@ class MDN_RNN(nn.Module):
         super().__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
+        self.batch_size = batch_size
+        self.seq_len = seq_len
         self.gaussians = gaussians
-        self.lstm = LSTM(input_size+action_size, hidden_size, num_layers)
+        self.lstm = LSTM(input_size+action_size,
+                         hidden_size,
+                         seq_len=self.seq_len,
+                         batch_size=self.batch_size,
+                         num_layers=num_layers)
         self.mdn = nn.Linear(hidden_size, (2*input_size+1)*gaussians + 2)
     
     def forward(self, latent_states, actions, mode="training"):
@@ -110,20 +118,32 @@ class MDN_RNN(nn.Module):
         
 class LSTM(nn.Module):
     
-    def __init__(self, input_size, hidden_size, num_layers=1):
+    def __init__(self,
+                 input_size,
+                 hidden_size,
+                 seq_len=2,
+                 batch_size=64,
+                 num_layers=1):
+        
         super().__init__()
         self.input_size = input_size
         self.hidden_size = hidden_size
+        self.seq_len = seq_len
+        self.batch_size = batch_size
         self.num_layers = num_layers
         self.lstm = nn.LSTM(input_size=input_size,
                             hidden_size=hidden_size,
                             num_layers=num_layers,
                             batch_first=True)
-        self.c_0 = nn.Linear(input_size, hidden_size) # (D -> hidden)
-        self.h_0 = nn.Linear(input_size, hidden_size)
+        # assume unidirectional
+        self.c_0 = torch.empty((self.num_layers*1, self.batch_size, self.hidden_size),
+                               requires_grad=True)
+        self.h_0 = torch.empty((self.num_layers*1, self.batch_size, self.hidden_size),
+                               requires_grad=True)
+        nn.init.xavier_normal_(self.h_0)
+        nn.init.xavier_normal_(self.c_0)
         
-        self.h_n = None
-        self.c_n = None
+        self.h_n, self.c_n = None, None
         
     def forward(self, input):
         """
@@ -134,16 +154,22 @@ class LSTM(nn.Module):
         hx = (self.h_n, self.c_n) if self.h_n else (self.h_0, self.c_0)
         outp, (h_n, c_n) = self.lstm(input, hx)
         self.h_n = h_n # update hidden_state 
-        self.c_n = c_n 
+        self.c_n = c_n
         return outp
+    
+    def reset_lstm(self):
+        self.h_n, self.c_n = None, None
         
-    def init_hidden_state(self, x_0):
-        """
-        :parama x_0: (Tensor [B, num_pix, D]) batch w/ initial feature slices 
-        :return h_0: (Tensor: [B, Hidden_size]) initial hidden states for the first features slices
-        :return c_0: (Tensor: [B, Hidden_size])
-        """
-        h_0 = self.h_0(x_0.mean(dim=1).squeeze()) # size of the input [B, D]
-        c_0 = self.c_0(x_0.mean(dim=1).squeeze()) 
-        return (h_0, c_0)
-
+if __name__ == "__main__":
+    
+    lstm = LSTM(input_size=8,
+                hidden_size=12,
+                seq_len=2,
+                batch_size=4,
+                num_layers=1)
+    
+    input = torch.rand((4, 2, 8))
+    outp = lstm(input)
+    print(outp.shape)
+    
+    
