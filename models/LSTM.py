@@ -37,12 +37,13 @@ class MDN_RNN(nn.Module):
         )
         self.mdn = nn.Linear(hidden_size, (2 * input_size + 1) * gaussians + 2)
 
-    def forward(self, latent_states, actions, mode="training"):
+    def forward(self, latent_states, mode="training"):
         """
         latent_states: (B, S, Z_dim+compl)
         actions: (B, S, a_size)
         """
-        inp = torch.cat([latent_states, actions], axis=-1)
+        # inp = torch.cat([latent_states, actions], axis=-1)
+        inp = latent_states
         outp = self.lstm(inp)
         gmm_out = self.mdn(outp)
         stride = self.gaussians * latent_states.shape[2]
@@ -170,9 +171,9 @@ class LSTM(nn.Module):
         :return h_n: (Tensor: [B, Bidirectional*Num_layers, Hidden_size])
         """
         if self.training_initial_hidden_states:
-            outp, (h_n, c_n) = self.lstm(input, (self.h_0, self.c_0))
+            outp, (_, _) = self.lstm(input, (self.h_0, self.c_0))
         else:
-            outp, (h_n, c_n) = self.lstm(input)  # initialize to zeros
+            outp, (_, _) = self.lstm(input)  # initialize to zeros
         return outp
 
     def reset_lstm(self):
@@ -188,19 +189,18 @@ if __name__ == "__main__":
         batch_size=4,
         device="cpu",
         num_layers=1,
-        training_initial_hidden_states=True,
+        training_initial_hidden_states=False,
     )
 
-    input = torch.rand((4, 2, 8))
-    outp = lstm(input)
-    print(outp.shape)
-    outp = lstm(input)
-    print(outp.shape)
-
-    # loss = torch.tensor([1.2])
-    loss = outp.mean()
-
     opt = torch.optim.Adam(lstm.parameters(), lr=1e-3)
-    opt.zero_grad()
-    loss.backward()
-    opt.step()
+    for i in range(2):
+        input = torch.rand((4, 2, 8))
+        outp = lstm(input)
+        print(outp.shape)
+
+        # loss = torch.tensor([1.2])
+        loss = outp.mean()
+
+        opt.zero_grad()
+        loss.backward()
+        opt.step()
