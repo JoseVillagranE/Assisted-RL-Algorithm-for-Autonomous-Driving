@@ -1,4 +1,3 @@
-
 import yaml
 import numpy as np
 from easydict import EasyDict as edict
@@ -7,21 +6,25 @@ import os
 import glob
 import sys
 
-root_dir = Path(__file__).parent.parent # Tesis's folder
+root_dir = Path(__file__).parent.parent  # Tesis's folder
 carla_dir = root_dir.parent.parent.parent
 
-path_egg = glob.glob(str(carla_dir) + '/PythonAPI/carla/dist/carla-*%d.%d-%s.egg' % (
-    sys.version_info.major,
-    sys.version_info.minor,
-    'win-amd64' if os.name == 'nt' else 'linux-x86_64'))[0]
-
+path_egg = glob.glob(
+    str(carla_dir)
+    + "/PythonAPI/carla/dist/carla-*%d.%d-%s.egg"
+    % (
+        sys.version_info.major,
+        sys.version_info.minor,
+        "win-amd64" if os.name == "nt" else "linux-x86_64",
+    )
+)[0]
 
 
 # Project Setup
 config = edict()
-config.project = str(root_dir.resolve()) # Root of the project
+config.project = str(root_dir.resolve())  # Root of the project
 config.seed = 1
-config.gpus = '0'
+config.gpus = "0"
 config.carla_dir = carla_dir
 config.carla_egg = path_egg
 
@@ -31,7 +34,7 @@ config.run_id = None
 
 # Model Defaults
 config.model_logs = edict()
-config.model_logs.root_dir = os.path.join(root_dir, 'models_logs')
+config.model_logs.root_dir = os.path.join(root_dir, "models_logs")
 
 # ---------------------- Simulation ----------------------------------------------
 
@@ -41,14 +44,12 @@ config.simulation = edict()
 config.simulation.map = "Town02"
 config.simulation.sleep = 120
 config.simulation.timeout = 4.0
-config.simulation.action_smoothing = 0.5 # w/out action_smoothing
+config.simulation.action_smoothing = 0.5  # w/out action_smoothing
 config.simulation.view_res = (640, 480)
 config.simulation.obs_res = (640, 480)
 config.simulation.fps = 10
 config.simulation.host = "localhost"
-config.simulation.port = 2000 # Default of world-port CARLA
-
-
+config.simulation.port = 2000  # Default of world-port CARLA
 
 
 # Train Defaults
@@ -56,46 +57,54 @@ config.train = edict()
 config.train.checkpoint_every = 0
 config.train.batch_size = 10
 config.train.episodes = 100
-config.train.steps = 300 # es una especie de time-out
-config.train.optimizer = 'Adam'
+config.train.steps = 300  # es una especie de time-out
+config.train.optimizer = "Adam"
 config.train.actor_lr = 1e-4
 config.train.critic_lr = 1e-3
-config.train.max_memory_size = 100000000 # 1e8
+config.train.max_memory_size = 100000000  # 1e8
 config.train.tau = 0.001
 config.train.gamma = 0.99
-config.train.alpha = 0.7 # Prioritized Experience Replay
-config.train.beta = 0.5 # Prioritized Experience Replay
+config.train.alpha = 0.7  # Prioritized Experience Replay
+config.train.beta = 0.5  # Prioritized Experience Replay
 config.train.device = "cpu"
 config.train.type_RM = "random"
-config.train.actor_layers = [512]
 config.train.load_checkpoint_name = ""
 config.train.episode_loading = 0
 config.train.start_to_update = 0
 config.train.optimization_steps = 1
-config.train.action_space = 2 # [steer, throttle]
-config.train.measurements_to_include = []#set(["steer", "throttle", "speed", "orientation"])
-config.train.wp_encode = False # harcoded
+config.train.action_space = 2  # [steer, throttle]
+config.train.measurements_to_include = set(
+    ["steer"]
+    + ["throttle"]
+    # ["speed"] +
+    # ["orientation"]
+)
+config.train.wp_encode = False  # harcoded
 config.train.wp_encoder_size = 64 if config.train.wp_encode else 0
 config.train.z_dim = 128
-config.train.state_dim = config.train.z_dim
-                            # len(config.train.measurements_to_include) + \
-                            # 2 if "orientation" in config.train.measurements_to_include else 0 + \
-                                # config.train.wp_encoder_size
-config.train.pretraining_steps = 100 # CoL
-config.train.lambdas = [1,1,1]
-config.train.expert_prop = 0.25 # CoL
+config.train.state_dim = (
+    config.train.z_dim
+    + len(config.train.measurements_to_include)
+    + (2 if "orientation" in config.train.measurements_to_include else 0)
+)
+# config.train.wp_encoder_size
+config.train.pretraining_steps = 10  # CoL
+config.train.lambdas = [1, 1, 1]
+config.train.expert_prop = 0.25  # CoL
 config.train.agent_prop = 0.75
 config.train.rm_filename = "BC-1.npy"
 config.train.VAE_weights_path = "./models/weights/segmodel_expert_samples_sem_all.pt"
 # RNN
 config.train.temporal_mech = False
 config.train.rnn_type = "mdn_rnn"
-config.train.rnn_input_size = 0 # ??
+config.train.rnn_input_size = config.train.state_dim + config.train.action_space
 config.train.rnn_hidden_size = 512
 config.train.gaussians = 3
 config.train.rnn_num_layers = 1
-config.train.RNN_weights_path= "./models/weights/rnn_st_samples_all.pt"
+config.train.RNN_weights_path = "./models/weights/lstm_512_st_3.pt"
 config.train.rnn_nsteps = 2
+
+config.train.linear_layers = [512]
 
 config.train.ou_noise_mu = 0.0
 config.train.ou_noise_theta = 0.6
@@ -104,10 +113,15 @@ config.train.ou_noise_min_sigma = 0.0
 config.train.ou_noise_decay_period = 250
 
 config.train.enable_scheduler_lr = False
-config.train.scheduler_step_size = 100 # epochs
+config.train.scheduler_step_size = 100  # epochs
 config.train.scheduler_gamma = 0.1
 
-
+config.train.load_rm = True
+config.train.load_rm_file = False
+config.train.load_rm_path = "./S_Rollouts_11"
+config.train.load_rm_idxs = [0, 1]
+config.train.load_rm_num_rolls = 20
+config.train.load_rm_choice = "random"
 
 # Agent Defaults (Single agent)
 config.agent = edict()
@@ -129,8 +143,8 @@ config.agent.goal.z = 1.0
 config.agent.sensor = edict()
 config.agent.sensor.spectator_camera = False
 config.agent.sensor.dashboard_camera = False
-config.agent.sensor.camera_type = "sensor.camera.rgb"
-config.agent.sensor.color_converter = "raw"
+config.agent.sensor.camera_type = "sensor.camera.semantic_segmentation"
+config.agent.sensor.color_converter = "CityScapesPallete"
 
 
 # ExoAgent Defaults
@@ -147,8 +161,8 @@ config.exo_agents.pedestrian.initial_position.yaw = 0
 config.exo_agents.vehicle = edict()
 config.exo_agents.vehicle.n = 0
 config.exo_agents.vehicle.vehicle_type = "vehicle.audi.a2"
-config.exo_agents.vehicle.target_speed = 20.0 # Km/h
-config.exo_agents.vehicle.controller = "None" # How control the exo vehicle ?
+config.exo_agents.vehicle.target_speed = 20.0  # Km/h
+config.exo_agents.vehicle.controller = "None"  # How control the exo vehicle ?
 
 config.exo_agents.vehicle.PID = edict()
 config.exo_agents.vehicle.PID.lateral_Kp = 1.95
@@ -161,8 +175,8 @@ config.exo_agents.vehicle.PID.longitudinal_Kd = 0
 
 
 config.exo_agents.vehicle.initial_position = edict()
-config.exo_agents.vehicle.initial_position.x = 149#221
-config.exo_agents.vehicle.initial_position.y = 63#57
+config.exo_agents.vehicle.initial_position.x = 149  # 221
+config.exo_agents.vehicle.initial_position.y = 63  # 57
 config.exo_agents.vehicle.initial_position.z = 1.0
 config.exo_agents.vehicle.initial_position.yaw = 180
 
@@ -173,7 +187,7 @@ config.exo_agents.vehicle.end_position.z = 1.0
 
 # Models Defaults
 config.model = edict()
-config.model.type = "Conv" # CLassic convolutional network train from scratch
+config.model.type = "VAE"  # CLassic convolutional network train from scratch
 config.model.id = 0
 
 
@@ -214,7 +228,7 @@ config.test.steps = 100000
 config.eval = edict()
 config.eval.weights_path = "./models/weights/VAEBC-1.pt"
 config.eval.save_replay_buffer = False
-config.eval.filename_rb = "MC-1.npy"#"BC-1.npy" # 1rst cinematic
+config.eval.filename_rb = "MC-1.npy"  # "BC-1.npy" # 1rst cinematic
 
 
 # Visualisation Defaults
@@ -230,6 +244,7 @@ def update_config(config_file):
         exp_config = edict(yaml.load(f))
         recursive_update(exp_config, c=config)
 
+
 def recursive_update(in_config, c):
     for ki, vi in in_config.items():
         if isinstance(vi, edict):
@@ -237,11 +252,12 @@ def recursive_update(in_config, c):
         else:
             c[ki] = vi
 
-def check_config(in_config, k=''):
+
+def check_config(in_config, k=""):
     for ki, vi in in_config.items():
         if isinstance(vi, edict):
-            check_config(vi, k+'.'+ki)
+            check_config(vi, k + "." + ki)
         elif vi is None:
             raise ValueError(f"{k+'.'+ki} Must be specified in the .yaml config file")
-        elif vi=='':
+        elif vi == "":
             in_config[ki] = None

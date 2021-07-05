@@ -12,8 +12,7 @@ import gym
 class DDPG:
 
     def __init__(self, 
-                 config,
-                 rw_weights=None):
+                 config):
 
         self.num_actions = config.train.action_space
         self.state_dim = config.train.state_dim
@@ -22,8 +21,7 @@ class DDPG:
         self.max_memory_size = config.train.max_memory_size
         self.batch_size = config.train.batch_size
         self.std = 0.1
-        self.rw_weights = rw_weights
-        self.model_type = config.run_type
+        self.model_type = config.model.type
         n_channel = 3
         
         input_size = config.train.z_dim + \
