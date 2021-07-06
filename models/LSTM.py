@@ -19,7 +19,7 @@ class MDN_RNN(nn.Module):
         mode="inference",
     ):
         """
-        input_size -> z_dim
+        input_size -> z_dim + Compl
         """
         super().__init__()
         self.input_size = input_size
@@ -28,7 +28,7 @@ class MDN_RNN(nn.Module):
         self.seq_len = seq_len
         self.gaussians = gaussians
         self.lstm = LSTM(
-            input_size + action_size,
+            input_size,
             hidden_size,
             seq_len=self.seq_len,
             batch_size=self.batch_size,
