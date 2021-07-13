@@ -27,6 +27,7 @@ class MDN_RNN(nn.Module):
         self.batch_size = batch_size
         self.seq_len = seq_len
         self.gaussians = gaussians
+        self.mode = mode
         self.lstm = LSTM(
             input_size,
             hidden_size,
@@ -37,7 +38,7 @@ class MDN_RNN(nn.Module):
         )
         self.mdn = nn.Linear(hidden_size, (2 * input_size + 1) * gaussians + 2)
 
-    def forward(self, latent_states, mode="training"):
+    def forward(self, latent_states):
         """
         latent_states: (B, S, Z_dim+compl)
         actions: (B, S, a_size)
@@ -70,13 +71,13 @@ class MDN_RNN(nn.Module):
         pi = pi.view(latent_states.shape[0], latent_states.shape[1], self.gaussians)
         log_pi = f.log_softmax(pi, dim=-1)
 
-        if mode == "training":
+        if self.mode == "training":
             rs = gmm_out[:, :, -2]
             ds = gmm_out[:, :, -1]
             return mus, sigmas, log_pi, rs, ds
-        elif mode == "inference":
-            w = Categorical(logits=log_pi).sample()  # (B, S)
-            next_latent_pred = Normal(mus, sigmas).sample()[:, :, w, :].squeeze()
+        elif self.mode == "inference":
+            w = Categorical(logits=log_pi).sample().squeeze()  # (B, S) [1]
+            next_latent_pred = Normal(mus, sigmas).sample()[:, :, w, :].squeeze(2)
             # (B, S, Z_dim+Complt)
             return next_latent_pred
 

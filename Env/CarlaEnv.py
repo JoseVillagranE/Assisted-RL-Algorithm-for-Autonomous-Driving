@@ -163,6 +163,7 @@ class CarlaEnv(gym.Env):
             
             # create the World
             self.world = World(self.client)
+            self.world.set_weather(carla.WeatherParameters.ClearNoon)
             self.controller = KeyboardControl()
 
             #synchronous mode

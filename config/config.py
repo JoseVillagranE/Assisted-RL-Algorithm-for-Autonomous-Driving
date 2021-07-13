@@ -95,14 +95,14 @@ config.train.agent_prop = 0.75
 config.train.rm_filename = "BC-1.npy"
 config.train.VAE_weights_path = "./models/weights/segmodel_expert_samples_sem_all.pt"
 # RNN
-config.train.temporal_mech = False
+config.train.temporal_mech = True
 config.train.rnn_type = "mdn_rnn"
 config.train.rnn_input_size = config.train.state_dim + config.train.action_space
 config.train.rnn_hidden_size = 512
 config.train.gaussians = 3
 config.train.rnn_num_layers = 1
-config.train.RNN_weights_path = "./models/weights/lstm_512_st_3.pt"
-config.train.rnn_nsteps = 2
+config.train.RNN_weights_path = "./models/weights/lstm_512_st_3_wd.pt"
+config.train.rnn_nsteps = 1
 
 config.train.linear_layers = [512]
 
@@ -117,7 +117,7 @@ config.train.scheduler_step_size = 100  # epochs
 config.train.scheduler_gamma = 0.1
 
 config.train.load_rm = True
-config.train.load_rm_file = False
+config.train.load_rm_file = False  # file or folder
 config.train.load_rm_path = "./S_Rollouts_11"
 config.train.load_rm_idxs = [0, 1]
 config.train.load_rm_num_rolls = 20

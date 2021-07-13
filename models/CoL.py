@@ -31,6 +31,7 @@ class CoL:
         self.tau = config.train.tau
         self.lambdas = config.train.lambdas
         self.model_type = config.model.type
+        self.temporal_mech = config.train.temporal_mech
 
         self.enable_scheduler_lr = config.train.enable_scheduler_lr
         n_channel = 3
@@ -267,6 +268,8 @@ class CoL:
         # state -> (B, Z_dim+actions)
 
         state = torch.from_numpy(state).float()
+        if self.temporal_mech:
+            state = state.unsqueeze(0)
         action = self.actor(state)
         action = action.detach().numpy()[0]  # [steer, throttle]
         if mode == "training":

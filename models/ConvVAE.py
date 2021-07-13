@@ -8,6 +8,7 @@ Created on Thu Feb  4 00:50:11 2021
 
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 import torch
 import torch.distributions as D
 import torch.nn as nn
@@ -69,7 +70,7 @@ class VAE_Actor(nn.Module):
                 )
 
         if self.lstm:
-            input_linear_layer_dim = state_dim * rnn_config["n_steps"]
+            input_linear_layer_dim = state_dim * (rnn_config["n_steps"] + 1)
         else:
             input_linear_layer_dim = state_dim
 
@@ -89,13 +90,13 @@ class VAE_Actor(nn.Module):
         if wp_encode:
             self.wp_encoder = nn.Linear(1, wp_encoder_size)
 
-        if len(VAE_weights_path) > 0:
+        if os.path.isdir(VAE_weights_path):
             print("Loading VAE weights..")
             self.vae.load_state_dict(torch.load(VAE_weights_path))
             if is_freeze_params:
                 freeze_params(self.vae)
 
-        if self.lstm is not None and len(rnn_config["weights_path"]) > 0:
+        if self.lstm is not None and os.path.isdir(rnn_config["weights_path"]):
             print("Loading RNN weights..")
             self.lstm.load_state_dict(
                 torch.load(rnn_config["weights_path"]), strict=False
@@ -112,8 +113,8 @@ class VAE_Actor(nn.Module):
         input_linear = state
         if self.lstm:
             next_state = self.lstm(state)
-            input_linear = torch.cat(
-                (state, next_state)
+            input_linear = torch.cat((state, next_state), dim=-1).squeeze(
+                0
             )  # TODO: admit more than 2 steps ??
         action = self.linear_forward(input_linear)
         return action

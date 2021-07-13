@@ -116,13 +116,17 @@ class SequentialDequeMemory:
 
 
 class RandomDequeMemory(ExperienceReplayMemory):
-    def __init__(self, queue_capacity=2000, rw_weights=None, batch_size=64):
+    def __init__(
+        self, queue_capacity=2000, rw_weights=None, batch_size=64, temporal=False, win=1
+    ):
         super().__init__()
 
         self.queue_capacity = queue_capacity
         self.memory = deque(maxlen=self.queue_capacity)
         self.rw_weights = rw_weights
         self.batch_size = batch_size
+        self.temporal = temporal
+        self.win = win
 
     def add_to_memory(self, experience_tuple):
         self.memory.append(experience_tuple)
@@ -227,9 +231,19 @@ class RandomDequeMemory(ExperienceReplayMemory):
                 obs = np.append(obs, complt_states, axis=-1)
                 next_obs = np.append(next_obs, next_complt_states, axis=-1)
 
-            print(obs.shape)
-
-            tuples = [x for x in zip(obs, actions, rewards, next_obs, terminals)]
+            if self.temporal:
+                tuples = [
+                    [
+                        obs[i : i + self.win],
+                        actions[i : i + self.win],
+                        rewards[i : i + self.win],
+                        next_obs[i : i + self.win],
+                        terminals[i : i + self.win],
+                    ]
+                    for i in range(len(obs) - self.win)
+                ]
+            else:
+                tuples = [x for x in zip(obs, actions, rewards, next_obs, terminals)]
             if i == 0:
                 self.memory = deque(tuples, maxlen=self.queue_capacity)
             else:
@@ -352,11 +366,11 @@ if __name__ == "__main__":
 
     # rw_weights = [1, 2, 3, 4]
 
-    # RB = RandomDequeMemory(10, rw_weights=rw_weights, batch_size=4)
-    # RB.add_to_memory((1, 1, (1,2,3,4), 2, False))
-    # RB.add_to_memory((2, 4, (1,2,2,3), 3, False))
-    # RB.add_to_memory((3, 1, (1,2,3,1), 2, False))
-    # RB.add_to_memory((2, 3, (3,2,3,4), 1, True))
+    # RB = RandomDequeMemory(10, batch_size=4, temporal=True, win=2)
+    # RB.add_to_memory((1, 1, (1, 2, 3, 4), 2, False))
+    # RB.add_to_memory((2, 4, (1, 2, 2, 3), 3, False))
+    # RB.add_to_memory((3, 1, (1, 2, 3, 1), 2, False))
+    # RB.add_to_memory((2, 3, (3, 2, 3, 4), 1, True))
 
     # state, action, reward, next_state, done = RB.get_batch_for_replay()
     # print(reward)
@@ -433,11 +447,12 @@ if __name__ == "__main__":
 
     ########################################################
 
-    RB = RandomDequeMemory(10, rw_weights=None, batch_size=4)
+    RB = RandomDequeMemory(10, rw_weights=None, batch_size=4, temporal=True, win=3)
 
     path = "../S_Rollouts_11/"
     complt_states = [0, 1]
     RB.load_rm_folder(path, complt_states)
     batch = RB.get_batch_for_replay()
-    print(batch)
-    print(len(batch[0]))
+    actions = batch[1]
+    actions = torch.tensor(actions)
+    print(actions.shape)

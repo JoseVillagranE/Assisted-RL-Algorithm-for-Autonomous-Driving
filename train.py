@@ -35,12 +35,7 @@ def parse_args():
     return args
 
 
-# TODO: # take action from a N-step state
-# save N-step tuples of experience
-# how make a decision from N initial steps??
-# create a new replay buffer ?? i think that's not necessary
-# samples chunks of experiences tuples - automacally ??
-# adapt training if is necesary
+# TODO: With more than one steps you should manage next_latent state dimensions
 
 
 def train():
