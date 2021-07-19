@@ -104,31 +104,32 @@ class CoL:
                 wp_encoder_size=config.train.wp_encoder_size,
             ).float()
 
-            self.critic = VAE_Critic(
-                config.train.state_dim, config.train.action_space
-            ).float()
-            self.critic_target = VAE_Critic(
-                config.train.state_dim, config.train.action_space
-            ).float()
+            self.critic = VAE_Critic(self.state_dim, self.action_space).float()
+            self.critic_target = VAE_Critic(self.state_dim, self.action_space).float()
 
         else:
-            h_image_in, w_image_in = (80, 160)
-            actor_linear_layers = [32]
-
             self.actor = Conv_Actor(
                 self.action_space,
-                h_image_in,
-                w_image_in,
+                config.preprocess.Resize_h,
+                config.preprocess.Resize_w,
                 linear_layers=config.train.linear_layers,
             )
             self.actor_target = Conv_Actor(
                 self.action_space,
-                h_image_in,
-                w_image_in,
+                config.preprocess.Resize_h,
+                config.preprocess.Resize_w,
                 linear_layers=config.train.linear_layers,
             )
-            self.critic = Conv_Critic(self.action_space, h_image_in, w_image_in)
-            self.critic_target = Conv_Critic(self.action_space, h_image_in, w_image_in)
+            self.critic = Conv_Critic(
+                self.action_space,
+                config.preprocess.Resize_h,
+                config.preprocess.Resize_w,
+            )
+            self.critic_target = Conv_Critic(
+                self.action_space,
+                config.preprocess.Resize_h,
+                config.preprocess.Resize_w,
+            )
 
         # Copy weights
         for target_param, param in zip(
@@ -153,11 +154,15 @@ class CoL:
                 queue_capacity=config.train.max_memory_size,
                 rw_weights=rw_weights,
                 batch_size=config.train.batch_size,
+                temporal=self.temporal_mech,
+                win=config.train.rnn_nsteps,
             )
             self.replay_memory_e = RandomDequeMemory(
                 queue_capacity=config.train.max_memory_size,
                 rw_weights=rw_weights,
                 batch_size=config.train.batch_size,
+                temporal=self.temporal_mech,
+                win=config.train.rnn_nsteps,
             )
 
         elif self.type_RM == "prioritized":
@@ -336,16 +341,33 @@ class CoL:
         actions_e = Variable(torch.from_numpy(np.array(actions_e)).float())
 
         # 1-step return Q-learning Loss
-        R_1 = (
-            rewards.squeeze()
-            + self.gamma
-            * self.critic_target(
-                next_states, self.actor_target(next_states).detach()
-            ).squeeze()
-        )
-        L_Q1 = self.mse(
-            R_1, self.critic(states, self.actor(states).detach()).squeeze()
-        )  # reduction -> mean
+
+        if self.temporal_mech:
+            R_1 = (
+                rewards.squeeze()
+                + self.gamma
+                * self.critic_target(
+                    next_states[:, -1, :], self.actor_target(next_states).detach()
+                ).squeeze()
+            )
+            L_Q1 = self.mse(
+                R_1,
+                self.critic(states[:, -1, :], self.actor(states).detach()).squeeze(),
+            )  # reduction -> mean
+            L_A = -1 * self.critic(states[:, -1, :], self.actor(states)).detach().mean()
+        else:
+            R_1 = (
+                rewards.squeeze()
+                + self.gamma
+                * self.critic_target(
+                    next_states, self.actor_target(next_states).detach()
+                ).squeeze()
+            )
+            L_Q1 = self.mse(
+                R_1, self.critic(states, self.actor(states).detach()).squeeze()
+            )  # reduction -> mean
+            L_A = -1 * self.critic(states, self.actor(states)).detach().mean()
+
         L_col_critic = self.lambdas[2] * L_Q1
 
         # BC loss
@@ -353,8 +375,7 @@ class CoL:
         L_BC = self.mse(pred_actions.squeeze(), actions_e)
 
         # Actor Q_loss
-        L_A = -1 * self.critic(states, self.actor(states)).detach().mean()
-        L_col_actor = self.lambdas[0] * L_BC + self.lambdas[1] * L_A
+        L_col_actor = -1 * (self.lambdas[0] * L_BC + self.lambdas[1] * L_A)
 
         self.actor_optimizer.zero_grad()
         L_col_actor.backward()
@@ -365,6 +386,9 @@ class CoL:
         L_col_critic.backward()
         nn.utils.clip_grad_norm_(self.critic.parameters(), 0.05)
         self.critic_optimizer.step()
+
+        # print(L_col_actor.item())
+        # print(L_col_critic.item())
 
         if not is_pretraining and self.enable_scheduler_lr:
             self.actor_scheduler.step()

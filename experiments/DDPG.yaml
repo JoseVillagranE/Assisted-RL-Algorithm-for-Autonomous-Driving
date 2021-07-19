@@ -6,10 +6,20 @@ train:
   checkpoint_every: 100000
   episodes: 100
   device: "cuda:0"
-  actor_lr: 0.0001
+  actor_lr: 0.00001
   critic_lr: 0.0001
   type_RM: "random"
-  batch_size: 16
+  batch_size: 64
+  train_mech: True
+  start_to_update: 0
+  optimization_steps: 1
+  ou_noise_mu: 0.0
+  ou_noise_theta: 0.6
+  ou_noise_max_sigma: 0.3
+  ou_noise_min_sigma: 0.0
+  ou_noise_decay_period: 100
+  tau: 0.001
+  gamma: 0.99
 
 agent:
   sensor:
@@ -25,22 +35,22 @@ exo_agents:
     spawn: False
 
 model:
-  type: "DDPG"
+  type: "VAE"
   id: '0'
 
 reward_fn:
-  normalize: True
-  weight_collision_pedestrian: 0
-  weight_collision_vehicle: 0
-  weight_collision_other: 10000
-  weight_final_goal: 5000
+  normalize: False
+  weight_collision_pedestrian: 1000
+  weight_collision_vehicle: 1000
+  weight_collision_other: 1000
+  weight_final_goal: 500
   weight_speed_limit: 1
-  weight_route_al: 1
-  weight_centralization: 1
+  weight_route_al: 2
+  weight_centralization: 2
   weight_distance_to_goal: 1
 
 test:
-  every: 10
+  every: 5
 
 
 vis:

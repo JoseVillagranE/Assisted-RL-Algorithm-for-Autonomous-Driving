@@ -45,40 +45,40 @@ class MDN_RNN(nn.Module):
         """
         # inp = torch.cat([latent_states, actions], axis=-1)
         inp = latent_states
-        outp = self.lstm(inp)
+        outp = self.lstm(inp)[:, -1, :]  # (B, LSTM_hidden_size)
         gmm_out = self.mdn(outp)
         stride = self.gaussians * latent_states.shape[2]
-        mus = gmm_out[:, :, :stride]
+        mus = gmm_out[:, :stride]
         mus = mus.view(
             latent_states.shape[0],
-            latent_states.shape[1],
+            # latent_states.shape[1],
             self.gaussians,
             latent_states.shape[-1],
         )
 
-        # mus -> [B, S, n_gaussians, Z_dim+Compl]
+        # mus -> [B, n_gaussians, Z_dim+Compl]
 
-        sigmas = gmm_out[:, :, stride : 2 * stride]
+        sigmas = gmm_out[:, stride : 2 * stride]
         sigmas = sigmas.view(
             latent_states.shape[0],
-            latent_states.shape[1],
+            # latent_states.shape[1],
             self.gaussians,
             latent_states.shape[-1],
         )
         sigmas = torch.exp(sigmas)
 
-        pi = gmm_out[:, :, 2 * stride : 2 * stride + self.gaussians]
-        pi = pi.view(latent_states.shape[0], latent_states.shape[1], self.gaussians)
+        pi = gmm_out[:, 2 * stride : 2 * stride + self.gaussians]
+        pi = pi.view(latent_states.shape[0], self.gaussians)
         log_pi = f.log_softmax(pi, dim=-1)
 
         if self.mode == "training":
-            rs = gmm_out[:, :, -2]
-            ds = gmm_out[:, :, -1]
+            rs = gmm_out[:, -2]
+            ds = gmm_out[:, -1]
             return mus, sigmas, log_pi, rs, ds
         elif self.mode == "inference":
-            w = Categorical(logits=log_pi).sample().squeeze()  # (B, S) [1]
-            next_latent_pred = Normal(mus, sigmas).sample()[:, :, w, :].squeeze(2)
-            # (B, S, Z_dim+Complt)
+            w = Categorical(logits=log_pi).sample()  # (B, S) [1]
+            next_latent_pred = Normal(mus, sigmas).sample()[range(w.shape[0]), w, :]
+            # (B, Z_dim+Complt)
             return next_latent_pred
 
     def gmm_loss(self, next_latent, mus, sigmas, log_pi, a="no_max"):
@@ -94,7 +94,7 @@ class MDN_RNN(nn.Module):
         log_probs = normal_dist.log_prob(next_latent)  # [B, S, n_g, Z_dim+Complt]
         log_probs = log_pi + log_probs.sum(dim=-1)  # (B, S, n_g)
 
-        if "no_max":
+        if a == "no_max":
             log_prob = log_probs.sum(dim=-1)
         else:
             max_log_probs = log_probs.max(dim=-1, keepdim=True)[0]  # (B, S, 1)

@@ -130,6 +130,7 @@ def train():
             state, terminal_state, episode_reward = env.reset(), False, []
             terminal_state_info = ""
             states_deque = deque(maxlen=config.train.rnn_nsteps)
+            next_states_deque = deque(maxlen=config.train.rnn_nsteps)
             while not terminal_state:
                 for step in range(config.train.steps):
                     if env.controller.parse_events():
@@ -145,6 +146,17 @@ def train():
 
                     action = model.predict(state, episode)  # return a np. action
                     next_state, reward, terminal_state, info = env.step(action)
+
+                    if config.train.temporal_mech:
+                        if step == 0:
+                            # begin with a deque of initial states
+                            next_states_deque.extend(
+                                [next_state] * next_states_deque.maxlen
+                            )
+                        else:
+                            next_states_deque.append(next_state)
+                        next_state_ = np.array(next_states_deque)  # (S, Z_dim+Compl)
+
                     if info["closed"] == True:
                         exit(0)
 
@@ -153,9 +165,26 @@ def train():
                         reward = weighted_rw  # rw is only a scalar value
                     # Because exist manual and straight control also
                     if config.run_type in ["DDPG", "CoL"]:
-                        model.replay_memory.add_to_memory(
-                            (state, action.copy(), reward, next_state, terminal_state)
-                        )
+                        if config.train.temporal_mech:
+                            model.replay_memory.add_to_memory(
+                                (
+                                    state,
+                                    action.copy(),
+                                    reward,
+                                    next_state_,
+                                    terminal_state,
+                                )
+                            )
+                        else:
+                            model.replay_memory.add_to_memory(
+                                (
+                                    state,
+                                    action.copy(),
+                                    reward,
+                                    next_state,
+                                    terminal_state,
+                                )
+                            )
 
                     episode_reward.append(reward)
                     state = next_state
@@ -201,11 +230,21 @@ def train():
 
             if episode % config.test.every == 0 and episode > 0:
                 state, terminal_state, episode_reward_test = env.reset(), False, 0
+                states_deque = deque(maxlen=config.train.rnn_nsteps)
                 terminal_state_info = ""
                 print("Running a test episode")
                 for step in range(config.test.steps):
                     if env.controller.parse_events():
                         return
+
+                    if config.train.temporal_mech:
+                        if step == 0:
+                            # begin with a deque of initial states
+                            states_deque.extend([state] * states_deque.maxlen)
+                        else:
+                            states_deque.append(state)
+                        state = np.array(states_deque)  # (S, Z_dim+Compl)
+
                     action = model.predict(state, episode, mode="testing")
                     next_state, reward, terminal_state, info = env.step(action)
                     if info["closed"] == True:

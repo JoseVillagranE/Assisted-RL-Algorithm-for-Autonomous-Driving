@@ -10,7 +10,7 @@ train:
   checkpoint_every: 100000
   episodes: 100
   device: "cpu"
-  actor_lr: 0.0001
+  actor_lr: 0.00001
   critic_lr: 0.001
   optimizer: "Adam"
   type_RM: "random"
@@ -25,12 +25,13 @@ train:
   ou_noise_max_sigma: 0.1
   ou_noise_min_sigma: 0.0
   ou_noise_decay_period: 100
-  pretraining_steps: 0
+  pretraining_steps: 10000
   tau: 0.001
   gamma: 0.99
   wp_encode: False
   wp_encoder_size: 64
   rm_filename: "MC-1.npy" # folder's name for load many experiences tuples
+  train_mech: False
 
 agent:
   sensor:

@@ -70,7 +70,7 @@ class VAE_Actor(nn.Module):
                 )
 
         if self.lstm:
-            input_linear_layer_dim = state_dim * (rnn_config["n_steps"] + 1)
+            input_linear_layer_dim = state_dim * rnn_config["n_steps"]
         else:
             input_linear_layer_dim = state_dim
 
@@ -112,10 +112,10 @@ class VAE_Actor(nn.Module):
         """
         input_linear = state
         if self.lstm:
-            next_state = self.lstm(state)
-            input_linear = torch.cat((state, next_state), dim=-1).squeeze(
-                0
-            )  # TODO: admit more than 2 steps ??
+            next_state = self.lstm(state)  # (B, Z_dim+Compl_State)
+            input_linear = torch.cat(
+                (state[:, -1, :].squeeze(1), next_state), dim=-1
+            ).squeeze(0)
         action = self.linear_forward(input_linear)
         return action
 

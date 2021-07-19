@@ -15,7 +15,9 @@ import torch
 
 
 def cat_experience_tuple(sa, se, aa, ae, ra, re, nsa, nse, da, de):
+
     states = np.vstack((sa, se))
+
     actions = np.vstack((aa[:, np.newaxis], ae[:, np.newaxis]))
     rewards = np.vstack((ra[:, np.newaxis], re[:, np.newaxis]))
     next_states = np.vstack((nsa, nse))
@@ -187,7 +189,7 @@ class RandomDequeMemory(ExperienceReplayMemory):
         self,
         path,
         complt_states_idx,
-        num_roll=10,
+        nums_roll=10,
         transform=None,
         choice_form="random",
         vae_encode=None,  # little bit ugly
@@ -195,13 +197,13 @@ class RandomDequeMemory(ExperienceReplayMemory):
         print("Load Replay memory")
         files = glob.glob(path + "/*.npz")
         assert (
-            len(files) >= num_roll
+            len(files) >= nums_roll
         ), "Numbers of rollouts required is higher than the dataset"
         if choice_form == "random":
-            files = random.sample(files, num_roll)
+            files = random.sample(files, nums_roll)
 
         else:
-            files = files[:num_roll]
+            files = files[:nums_roll]
 
         for i, file in enumerate(files):
             with np.load(file) as data:
@@ -232,18 +234,29 @@ class RandomDequeMemory(ExperienceReplayMemory):
                 next_obs = np.append(next_obs, next_complt_states, axis=-1)
 
             if self.temporal:
-                tuples = [
-                    [
-                        obs[i : i + self.win],
-                        actions[i : i + self.win],
-                        rewards[i : i + self.win],
-                        next_obs[i : i + self.win],
-                        terminals[i : i + self.win],
-                    ]
-                    for i in range(len(obs) - self.win)
-                ]
-            else:
-                tuples = [x for x in zip(obs, actions, rewards, next_obs, terminals)]
+                obs_list, next_obs_list = [], []
+                obs_array = np.zeros(
+                    (self.win, obs[0].shape[-1])
+                )  # (B, S , Z_dim+Compl)
+                next_obs_array = np.zeros(
+                    (self.win, obs[0].shape[-1])
+                )  # (B, S , Z_dim+Compl)
+                for i in range(len(obs)):
+                    if i == 0:
+                        for j in range(self.win):
+                            obs_array[j, :] = obs[i]
+                            next_obs_array[j, :] = next_obs[i]
+                    else:
+                        obs_array[:-1, :] = obs_array[1:, :].copy()
+                        obs_array[:-1, :] = obs[i]
+                        next_obs_array[:-1, :] = next_obs_array[1:, :].copy()
+                        next_obs_array[:-1, :] = next_obs[i]
+
+                    obs_list.append(obs_array.copy())
+                    next_obs_list.append(next_obs_array.copy())
+                obs = obs_list
+                next_obs = next_obs_list
+            tuples = [x for x in zip(obs, actions, rewards, next_obs, terminals)]
             if i == 0:
                 self.memory = deque(tuples, maxlen=self.queue_capacity)
             else:
@@ -453,6 +466,9 @@ if __name__ == "__main__":
     complt_states = [0, 1]
     RB.load_rm_folder(path, complt_states)
     batch = RB.get_batch_for_replay()
+    states = batch[0]
     actions = batch[1]
+    states = torch.tensor(states)
     actions = torch.tensor(actions)
+    print(states.shape)
     print(actions.shape)
