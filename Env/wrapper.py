@@ -411,3 +411,6 @@ class World():
     def __getattr__(self, name):
         """Relay missing methods to underlying carla object"""
         return getattr(self.world, name)
+    
+    def set_weather(self, weather):
+        self.world.set_weather(weather)

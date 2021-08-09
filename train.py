@@ -9,6 +9,7 @@ import time
 import copy
 from collections import deque
 import torch
+from copy import deepcopy
 
 from config.config import config, update_config, check_config
 from utils.logger import init_logger
@@ -43,8 +44,8 @@ def train():
     if isinstance(config.seed, int):
         np.random.seed(config.seed)
         random.seed(config.seed)
-        torch.manual_seed(config.seed)
-        torch.cuda.manual_seed(config.seed)
+        torch.manual_seed(config.pytorch_seed)
+        torch.cuda.manual_seed(config.pytorch_seed)
 
     # Setup the paths and dirs
     save_path = os.path.join(
@@ -101,8 +102,31 @@ def train():
         feat_wp_encode=model.wp_encode_fn if config.train.wp_encode else None,
     )
     print("Creating Environment..")
+
+    n_vehs = config.exo_agents.vehicle.n
+    exo_veh_ipos = list(
+        zip(
+            config.exo_agents.vehicle.initial_position.x,
+            config.exo_agents.vehicle.initial_position.y,
+            config.exo_agents.vehicle.initial_position.yaw,
+        )
+    )  # [[x, y, yaw], ..]
+    exo_driving = False
+    n_peds = 0
+    peds_ipos = []
+
+    assert len(exo_veh_ipos) == n_vehs
+
     env = NormalizedEnv(
-        CarlaEnv(reward_fn=reward_functions[reward_fn], encode_state_fn=encode_state_fn)
+        CarlaEnv(
+            reward_fn=reward_functions[reward_fn],
+            encode_state_fn=encode_state_fn,
+            n_vehs=n_vehs,
+            exo_vehs_ipos=exo_veh_ipos,
+            n_peds=n_peds,
+            peds_ipos=peds_ipos,
+            exo_driving=exo_driving,
+        )
     )
 
     # normalize actions
@@ -127,7 +151,11 @@ def train():
     episode_test = 0
     try:
         for episode in range(start_episode, config.train.episodes):
-            state, terminal_state, episode_reward = env.reset(), False, []
+            state, terminal_state, episode_reward = (
+                env.reset(exo_vehs_ipos=exo_veh_ipos),
+                False,
+                [],
+            )
             terminal_state_info = ""
             states_deque = deque(maxlen=config.train.rnn_nsteps)
             next_states_deque = deque(maxlen=config.train.rnn_nsteps)
@@ -178,16 +206,16 @@ def train():
                         else:
                             model.replay_memory.add_to_memory(
                                 (
-                                    state,
+                                    state.copy(),
                                     action.copy(),
-                                    reward,
-                                    next_state,
+                                    reward.copy(),
+                                    next_state.copy(),
                                     terminal_state,
                                 )
                             )
 
                     episode_reward.append(reward)
-                    state = next_state
+                    state = deepcopy(next_state)
 
                     if config.vis.render:
                         env.render()
@@ -229,7 +257,11 @@ def train():
                 model.replay_memory.delete_memory()
 
             if episode % config.test.every == 0 and episode > 0:
-                state, terminal_state, episode_reward_test = env.reset(), False, 0
+                state, terminal_state, episode_reward_test = (
+                    env.reset(exo_vehs_ipos=exo_veh_ipos),
+                    False,
+                    0,
+                )
                 states_deque = deque(maxlen=config.train.rnn_nsteps)
                 terminal_state_info = ""
                 print("Running a test episode")
@@ -251,7 +283,7 @@ def train():
                         exit(0)
                     weighted_rw = weighted_rw_fn(reward, rw_weights)
                     episode_reward_test += weighted_rw
-                    state = next_state
+                    state = deepcopy(next_state)
                     if config.vis.render:
                         env.render()
 

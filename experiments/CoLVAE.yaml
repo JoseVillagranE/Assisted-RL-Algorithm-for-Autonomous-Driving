@@ -10,28 +10,33 @@ train:
   checkpoint_every: 100000
   episodes: 100
   device: "cpu"
-  actor_lr: 0.00001
-  critic_lr: 0.001
+  actor_lr: 0.0001
+  critic_lr: 0.0001
   optimizer: "Adam"
   type_RM: "random"
-  batch_size: 64
-  start_to_update: 0
+  batch_size: 128
+  start_to_update: 5
   optimization_steps: 1
   lambdas: [1, 1, 1]
   expert_prop: 0.25
   agent_prop: 0.75
   ou_noise_mu: 0.0
-  ou_noise_theta: 0.4
-  ou_noise_max_sigma: 0.1
+  ou_noise_theta: 0.6
+  ou_noise_max_sigma: 0.4
   ou_noise_min_sigma: 0.0
-  ou_noise_decay_period: 100
-  pretraining_steps: 10000
-  tau: 0.001
+  ou_noise_decay_period: 50
+  pretraining_steps: 5000
+  tau: 0.005
   gamma: 0.99
   wp_encode: False
   wp_encoder_size: 64
   rm_filename: "MC-1.npy" # folder's name for load many experiences tuples
-  train_mech: False
+  temporal_mech: True
+  scheduler_step_size: 20
+  scheduler_gamma: 0.1
+  load_rm_name_c: ["1", "g"]
+  load_rm_idxs: [0, 1]
+  enable_scheduler_lr: True
 
 agent:
   sensor:
@@ -46,7 +51,13 @@ exo_agents:
     spawn: False
 
   vehicle:
+    n: 1
     spawn: True
+    initial_position:
+      x: [149]
+      y: [63]
+      z: [1]
+      yaw: [180]
 
 model:
   type: "VAE"
@@ -61,10 +72,10 @@ reward_fn:
   weight_speed_limit: 1
   weight_route_al: 2
   weight_centralization: 2
-  weight_distance_to_goal: 1
+  weight_distance_to_goal: 5
 
 test:
-  every: 10
+  every: 5
   steps: 300
 
 

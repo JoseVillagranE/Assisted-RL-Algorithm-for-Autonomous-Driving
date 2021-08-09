@@ -4,22 +4,24 @@ seed: 1
 
 train:
   checkpoint_every: 100000
-  episodes: 100
+  episodes: 150
   device: "cuda:0"
-  actor_lr: 0.00001
+  actor_lr: 0.0001
   critic_lr: 0.0001
-  type_RM: "random"
-  batch_size: 64
-  train_mech: True
-  start_to_update: 0
-  optimization_steps: 1
+  type_RM: "prioritized"
+  batch_size: 128
+  temporal_mech: False
+  start_to_update: 10
+  optimization_steps: 100
   ou_noise_mu: 0.0
   ou_noise_theta: 0.6
-  ou_noise_max_sigma: 0.3
-  ou_noise_min_sigma: 0.0
+  ou_noise_max_sigma: 0.4
+  ou_noise_min_sigma: 0.1
   ou_noise_decay_period: 100
-  tau: 0.001
+  tau: 0.005
   gamma: 0.99
+  scheduler_step_size: 5
+  scheduler_gamma: 0.1
 
 agent:
   sensor:
@@ -32,7 +34,13 @@ exo_agents:
     spawn: False
 
   vehicle:
+    n: 0
     spawn: False
+    initial_position:
+      x: []
+      y: []
+      z: []
+      yaw: []
 
 model:
   type: "VAE"
@@ -47,7 +55,7 @@ reward_fn:
   weight_speed_limit: 1
   weight_route_al: 2
   weight_centralization: 2
-  weight_distance_to_goal: 1
+  weight_distance_to_goal: 5
 
 test:
   every: 5

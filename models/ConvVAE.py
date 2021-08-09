@@ -76,7 +76,7 @@ class VAE_Actor(nn.Module):
 
         self.mlp = nn.ModuleList()
 
-        if linear_layers is not None:
+        if len(linear_layers) > 0:
             for i, dim_layer in enumerate(linear_layers):
                 if i == 0:
                     self.mlp.append(nn.Linear(input_linear_layer_dim, dim_layer))
@@ -90,18 +90,20 @@ class VAE_Actor(nn.Module):
         if wp_encode:
             self.wp_encoder = nn.Linear(1, wp_encoder_size)
 
-        if os.path.isdir(VAE_weights_path):
+        if len(VAE_weights_path) > 0:
             print("Loading VAE weights..")
             self.vae.load_state_dict(torch.load(VAE_weights_path))
             if is_freeze_params:
+                print("Freezing VAE")
                 freeze_params(self.vae)
 
-        if self.lstm is not None and os.path.isdir(rnn_config["weights_path"]):
+        if self.lstm is not None:
             print("Loading RNN weights..")
             self.lstm.load_state_dict(
                 torch.load(rnn_config["weights_path"]), strict=False
             )
             if is_freeze_params:
+                print("Freezing RNN")
                 freeze_params(self.lstm)
 
     def forward(self, state):

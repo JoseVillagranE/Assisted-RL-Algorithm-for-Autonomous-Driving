@@ -3,6 +3,8 @@ import torch.nn as nn
 from torch.autograd import Variable
 import torchvision.transforms as transforms
 import numpy as np
+from copy import deepcopy
+import random
 from ExperienceReplayMemory import (
     SequentialDequeMemory,
     RandomDequeMemory,
@@ -32,6 +34,7 @@ class CoL:
         self.lambdas = config.train.lambdas
         self.model_type = config.model.type
         self.temporal_mech = config.train.temporal_mech
+        self.min_lr = config.train.scheduler_min_lr
 
         self.enable_scheduler_lr = config.train.enable_scheduler_lr
         n_channel = 3
@@ -146,42 +149,52 @@ class CoL:
         self.type_RM = config.train.type_RM
         self.optim = config.train.optimizer
 
-        if self.type_RM == "sequential":
-            self.replay_memory = SequentialDequeMemory(rw_weights)
-            self.replay_memory_e = SequentialDequeMemory(rw_weights)
-        elif self.type_RM == "random":
-            self.replay_memory = RandomDequeMemory(
-                queue_capacity=config.train.max_memory_size,
-                rw_weights=rw_weights,
-                batch_size=config.train.batch_size,
-                temporal=self.temporal_mech,
-                win=config.train.rnn_nsteps,
-            )
-            self.replay_memory_e = RandomDequeMemory(
-                queue_capacity=config.train.max_memory_size,
-                rw_weights=rw_weights,
-                batch_size=config.train.batch_size,
-                temporal=self.temporal_mech,
-                win=config.train.rnn_nsteps,
-            )
+        batch_size = config.train.batch_size
+        if self.q_of_tasks > 1:
+            self.B = []
+            self.B_e = []
+            batch_size = 1
+            self.cl_batch_size = config.train.batch_size
 
-        elif self.type_RM == "prioritized":
+        for i in range(self.q_of_tasks):
+            if self.type_RM == "sequential":
+                self.replay_memory = SequentialDequeMemory(rw_weights)
+                self.replay_memory_e = SequentialDequeMemory(rw_weights)
+            elif self.type_RM == "random":
+                self.replay_memory = RandomDequeMemory(
+                    queue_capacity=config.train.max_memory_size,
+                    rw_weights=rw_weights,
+                    batch_size=round(config.train.batch_size * self.agent_prop),
+                    temporal=self.temporal_mech,
+                    win=config.train.rnn_nsteps,
+                )
+                self.replay_memory_e = RandomDequeMemory(
+                    queue_capacity=config.train.max_memory_size,
+                    rw_weights=rw_weights,
+                    batch_size=config.train.batch_size,
+                    temporal=self.temporal_mech,
+                    win=config.train.rnn_nsteps,
+                )
+            elif self.type_RM == "prioritized":
+                alpha = 1
+                self.replay_memory = PrioritizedDequeMemory(
+                    queue_capacity=config.train.max_memory_size,
+                    alpha=config.train.alpha,
+                    beta=config.train.beta,
+                    rw_weights=rw_weights,
+                    batch_size=config.train.batch_size,
+                )
+                self.replay_memory_e = PrioritizedDequeMemory(
+                    queue_capacity=config.train.max_memory_size,
+                    alpha=config.train.alpha,
+                    beta=config.train.beta,
+                    rw_weights=rw_weights,
+                    batch_size=config.train.batch_size,
+                )
 
-            alpha = 1
-            self.replay_memory = PrioritizedDequeMemory(
-                queue_capacity=config.train.max_memory_size,
-                alpha=config.train.alpha,
-                beta=config.train.beta,
-                rw_weights=rw_weights,
-                batch_size=config.train.batch_size,
-            )
-            self.replay_memory_e = PrioritizedDequeMemory(
-                queue_capacity=config.train.max_memory_size,
-                alpha=config.train.alpha,
-                beta=config.train.beta,
-                rw_weights=rw_weights,
-                batch_size=config.train.batch_size,
-            )
+            if self.q_of_tasks > 1:
+                self.B.append(deepcopy(self.replay_memory))
+                self.B_e.append(deepcopy(self.replay_memory_e))
 
         if self.optim == "SGD":
             self.actor_optimizer = torch.optim.SGD(
@@ -256,14 +269,19 @@ class CoL:
                     num_roll,
                     transform,
                     choice_form,
+                    config.train.load_rm_idxs,
+                    config.train.load_rm_name_c,
                     vae_encode,
                 )
 
             print(f"samples of expert rm: {self.replay_memory_e.get_memory_size()}")
 
+        self.update = self._update if self.type_RM == "random" else self.p_update
         # pretraining steps
         for l in range(config.train.pretraining_steps):
             self.update(is_pretraining=True)
+
+        self.replay_memory_e.set_batch_size(round(self.batch_size * self.expert_prop))
 
     def predict(self, state, step, mode="training"):
 
@@ -276,59 +294,28 @@ class CoL:
         if self.temporal_mech:
             state = state.unsqueeze(0)
         action = self.actor(state)
-        action = action.detach().numpy()[0]  # [steer, throttle]
+        action = action.detach().numpy()  # [steer, throttle]
         if mode == "training":
             action = self.ounoise.get_action(action, step)
             action[0] = np.clip(action[0], -1, 1)
             action[1] = np.clip(action[1], -1, 1)
         return action
 
-    def update(self, is_pretraining=False):
+    def p_update(self, is_pretraining=False):
 
-        if self.batch_size * 0.75 > self.replay_memory.get_memory_size():
-            (
-                states,
-                actions,
-                rewards,
-                next_states,
-                dones,
-            ) = self.replay_memory_e.get_batch_for_replay()
+        pass
 
-            states_e = states = np.array(states)
-            actions_e = actions = np.array(actions)
-            rewards = np.array(rewards)
-            next_states = np.array(next_states)
-            dones = np.array(dones)
-        else:
-            (
-                states_e,
-                actions_e,
-                rewards_e,
-                next_states_e,
-                dones_e,
-            ) = self.replay_memory_e.get_batch_for_replay()
+    def _update(self, is_pretraining=False):
 
-            (
-                states_a,
-                actions_a,
-                rewards_a,
-                next_states_a,
-                dones_a,
-            ) = self.replay_memory.get_batch_for_replay()
-
-            states, actions, rewards, next_states, dones = cat_experience_tuple(
-                np.array(states_a),
-                np.array(states_e),
-                np.array(actions_a),
-                np.array(actions_e),
-                np.array(rewards_a),
-                np.array(rewards_e),
-                np.array(next_states_a),
-                np.array(next_states_e),
-                np.array(dones_a),
-                np.array(dones_e),
-            )
-
+        (
+            states,
+            actions,
+            rewards,
+            next_states,
+            dones,
+            states_e,
+            actions_e,
+        ) = self.get_single_memory(is_pretraining)
         # # normalize action
         # actions = 2*(actions - self.action_min)/(self.action_max - self.action_min) - 1
 
@@ -375,7 +362,7 @@ class CoL:
         L_BC = self.mse(pred_actions.squeeze(), actions_e)
 
         # Actor Q_loss
-        L_col_actor = -1 * (self.lambdas[0] * L_BC + self.lambdas[1] * L_A)
+        L_col_actor = 1 * (self.lambdas[0] * L_BC + self.lambdas[1] * L_A)
 
         self.actor_optimizer.zero_grad()
         L_col_actor.backward()
@@ -387,12 +374,13 @@ class CoL:
         nn.utils.clip_grad_norm_(self.critic.parameters(), 0.05)
         self.critic_optimizer.step()
 
-        # print(L_col_actor.item())
-        # print(L_col_critic.item())
+        print(L_col_actor.item())
+        print(L_col_critic.item())
 
         if not is_pretraining and self.enable_scheduler_lr:
-            self.actor_scheduler.step()
-            self.critic_scheduler.step()
+            if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
+                self.actor_scheduler.step()
+                self.critic_scheduler.step()
 
         for target_param, param in zip(
             self.actor_target.parameters(), self.actor.parameters()
@@ -419,6 +407,161 @@ class CoL:
 
     def lambda_decay(self, rd, n_lambda):
         self.lambdas[n_lambda] -= rd
+
+    def get_single_memory(self, is_pretraining):
+        if self.batch_size * self.agent_prop > self.replay_memory.get_memory_size():
+
+            if is_pretraining:
+                (
+                    states,
+                    actions,
+                    rewards,
+                    next_states,
+                    dones,
+                ) = self.replay_memory_e.get_batch_for_replay()
+
+                states_e = states = np.array(states)
+                actions_e = actions = np.array(actions)
+                rewards = np.array(rewards)
+                next_states = np.array(next_states)
+                dones = np.array(dones)
+            else:
+                return
+        else:
+            (
+                states_e,
+                actions_e,
+                rewards_e,
+                next_states_e,
+                dones_e,
+            ) = self.replay_memory_e.get_batch_for_replay()
+
+            (
+                states_a,
+                actions_a,
+                rewards_a,
+                next_states_a,
+                dones_a,
+            ) = self.replay_memory.get_batch_for_replay()
+
+            states, actions, rewards, next_states, dones = cat_experience_tuple(
+                np.array(states_a),
+                np.array(states_e),
+                np.array(actions_a),
+                np.array(actions_e),
+                np.array(rewards_a),
+                np.array(rewards_e),
+                np.array(next_states_a),
+                np.array(next_states_e),
+                np.array(dones_a),
+                np.array(dones_e),
+            )
+
+        return states, actions, rewards, next_states, dones, states_e, actions_e
+
+    def get_multi_memory(self, is_pretraining):
+        if self.batch_size * self.agent_prop > sum([rb for rb in self.B]):
+            if is_pretraining:
+
+                states = []
+                actions = []
+                rewards = []
+                next_states = []
+                dones = []
+                isw = []
+                inter_idxs = []
+                indexs = random.choices(len(self.B_e), k=self.cl_batch_size)
+
+                for i in indexs:
+                    state, action, reward, next_state, done, isw_, idx = self.B_e[
+                        i
+                    ].get_batch_for_replay()
+                    states += state
+                    actions += action
+                    rewards += reward
+                    next_states += next_state
+                    dones += done
+                    isw += isw_
+                    inter_idxs += idx
+
+                states_e = states = np.array(states)
+                actions_e = actions = np.array(actions)
+                rewards = np.array(rewards)
+                next_states = np.array(next_states)
+                dones = np.array(dones)
+            else:
+                return
+
+        else:
+
+            states_a = []
+            actions_a = []
+            rewards_a = []
+            next_states_a = []
+            dones_a = []
+            isw_a = []
+            inter_idxs_a = []
+            indexs_a = random.choices(len(self.B), k=self.cl_batch_size)
+
+            for i in indexs:
+                state, action, reward, next_state, done, isw_, idx = self.B[
+                    i
+                ].get_batch_for_replay()
+                states_a += state
+                actions_a += action
+                rewards_a += reward
+                next_states_a += next_state
+                dones_a += done
+                isw_a += isw_
+                inter_idxs_a += idx
+
+            states_e = []
+            actions_e = []
+            rewards_e = []
+            next_states_e = []
+            dones_e = []
+            isw_e = []
+            inter_idxs_e = []
+            indexs_e = random.choices(len(self.B_e), k=self.cl_batch_size)
+
+            for i in indexs_e:
+                state, action, reward, next_state, done, isw_, idx = self.B[
+                    i
+                ].get_batch_for_replay()
+                states_e += state
+                actions_e += action
+                rewards_e += reward
+                next_states_e += next_state
+                dones_e += done
+                isw_e += isw_
+                inter_idxs_e += idx
+
+            states, actions, rewards, next_states, dones = cat_experience_tuple(
+                np.array(states_a),
+                np.array(states_e),
+                np.array(actions_a),
+                np.array(actions_e),
+                np.array(rewards_a),
+                np.array(rewards_e),
+                np.array(next_states_a),
+                np.array(next_states_e),
+                np.array(dones_a),
+                np.array(dones_e),
+            )
+
+        return (
+            states,
+            actions,
+            rewards,
+            next_states,
+            dones,
+            states_e,
+            actions_e,
+            isw_a,
+            isw_e,
+            inter_idxs_a,
+            inter_idxs_e,
+        )
 
 
 if __name__ == "__main__":

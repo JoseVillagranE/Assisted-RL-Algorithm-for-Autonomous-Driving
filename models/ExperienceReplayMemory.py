@@ -192,6 +192,8 @@ class RandomDequeMemory(ExperienceReplayMemory):
         nums_roll=10,
         transform=None,
         choice_form="random",
+        idxs=None,
+        name_c=None,
         vae_encode=None,  # little bit ugly
     ):
         print("Load Replay memory")
@@ -201,7 +203,18 @@ class RandomDequeMemory(ExperienceReplayMemory):
         ), "Numbers of rollouts required is higher than the dataset"
         if choice_form == "random":
             files = random.sample(files, nums_roll)
-
+        elif choice_form == "name":
+            assert name_c is not None
+            files = list(
+                filter(
+                    lambda x: x.split("_")[2] == name_c[0]
+                    and x.split("_")[-1].split(".")[0] == name_c[1],
+                    files,
+                )
+            )
+        elif choice_form == "idx":
+            assert idxs is not None
+            files = [files[idx] for idx in idxs]
         else:
             files = files[:nums_roll]
 
@@ -230,8 +243,9 @@ class RandomDequeMemory(ExperienceReplayMemory):
                 # obs -> (S, C, H, W)
                 obs = vae_encode(obs).detach().numpy()  # (S, Z_dim)
                 next_obs = vae_encode(next_obs).detach().numpy()
-                obs = np.append(obs, complt_states, axis=-1)
-                next_obs = np.append(next_obs, next_complt_states, axis=-1)
+                if len(complt_states_idx) > 0:
+                    obs = np.append(obs, complt_states, axis=-1)
+                    next_obs = np.append(next_obs, next_complt_states, axis=-1)
 
             if self.temporal:
                 obs_list, next_obs_list = [], []
@@ -282,97 +296,53 @@ class PrioritizedDequeMemory(ExperienceReplayMemory):
 
     def add_to_memory(self, experience_tuple):
         self.memory.append(experience_tuple)
-        self.priority.append(
-            max(self.priority) if len(self.priority) > 0 else 1
-        )  # paper said that you have to restart priority
+        self.priority.append(max(self.priority) if len(self.priority) > 0 else 1)
 
-    def get_batch_for_replay(self, actor_target, critic, critic_target, gamma):
+    def get_batch_for_replay(self):
 
-        state_batch, action_batch, reward_batch, next_state_batch, done_batch = (
-            [],
-            [],
-            [],
-            [],
-            [],
+        sampled_states = []
+        sampled_actions = []
+        sampled_rewards = []
+        sampled_next_states = []
+        sampled_dones = []
+        isw = []
+
+        D = np.array(self.priority)
+        probs = np.power(D, self.alpha) / np.sum(np.power(D, self.alpha))
+        idxs = np.random.choice(
+            list(range(len(self.memory))), size=self.batch_size, replace=False, p=probs
         )
-        importance_sampling_weight = []
 
-        for _ in range(self.batch_size):
-            priority_normalized = np.power(
-                np.array(self.priority), self.alpha
-            ) / np.sum(np.power(np.array(self.priority), self.alpha))
-            j = random.choices(
-                range(len(self.memory)), weights=priority_normalized, k=1
-            )[
-                0
-            ]  # return a list
-            state, action, reward, next_state, done = self.memory[j]
-            state_batch.append(state)
-            action_batch.append(action)
-            next_state_batch.append(next_state)
-            done_batch.append(done)
-            reward_batch.append(reward)
+        for i in idxs:
+            state, action, reward, next_state, done = self.memory[i]
+            sampled_states.append(state)
+            sampled_actions.append(action)
+            sampled_rewards.append(reward)
+            sampled_next_states.append(next_state)
+            sampled_dones.append(done)
 
             # compute importance sampling weight
-            w_j = 1 / (
-                (self.queue_capacity * priority_normalized[j]) ** self.beta
-            )  # in paper add max w_i
-            importance_sampling_weight.append(w_j)
+            w_j = (self.queue_capacity * probs[i]) ** (-self.beta)
+            # in paper add max w_i
+            isw.append(w_j)
 
-            # Calculate TD-error
-            state = torch.FloatTensor(state)
-            action = torch.FloatTensor(action).unsqueeze(0)
-            next_state = torch.FloatTensor(next_state)
-
-            # mm rethink this sum of rewards
-            if isinstance(reward_batch[0], tuple):
-                delta = (
-                    sum(reward)
-                    + gamma
-                    * critic_target(next_state, actor_target(next_state))
-                    .detach()
-                    .numpy()
-                    .squeeze()
-                    - critic(state, action).detach().numpy().squeeze()
-                )
-            else:
-                delta = (
-                    reward
-                    + gamma
-                    * critic_target(next_state, actor_target(next_state))
-                    .detach()
-                    .numpy()
-                    .squeeze()
-                    - critic(state, action).detach().numpy().squeeze()
-                )
-            # update
-            self.priority[j] = abs(delta)
-
-        if isinstance(reward_batch[0], tuple):
-            list_rw_i = list(zip(*reward_batch))  # sort in order of type reward
-            reward_batch = [
-                list(map(lambda y: (y - min(x)) / (max(x) - min(x) + 1e-30), x))
-                for x in list_rw_i
-            ]  # normalize
-            reward_batch = list(zip(*reward_batch))
-            if self.rw_weights is not None:
-                reward_batch = np.multiply(np.array(reward_batch), self.rw_weights).sum(
-                    axis=1
-                )
         return (
-            state_batch,
-            action_batch,
-            reward_batch,
-            next_state_batch,
-            done_batch,
-            importance_sampling_weight,
+            sampled_states,
+            sampled_actions,
+            sampled_rewards,
+            sampled_next_states,
+            sampled_dones,
+            isw,
+            idxs,
         )
+
+    def update_priorities(self, idxs, priorities):
+
+        for idx, priority in zip(idxs, priorities):
+            self.priority[idx] = priority
 
     def get_memory_size(self):
         return len(self.memory)
-
-    def delete_memory(self):
-        pass
 
 
 if __name__ == "__main__":
@@ -460,15 +430,39 @@ if __name__ == "__main__":
 
     ########################################################
 
-    RB = RandomDequeMemory(10, rw_weights=None, batch_size=4, temporal=True, win=3)
+    # RB = RandomDequeMemory(10, rw_weights=None, batch_size=4, temporal=True, win=3)
 
-    path = "../S_Rollouts_11/"
-    complt_states = [0, 1]
-    RB.load_rm_folder(path, complt_states)
-    batch = RB.get_batch_for_replay()
-    states = batch[0]
-    actions = batch[1]
-    states = torch.tensor(states)
-    actions = torch.tensor(actions)
-    print(states.shape)
-    print(actions.shape)
+    # path = "../S_Rollouts_11/"
+    # complt_states = [0, 1]
+    # RB.load_rm_folder(path, complt_states)
+    # batch = RB.get_batch_for_replay()
+    # states = batch[0]
+    # actions = batch[1]
+    # states = torch.tensor(states)
+    # actions = torch.tensor(actions)
+    # print(states.shape)
+    # print(actions.shape)
+
+    ############################################################################3
+
+    RB_1 = RandomDequeMemory(10, rw_weights=None, batch_size=1, temporal=False, win=3)
+    RB_2 = RandomDequeMemory(10, rw_weights=None, batch_size=1, temporal=False, win=3)
+    RB_3 = RandomDequeMemory(10, rw_weights=None, batch_size=1, temporal=False, win=3)
+
+    RB_1.add_to_memory((1, 1, 5, 2, False))
+    RB_2.add_to_memory((2, 1, 6, 2, False))
+    RB_3.add_to_memory((3, 1, 7, 2, False))
+
+    B = []
+    B.extend([RB_1, RB_2, RB_3])
+
+    states, actions, rewards, next_states, dones = [], [], [], [], []
+    for i in range(len(B)):
+        state, action, reward, next_state, done = B[i].get_batch_for_replay()
+        states += state
+        actions += action
+        rewards += reward
+        next_states += next_state
+        dones += done
+
+    print(rewards)

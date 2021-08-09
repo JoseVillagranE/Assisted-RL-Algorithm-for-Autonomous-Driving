@@ -6,13 +6,14 @@ import sys
 import pathlib
 import copy
 from config.config import config
+
 try:
     sys.path.append(config.carla_egg)
 except IndexError:
     pass
 
 try:
-    sys.path.append(str(config.carla_dir) + '/PythonAPI/carla')
+    sys.path.append(str(config.carla_dir) + "/PythonAPI/carla")
 except IndexError:
     pass
 
@@ -25,12 +26,15 @@ from .wrapper import *
 import signal
 from collections import deque
 from agents.navigation.controller import VehiclePIDController
-from utils.utils import vector, \
-                        distance_to_lane, \
-                        get_actor_display_name, \
-                        get_actor_display_type, \
-                        PID_assign
+from utils.utils import (
+    vector,
+    distance_to_lane,
+    get_actor_display_name,
+    get_actor_display_type,
+    PID_assign,
+)
 from PIL import Image
+
 
 class KeyboardControl(object):
     def __init__(self):
@@ -52,29 +56,36 @@ class KeyboardControl(object):
 
 
 class NormalizedEnv(gym.ActionWrapper):
+    def __init__(self, env):
+        super().__init__(env)
 
     def action(self, action):
-        act_k = (self.action_space.high - self.action_space.low)/ 2.
-        act_b = (self.action_space.high + self.action_space.low)/ 2.
-        return act_k*action + act_b
+        act_k = (self.action_space.high - self.action_space.low) / 2.0
+        act_b = (self.action_space.high + self.action_space.low) / 2.0
+        return act_k * action + act_b
 
     def reverse_action(self, action):
-        act_k_inv = 2./(self.action_space.high - self.action_space.low)
-        act_b = (self.action_space.high + self.action_space.low)/ 2.
-        return act_k_inv*(action - act_b)
+        act_k_inv = 2.0 / (self.action_space.high - self.action_space.low)
+        act_b = (self.action_space.high + self.action_space.low) / 2.0
+        return act_k_inv * (action - act_b)
+
 
 class CarlaEnv(gym.Env):
 
-    metadata = {"render.modes": ["human", "rgb_array", "rgb_array_no_hud", "state_pixels"]}
+    metadata = {
+        "render.modes": ["human", "rgb_array", "rgb_array_no_hud", "state_pixels"]
+    }
 
-    def __init__(self, 
-                 reward_fn=None, 
-                 encode_state_fn=None,
-                 n_vehs=0,
-                 exo_vehs_ipos=[],
-                 n_peds=0,
-                 peds_ipos=[],
-                 exo_driving=False):
+    def __init__(
+        self,
+        reward_fn=None,
+        encode_state_fn=None,
+        n_vehs=0,
+        exo_vehs_ipos=[],
+        n_peds=0,
+        peds_ipos=[],
+        exo_driving=False,
+    ):
         """
         reward_fn (function): Custom reward function is called every step. If none, no reward function is used
         """
@@ -96,9 +107,13 @@ class CarlaEnv(gym.Env):
         if config.vis.render:
 
             if config.agent.sensor.spectator_camera:
-                self.display = pygame.display.set_mode(config.simulation.view_res, pygame.HWSURFACE | pygame.DOUBLEBUF)
+                self.display = pygame.display.set_mode(
+                    config.simulation.view_res, pygame.HWSURFACE | pygame.DOUBLEBUF
+                )
             elif config.agent.sensor.dashboard_camera:
-                self.display = pygame.display.set_mode(config.simulation.obs_res, pygame.HWSURFACE | pygame.DOUBLEBUF)
+                self.display = pygame.display.set_mode(
+                    config.simulation.obs_res, pygame.HWSURFACE | pygame.DOUBLEBUF
+                )
 
         self.clock = pygame.time.Clock()
         self.synchronous = config.synchronous_mode
@@ -107,27 +122,34 @@ class CarlaEnv(gym.Env):
 
         # setup gym env
         self.seed(config.seed)
-        self.action_space = gym.spaces.Box(np.array([-1, 0]), np.array([1, 1]), dtype=np.float32) # steer, thottle
-        self.observation_space = gym.spaces.Box(low=0.0, high=1.0, shape=(*config.simulation.obs_res, 3), dtype=np.float32)
+        self.action_space = gym.spaces.Box(
+            np.array([-1, 0]), np.array([1, 1]), dtype=np.float32
+        )  # steer, thottle
+        self.observation_space = gym.spaces.Box(
+            low=0.0, high=1.0, shape=(*config.simulation.obs_res, 3), dtype=np.float32
+        )
         self.action_smoothing = config.simulation.action_smoothing
         self.world = None
         self._dt = 1.0 / 20.0
         self.exo_driving = exo_driving
 
         self.terminal_state = False
-        self.extra_info = [] # List of extra info shown of the HUD
-        
-        self.initial_location = carla.Location(config.agent.initial_position.x,
-                                               config.agent.initial_position.y,
-                                               config.agent.initial_position.z,)
-        
-        self.goal_location = carla.Location(config.agent.goal.x,
-                                            config.agent.goal.y,
-                                            config.agent.goal.z)
-        
-        self.max_distance_to_goal = self.initial_location.distance(self.goal_location) #[m]
-        
-        
+        self.extra_info = []  # List of extra info shown of the HUD
+
+        self.initial_location = carla.Location(
+            config.agent.initial_position.x,
+            config.agent.initial_position.y,
+            config.agent.initial_position.z,
+        )
+
+        self.goal_location = carla.Location(
+            config.agent.goal.x, config.agent.goal.y, config.agent.goal.z
+        )
+
+        self.max_distance_to_goal = self.initial_location.distance(
+            self.goal_location
+        )  # [m]
+
         self.margin_to_goal = config.agent.margin_to_goal
         self.safe_distance = config.agent.safe_distance
 
@@ -145,28 +167,32 @@ class CarlaEnv(gym.Env):
         self.collision_pedestrian = False
         self.collision_vehicle = False
         self.collision_other = False
-        self.collision_other_objects = ["Building",
-                                        "Fence",
-                                        "Pole",
-                                        "Vegetation",
-                                        "Wall",
-                                        "Traffic sign",
-                                        "SideWalk",
-                                        "Unknown",
-                                        "Other"]
+        self.collision_other_objects = [
+            "Building",
+            "Fence",
+            "Pole",
+            "Vegetation",
+            "Wall",
+            "Traffic sign",
+            "SideWalk",
+            "Unknown",
+            "Other",
+        ]
         self.final_goal = False
         # functions for encode state
-        self.encode_state_fn = (lambda x: x) if not callable(encode_state_fn) else encode_state_fn
+        self.encode_state_fn = (
+            (lambda x: x) if not callable(encode_state_fn) else encode_state_fn
+        )
         try:
             self.client = carla.Client(config.simulation.host, config.simulation.port)
             self.client.set_timeout(config.simulation.timeout)
-            
+
             # create the World
             self.world = World(self.client)
             self.world.set_weather(carla.WeatherParameters.ClearNoon)
             self.controller = KeyboardControl()
 
-            #synchronous mode
+            # synchronous mode
             if self.synchronous:
                 settings = self.world.get_settings()
                 settings.synchronous_mode = True
@@ -174,74 +200,82 @@ class CarlaEnv(gym.Env):
                 self.world.apply_settings(settings)
 
             # Initial location
-            initial_location = carla.Location(x=config.agent.initial_position.x,
-                                            y=config.agent.initial_position.y,
-                                            z=config.agent.initial_position.z)
+            initial_location = carla.Location(
+                x=config.agent.initial_position.x,
+                y=config.agent.initial_position.y,
+                z=config.agent.initial_position.z,
+            )
 
-            end_location = carla.Location(x = config.agent.goal.x,
-                                          y = config.agent.goal.y,
-                                          z = config.agent.goal.z)
+            end_location = carla.Location(
+                x=config.agent.goal.x, y=config.agent.goal.y, z=config.agent.goal.z
+            )
 
-            self.initial_transform = carla.Transform(initial_location,
-                                                        carla.Rotation(yaw=config.agent.initial_position.yaw))
+            self.initial_transform = carla.Transform(
+                initial_location, carla.Rotation(yaw=config.agent.initial_position.yaw)
+            )
             # Create a agent vehicle
-            self.agent = Vehicle(self.world,
-                                transform=self.initial_transform,
-                                vehicle_type=config.agent.vehicle_type,
-                                on_collision_fn=lambda e: self._on_collision(e),
-                                end_location=end_location)
+            self.agent = Vehicle(
+                self.world,
+                transform=self.initial_transform,
+                vehicle_type=config.agent.vehicle_type,
+                on_collision_fn=lambda e: self._on_collision(e),
+                end_location=end_location,
+            )
 
-            self.agent.set_automatic_wp() # I need for orientation reward
+            self.agent.set_automatic_wp()  # I need for orientation reward
             self.exo_vehs_initial_transforms = []
             self.exo_vehs = []
             for exo_veh_ipos in exo_vehs_ipos:
-            #     # Create a exo-vehicle
-                exo_veh_initial_location = carla.Location(x=exo_veh_ipos[0],
-                                                        y=exo_veh_ipos[1],
-                                                        z=1)
+                #     # Create a exo-vehicle
+                exo_veh_initial_location = carla.Location(
+                    x=exo_veh_ipos[0], y=exo_veh_ipos[1], z=1
+                )
                 if config.exo_agents.vehicle.end_position.x:
-                    exo_veh_end_location = carla.Location(x=config.exo_agents.vehicle.end_position.x,
-                                                y=config.exo_agents.vehicle.end_position.y,
-                                                z=config.exo_agents.vehicle.end_position.z)
+                    exo_veh_end_location = carla.Location(
+                        x=config.exo_agents.vehicle.end_position.x,
+                        y=config.exo_agents.vehicle.end_position.y,
+                        z=config.exo_agents.vehicle.end_position.z,
+                    )
                 else:
                     exo_veh_end_location = None
 
-                exo_veh_initial_transform = carla.Transform(exo_veh_initial_location,
-                                            carla.Rotation(yaw=exo_veh_ipos[2]))
+                exo_veh_initial_transform = carla.Transform(
+                    exo_veh_initial_location, carla.Rotation(yaw=exo_veh_ipos[2])
+                )
 
-                self.exo_vehicle = Vehicle(self.world, transform=exo_veh_initial_transform,
-                                            end_location=None,
-                                            target_speed = config.exo_agents.vehicle.target_speed,
-                                            vehicle_type=config.exo_agents.vehicle.vehicle_type)
+                self.exo_vehicle = Vehicle(
+                    self.world,
+                    transform=exo_veh_initial_transform,
+                    end_location=None,
+                    target_speed=config.exo_agents.vehicle.target_speed,
+                    vehicle_type=config.exo_agents.vehicle.vehicle_type,
+                )
 
-                
-                self.exo_veh_initial_transform.append(exo_veh_initial_transform)
+                self.exo_vehs_initial_transforms.append(exo_veh_initial_transform)
                 self.exo_vehs.append(self.exo_vehicle)
-                
+
                 # self.exo_vehicle.set_automatic_wp()
                 if exo_driving:
-                    PID_assign(self.exo_vehicle,
-                               config.exo_agents.vehicle.PID.lateral_Kp,
-                               config.exo_agents.vehicle.PID.lateral_Kd,
-                               config.exo_agents.vehicle.PID.lateral_Ki,
-                               self._dt)
-                
+                    PID_assign(
+                        self.exo_vehicle,
+                        config.exo_agents.vehicle.PID.lateral_Kp,
+                        config.exo_agents.vehicle.PID.lateral_Kd,
+                        config.exo_agents.vehicle.PID.lateral_Ki,
+                        self._dt,
+                    )
+
                 self.exo_vehicle.is_static = True
-                    
-                
-                
+
             self.initial_transform_ped = None
             self.peds_initial_transforms = []
             self.peds = []
             for ped_ipos in peds_ipos:
                 # Create a pedestrian
-                ped_initial_location = carla.Location(x=ped_ipos[0],
-                                                        y=ped_ipos[1],
-                                                        z=1)
-                initial_transform_ped = carla.Transform(ped_initial_location,
-                                            carla.Rotation(yaw=ped_ipos[2]))
-                
-                
+                ped_initial_location = carla.Location(x=ped_ipos[0], y=ped_ipos[1], z=1)
+                initial_transform_ped = carla.Transform(
+                    ped_initial_location, carla.Rotation(yaw=ped_ipos[2])
+                )
+
                 pedestrian = Pedestrian(self.world, transform=initial_transform_ped)
 
                 self.peds_initial_transforms.append(initial_transform_ped)
@@ -249,41 +283,47 @@ class CarlaEnv(gym.Env):
 
             # Setup sensor for agent
             if config.agent.sensor.dashboard_camera:
-                self.dashcam = Camera(self.world, config.simulation.obs_res[0],
-                                    config.simulation.obs_res[1],
-                                    transform= camera_transforms["dashboard"],
-                                        attach_to=self.agent, on_recv_image = lambda e: self._set_observation_image(e),
-                                        camera_type=config.agent.sensor.camera_type,
-                                        color_converter=carla.ColorConverter.Raw if config.agent.sensor.color_converter=="raw" else \
-                                                        carla.ColorConverter.CityScapesPalette, 
-                                        sensor_tick=0.0 if config.synchronous_mode else 1.0/self.fps)
-                
+                self.dashcam = Camera(
+                    self.world,
+                    config.simulation.obs_res[0],
+                    config.simulation.obs_res[1],
+                    transform=camera_transforms["dashboard"],
+                    attach_to=self.agent,
+                    on_recv_image=lambda e: self._set_observation_image(e),
+                    camera_type=config.agent.sensor.camera_type,
+                    color_converter=carla.ColorConverter.Raw
+                    if config.agent.sensor.color_converter == "raw"
+                    else carla.ColorConverter.CityScapesPalette,
+                    sensor_tick=0.0 if config.synchronous_mode else 1.0 / self.fps,
+                )
+
                 # self.dashcam_1 = Camera(self.world, config.simulation.obs_res[0],
                 #                     config.simulation.obs_res[1],
                 #                     transform= camera_transforms["dashboard_1"],
                 #                         attach_to=self.agent, on_recv_image = lambda e: self._set_observation_image(e),
                 #                         sensor_tick=0.0 if config.synchronous_mode else 1.0/self.fps)
 
-
             if config.agent.sensor.spectator_camera:
-                self.camera = Camera(self.world, config.simulation.view_res[0],
-                                            config.simulation.view_res[1],
-                                            transform = camera_transforms["spectator"],
-                                            attach_to=self.agent, on_recv_image = lambda e: self._set_viewer_image(e),
-                                            sensor_tick=0.0 if config.synchronous_mode else 1.0/self.fps)
-                
+                self.camera = Camera(
+                    self.world,
+                    config.simulation.view_res[0],
+                    config.simulation.view_res[1],
+                    transform=camera_transforms["spectator"],
+                    attach_to=self.agent,
+                    on_recv_image=lambda e: self._set_viewer_image(e),
+                    sensor_tick=0.0 if config.synchronous_mode else 1.0 / self.fps,
+                )
 
         except Exception as e:
             self.close()
             raise e
 
-
         self.world.get_exo_agents(self.agent.get_carla_actor().id)
-        
+
         self.num_saved_obs = 5435
-        
+
         self.agent.control.brake = 0.0
-        
+
         # self.world.debug.draw_point(carla.Location(config.agent.goal.x,
         #                             config.agent.goal.y, config.agent.goal.z),
         #                             color=carla.Color(0, 0, 255))
@@ -293,23 +333,28 @@ class CarlaEnv(gym.Env):
         return [seed]
 
     def step(self, action):
-        
-        #print(self.clock.get_fps())
+
+        # print(self.clock.get_fps())
 
         if self.closed:
             raise Exception("Env was closed")
 
         if action is not None:
             steer, throttle = [float(a) for a in action]
-            self.agent.control.steer = self.agent.control.steer*self.action_smoothing + steer *(1.0 - self.action_smoothing)
-            self.agent.control.throttle = self.agent.control.throttle*self.action_smoothing + throttle *(1.0 - self.action_smoothing)
-            self.agent.control.brake = 0.
+            self.agent.control.steer = (
+                self.agent.control.steer * self.action_smoothing
+                + steer * (1.0 - self.action_smoothing)
+            )
+            self.agent.control.throttle = (
+                self.agent.control.throttle * self.action_smoothing
+                + throttle * (1.0 - self.action_smoothing)
+            )
+            self.agent.control.brake = 0.0
         if self.exo_driving:
             # Always exo agent have action
-            next_wp = self.exo_vehs[0].get_next_wp() # np.array -> coor
+            next_wp = self.exo_vehs[0].get_next_wp()  # np.array -> coor
             if not self.exo_vehs[0].autopilot_mode:
-                exo_control = self.exo_veh_controller.run_step(self.speed,
-                                                               next_wp)
+                exo_control = self.exo_veh_controller.run_step(self.speed, next_wp)
                 self.exo_vehs[0].control.steer = exo_control.steer
                 self.exo_vehs[0].control.throttle = exo_control.throttle
                 self.exo_vehs[0].control.brake = 0.0
@@ -318,15 +363,14 @@ class CarlaEnv(gym.Env):
         # Get most recent observation and viewer image
         if config.agent.sensor.dashboard_camera:
             self.observation = self._get_observation_image()
-            #img = Image.fromarray(self.observation)
-            #img.save("./segmentation_data/"+str(self.num_saved_obs)+".png")
-            #self.num_saved_obs += 1
-            
-            
+            # img = Image.fromarray(self.observation)
+            # img.save("./segmentation_data/"+str(self.num_saved_obs)+".png")
+            # self.num_saved_obs += 1
+
         if config.agent.sensor.spectator_camera:
             self.viewer_image = self._get_viewer_image()
 
-        encode_state = self.encode_state_fn(self) # preprocess image
+        encode_state = self.encode_state_fn(self)  # preprocess image
 
         # Current location
         transform = self.agent.get_transform()
@@ -336,19 +380,19 @@ class CarlaEnv(gym.Env):
         current_wp = self.agent.get_current_wp()
         next_wp = self.agent.get_next_wp_ego()
 
-        self.distance_from_center = distance_to_lane(vector(current_wp.transform.location),
-                                                vector(next_wp.transform.location),
-                                                vector(transform.location))
+        self.distance_from_center = distance_to_lane(
+            vector(current_wp.transform.location),
+            vector(next_wp.transform.location),
+            vector(transform.location),
+        )
 
         self.terminal_state = self.check_for_terminal_state()
         reward = self.reward_fn(self)
-
 
         # Terminal state for distance to exo-agents or objective
 
         # if self.check_for_terminal_state():
         #     self.terminal_state = True
-
 
         pygame.event.pump()
         if pygame.key.get_pressed()[K_ESCAPE]:
@@ -357,10 +401,7 @@ class CarlaEnv(gym.Env):
 
         return encode_state, reward, self.terminal_state, {"closed": self.closed}
 
-    def reset(self, is_training=False, 
-              exo_vehs_ipos=[], 
-              peds_ipos=[],
-              exo_wps=None):
+    def reset(self, is_training=False, exo_vehs_ipos=[], peds_ipos=[], exo_wps=None):
 
         self.agent.control.steer = float(0.0)
         self.agent.control.throttle = float(0.0)
@@ -368,59 +409,60 @@ class CarlaEnv(gym.Env):
         self.agent.current_wp_index = 0
 
         self.agent.set_transform(self.initial_transform)
-        self.agent.set_simulate_physics(False) # freeze the vehicle
+        self.agent.set_simulate_physics(False)  # freeze the vehicle
         self.world.tick()
         self.agent.set_simulate_physics(True)
-        
-        diff = len(self.exo_vehs_initial_transforms)-len(exo_vehs_ipos)
+
+        diff = len(self.exo_vehs_initial_transforms) - len(exo_vehs_ipos)
         if diff > 0:
             # delete some exo-vehicles
             for i in range(diff):
                 self.exo_vehs[i].destroy()
             del self.exo_vehs[:diff]
             del self.exo_vehs_initial_transforms[:diff]
-            
+
         elif diff < 0:
             # add exo_veh
             for i in range(abs(diff)):
-                location = carla.Location(x=exo_vehs_ipos[i][0],
-                                          y=exo_vehs_ipos[i][1],
-                                          z=1)
+                location = carla.Location(
+                    x=exo_vehs_ipos[i][0], y=exo_vehs_ipos[i][1], z=1
+                )
                 rotation = carla.Rotation(yaw=exo_vehs_ipos[i][2])
-                                          
+
                 transform = carla.Transform(location, rotation)
-                exo_veh = Vehicle(self.world, 
-                                  transform=transform,
-                                  end_location=None,
-                                  target_speed = config.exo_agents.vehicle.target_speed,
-                                  vehicle_type=config.exo_agents.vehicle.vehicle_type)
+                exo_veh = Vehicle(
+                    self.world,
+                    transform=transform,
+                    end_location=None,
+                    target_speed=config.exo_agents.vehicle.target_speed,
+                    vehicle_type=config.exo_agents.vehicle.vehicle_type,
+                )
                 self.exo_vehs.append(exo_veh)
                 self.exo_vehs_initial_transforms.append(transform)
                 if self.exo_driving:
-                    self.exo_veh_controller = PID_assign(exo_veh,
-                               config.exo_agents.vehicle.PID.lateral_Kp,
-                               config.exo_agents.vehicle.PID.lateral_Kd,
-                               config.exo_agents.vehicle.PID.lateral_Ki,
-                               self._dt)
-                
-            
+                    self.exo_veh_controller = PID_assign(
+                        exo_veh,
+                        config.exo_agents.vehicle.PID.lateral_Kp,
+                        config.exo_agents.vehicle.PID.lateral_Kd,
+                        config.exo_agents.vehicle.PID.lateral_Ki,
+                        self._dt,
+                    )
+
         for exo_veh, exo_veh_ipos in zip(self.exo_vehs, exo_vehs_ipos):
-            exo_veh_location = carla.Location(x=exo_veh_ipos[0],
-                                              y=exo_veh_ipos[1],
-                                              z=1)
-            
+            exo_veh_location = carla.Location(x=exo_veh_ipos[0], y=exo_veh_ipos[1], z=1)
+
             exo_veh_rotation = carla.Rotation(yaw=exo_veh_ipos[2])
-            exo_veh_transform = carla.Transform(exo_veh_location,
-                                                exo_veh_rotation)
+            exo_veh_transform = carla.Transform(exo_veh_location, exo_veh_rotation)
             exo_veh.set_transform(exo_veh_transform)
             exo_veh.control.brake = 1.0
             exo_veh.control.throttle = 0.0
-            
+
             # set wps if it's neccesary
-            if exo_wps is not None: exo_veh.set_wps(exo_wps)
-            
-        diff = len(self.peds_initial_transforms)-len(peds_ipos)
-        
+            if exo_wps is not None:
+                exo_veh.set_wps(exo_wps)
+
+        diff = len(self.peds_initial_transforms) - len(peds_ipos)
+
         if diff > 0:
             # delete some peds
             for i in range(diff):
@@ -430,31 +472,25 @@ class CarlaEnv(gym.Env):
         elif diff < 0:
             # add peds
             for i in range(abs(diff)):
-                location = carla.Location(x=peds_ipos[i][0],
-                                          y=peds_ipos[i][1],
-                                          z=1)
+                location = carla.Location(x=peds_ipos[i][0], y=peds_ipos[i][1], z=1)
                 rotation = carla.Rotation(yaw=peds_ipos[i][2])
                 transform = carla.Transform(location, rotation)
-                                          
-                ped = Pedestrian(self.world,
-                                  transform=transform)
+
+                ped = Pedestrian(self.world, transform=transform)
                 self.peds.append(ped)
                 self.peds_initial_transforms.append(transform)
-                
+
         for ped, ped_ipos in zip(self.peds, peds_ipos):
-            ped_location = carla.Location(x=ped_ipos[0],
-                                          y=ped_ipos[1],
-                                          z=1)
-            
+            ped_location = carla.Location(x=ped_ipos[0], y=ped_ipos[1], z=1)
+
             ped_rotation = carla.Rotation(yaw=ped_ipos[2])
-            ped_transform = carla.Transform(ped_location,
-                                            ped_rotation)
+            ped_transform = carla.Transform(ped_location, ped_rotation)
             ped.set_transform(ped_transform)
-        
+
         self.world.tick()
 
-        self.terminal_state = False # Set to true when we want to end episode
-        self.closed = False         # Set to True when ESC is pressed
+        self.terminal_state = False  # Set to true when we want to end episode
+        self.closed = False  # Set to True when ESC is pressed
         self.observation = self.observation_buffer = None
         self.viewer_image = self.viewer_image_buffer = None
         self.collision_pedestrian = False
@@ -467,45 +503,55 @@ class CarlaEnv(gym.Env):
     def render(self, mode="human"):
 
         view_h, view_w = 10, 0
-        
+
         if config.agent.sensor.dashboard_camera:
             # Superimpose current observation into top-right corner
             obs_h, obs_w = self.observation.shape[:2]
             # pos = (view_w - obs_w - 10, 10)
             pos = (0, 0)
-            self.display.blit(pygame.surfarray.make_surface(self.observation.swapaxes(0,1)), pos)
-        
+            self.display.blit(
+                pygame.surfarray.make_surface(self.observation.swapaxes(0, 1)), pos
+            )
+
         if config.agent.sensor.spectator_camera:
             view_h, view_w = self.viewer_image.shape[:2]
-            self.display.blit(pygame.surfarray.make_surface(self.viewer_image.swapaxes(0,1)), (0, 0)) # Draw the image on the surface
-
+            self.display.blit(
+                pygame.surfarray.make_surface(self.viewer_image.swapaxes(0, 1)), (0, 0)
+            )  # Draw the image on the surface
 
         # Render to screen
-        pygame.display.flip() # Will update the contents of entire display
+        pygame.display.flip()  # Will update the contents of entire display
 
         if mode == "rgb_array_no_hud":
             return self.viewer_image
 
     def check_for_terminal_state(self, verbose=True):
-        '''
-            Check for crashes or arrive to goal
-            output: True if crash or goal
-        '''
+        """
+        Check for crashes or arrive to goal
+        output: True if crash or goal
+        """
         if self.collision_vehicle:
             return True
-        
+
         if self.collision_pedestrian:
             return True
-        
+
         if self.collision_other:
             return True
 
-        self.distance_to_goal = self.agent.get_carla_actor().get_transform().location.distance(self.goal_location)
+        self.distance_to_goal = (
+            self.agent.get_carla_actor()
+            .get_transform()
+            .location.distance(self.goal_location)
+        )
         if self.distance_to_goal < self.margin_to_goal:
             self.final_goal = True
             return True
-        
-        if self.agent.get_carla_actor().get_transform().location.x > config.agent.goal.x:
+
+        if (
+            self.agent.get_carla_actor().get_transform().location.x
+            > config.agent.goal.x
+        ):
             self.extra_info.append("Cross Finish Line")
             return True
         return False
@@ -532,7 +578,6 @@ class CarlaEnv(gym.Env):
             self.collision_pedestrian = True
         else:
             self.collision_other = True
-            
 
     def _set_observation_image(self, image):
         self.observation_buffer = image
@@ -540,20 +585,22 @@ class CarlaEnv(gym.Env):
     def _set_viewer_image(self, image):
         self.viewer_image_buffer = image
 
-
     def _draw_path(self, life_time=60.0, skip=0):
         """
         Draw a connected path from start of route to end
         """
         for actor in self.world.actor_list:
-            for i in range(0, len(actor.route_wp), skip+1):
+            for i in range(0, len(actor.route_wp), skip + 1):
                 w0 = self.route_wp[i]
-                w1 = self.route_wp[i+1]
+                w1 = self.route_wp[i + 1]
                 self.world.debug.draw_line(
-                w0.transform.location,
-                w1.transform.location,
-                thickness=0.1, color=carla.Color(255, 0, 0),
-                life_time=life_time) # Fix the color specified
+                    w0.transform.location,
+                    w1.transform.location,
+                    thickness=0.1,
+                    color=carla.Color(255, 0, 0),
+                    life_time=life_time,
+                )  # Fix the color specified
+
     def close(self):
         pygame.quit()
         if self.carla_process:
@@ -561,9 +608,9 @@ class CarlaEnv(gym.Env):
         if self.world is not None:
             self.world.destroy()
         self.closed = True
-        
+
     def get_agent_extra_info(self):
-        speed = self.agent.get_speed()*3.6 # [km/h]
+        speed = self.agent.get_speed() * 3.6  # [km/h]
         steer = self.agent.control.steer
         throttle = self.agent.control.throttle
         orientation = vector(self.agent.get_forward_vector())
@@ -593,10 +640,11 @@ def game_loop():
                 action[0] = np.clip(action[0], -1, 1)
                 action[1] = 1.0 if keys[K_UP] or keys[K_w] else 0.0
                 obs, _, done, info = env.step(action)
-                if info["closed"]: # Check if closed
+                if info["closed"]:  # Check if closed
                     exit(0)
-                env.render("rgb_array_no_hud") # Render
-                if done: break
+                env.render("rgb_array_no_hud")  # Render
+                if done:
+                    break
     except Exception as e:
         raise e
 
@@ -606,4 +654,4 @@ if __name__ == "__main__":
     try:
         game_loop()
     except KeyboardInterrupt:
-        print('\nCancelled by user. Bye!')
+        print("\nCancelled by user. Bye!")

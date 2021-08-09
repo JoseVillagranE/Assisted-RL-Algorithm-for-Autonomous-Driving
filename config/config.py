@@ -24,6 +24,7 @@ path_egg = glob.glob(
 config = edict()
 config.project = str(root_dir.resolve())  # Root of the project
 config.seed = 1
+config.pytorch_seed = 1
 config.gpus = "0"
 config.carla_dir = carla_dir
 config.carla_egg = path_egg
@@ -61,7 +62,7 @@ config.train.steps = 300  # es una especie de time-out
 config.train.optimizer = "Adam"
 config.train.actor_lr = 1e-4
 config.train.critic_lr = 1e-3
-config.train.max_memory_size = 100000000  # 1e8
+config.train.max_memory_size = 10000  # 4e5
 config.train.tau = 0.001
 config.train.gamma = 0.99
 config.train.alpha = 0.7  # Prioritized Experience Replay
@@ -93,7 +94,9 @@ config.train.lambdas = [1, 1, 1]
 config.train.expert_prop = 0.25  # CoL
 config.train.agent_prop = 0.75
 config.train.rm_filename = "BC-1.npy"
-config.train.VAE_weights_path = "./models/weights/segmodel_expert_samples_sem_all.pt"
+config.train.VAE_weights_path = os.path.join(
+    root_dir, "models/weights/segmodel_expert_samples_sem_all.pt"
+)
 # RNN
 config.train.temporal_mech = False
 config.train.rnn_type = "mdn_rnn"
@@ -101,10 +104,12 @@ config.train.rnn_input_size = config.train.state_dim + config.train.action_space
 config.train.rnn_hidden_size = 512
 config.train.gaussians = 3
 config.train.rnn_num_layers = 1
-config.train.RNN_weights_path = "./models/weights/lstm_512_st_3_wd.pt"
+config.train.RNN_weights_path = os.path.join(
+    root_dir, "models/weights/lstm_512_st_3_wd.pt"
+)
 config.train.rnn_nsteps = 2
 
-config.train.linear_layers = [512]
+config.train.linear_layers = []
 
 config.train.ou_noise_mu = 0.0
 config.train.ou_noise_theta = 0.6
@@ -115,6 +120,7 @@ config.train.ou_noise_decay_period = 250
 config.train.enable_scheduler_lr = False
 config.train.scheduler_step_size = 100  # epochs
 config.train.scheduler_gamma = 0.1
+config.train.scheduler_min_lr = 1e-7
 
 config.train.load_rm = True
 config.train.load_rm_file = False  # file or folder
@@ -122,6 +128,18 @@ config.train.load_rm_path = "./S_Rollouts_11"
 config.train.load_rm_idxs = [0, 1]
 config.train.load_rm_num_rolls = 20
 config.train.load_rm_choice = "random"
+config.train.load_rm_name_c = ["0", "g"]
+
+config.cl_train = edict()
+config.cl_train.q_of_tasks = 1
+config.cl_train.exo_sample = "random"
+config.cl_train.L = 10  # values functions lenght
+config.cl_train.alpha = 0
+config.cl_train.episodes = 20
+config.cl_train.general_tr_episodes = 200
+config.cl_train.exo_vehs_x = []
+config.cl_train.exo_vehs_y = []
+config.cl_train.exo_vehs_yaw = []
 
 # Agent Defaults (Single agent)
 config.agent = edict()
@@ -222,7 +240,7 @@ config.reward_fn.weight_distance_to_goal = 5
 # Test Defaults
 config.test = edict()
 config.test.every = 10
-config.test.steps = 100000
+config.test.steps = 300
 
 # Eval Defaults
 config.eval = edict()

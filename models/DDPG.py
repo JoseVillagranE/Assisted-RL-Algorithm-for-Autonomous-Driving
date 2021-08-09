@@ -11,6 +11,8 @@ from .Conv_Actor_Critic import Conv_Actor, Conv_Critic
 from ConvVAE import VAE_Actor, VAE_Critic
 from utils.Network_utils import OUNoise
 import gym
+from copy import deepcopy
+import random
 
 
 class DDPG:
@@ -25,6 +27,8 @@ class DDPG:
         self.std = 0.1
         self.model_type = config.model.type
         self.temporal_mech = config.train.temporal_mech
+        self.min_lr = config.train.scheduler_min_lr
+        self.q_of_tasks = config.cl_train.q_of_tasks
         n_channel = 3
 
         input_size = (
@@ -136,24 +140,39 @@ class DDPG:
 
         self.type_RM = config.train.type_RM
         self.optim = config.train.optimizer
-        if self.type_RM == "sequential":
-            self.replay_memory = SequentialDequeMemory(rw_weights)
-        elif self.type_RM == "random":
-            self.replay_memory = RandomDequeMemory(
-                queue_capacity=config.train.max_memory_size,
-                rw_weights=rw_weights,
-                batch_size=config.train.batch_size,
-                temporal=self.temporal_mech,
-                win=config.train.rnn_nsteps,
-            )
-        elif self.type_RM == "prioritized":
-            self.replay_memory = PrioritizedDequeMemory(
-                queue_capacity=config.train.max_memory_size,
-                alpha=config.train.alpha,
-                beta=config.train.beta,
-                rw_weights=rw_weights,
-                batch_size=config.train.batch_size,
-            )
+
+        batch_size = config.train.batch_size
+        if self.q_of_tasks > 1:
+            self.B = []
+            batch_size = 1
+            self.cl_batch_size = config.train.batch_size
+
+        for i in range(self.q_of_tasks):
+            if self.type_RM == "sequential":
+                self.replay_memory = SequentialDequeMemory(rw_weights)
+            elif self.type_RM == "random":
+                self.replay_memory = RandomDequeMemory(
+                    queue_capacity=config.train.max_memory_size,
+                    rw_weights=rw_weights,
+                    batch_size=batch_size,
+                    temporal=self.temporal_mech,
+                    win=config.train.rnn_nsteps,
+                )
+            elif self.type_RM == "prioritized":
+                self.replay_memory = PrioritizedDequeMemory(
+                    queue_capacity=config.train.max_memory_size,
+                    alpha=config.train.alpha,
+                    beta=config.train.beta,
+                    rw_weights=rw_weights,
+                    batch_size=batch_size,
+                )
+
+            if self.q_of_tasks > 1:
+                self.B.append(deepcopy(self.replay_memory))
+
+        for name, param in self.actor.named_parameters():
+            if param.requires_grad:
+                print(name)
 
         if self.optim == "SGD":
             self.actor_optimizer = torch.optim.SGD(
@@ -204,13 +223,15 @@ class DDPG:
         # Device
         self.device = torch.device(config.train.device)
 
+        self.update = self._update if self.type_RM == "random" else self.p_update
+
     def predict(self, state, step, mode="training"):
         # if self.model_type != "VAE": state = Variable(state.unsqueeze(0)) # [1, C, H, W]
         state = torch.from_numpy(state).float()
         if self.temporal_mech:
             state = state.unsqueeze(0)
         action = self.actor(state)
-        action = action.detach().numpy()[0]  # [steer, throttle]
+        action = action.detach().numpy()  # [steer, throttle]
         if mode == "training":
             action = self.ounoise.get_action(action, step)
             # action[0] = np.clip(np.random.normal(action[0], self.std, 1), -1, 1)
@@ -219,13 +240,131 @@ class DDPG:
             action[1] = np.clip(action[1], -1, 1)
         return action
 
-    def update(self):
+    def p_update(self):
 
-        if self.type_RM in ["random", "prioritized"]:
+        if self.q_of_tasks == 1:
+            (
+                states,
+                actions,
+                rewards,
+                next_states,
+                dones,
+                isw,
+                idxs,
+            ) = self.replay_memory.get_batch_for_replay()
+
+        else:
+
+            # multi_task
+            if sum([len(rb) for rb in self.B]) < self.batch_size:
+                return
+            indexs = random.choices(len(self.B), k=self.cl_batch_size)
+            states = []
+            actions = []
+            rewards = []
+            next_states = []
+            dones = []
+            isw = []
+            inter_idxs = []
+            for i in indexs:
+                state, action, reward, next_state, done, isw_, idx = self.B[
+                    i
+                ].get_batch_for_replay()
+                states += state
+                actions += action
+                rewards += reward
+                next_states += next_state
+                dones += done
+                isw += isw_
+                inter_idxs += idx
+
+        isw = torch.FloatTensor(isw).to(self.device)
+
+        states = torch.FloatTensor(states).to(self.device)
+        actions = torch.FloatTensor(actions).to(self.device)
+        rewards = torch.FloatTensor(rewards).to(self.device)
+        next_states = torch.FloatTensor(next_states).to(self.device)
+        dones = torch.BoolTensor(dones).to(self.device)
+
+        self.actor = self.actor.to(self.device).train()
+        self.actor_target = self.actor_target.to(self.device).train()
+        self.critic = self.critic.to(self.device).train()
+        self.critic_target = self.critic_target.to(self.device).train()
+
+        next_actions = self.actor_target(next_states)
+
+        if self.temporal_mech:
+            Qvals = self.critic(states[:, -1, :], actions)
+            next_Q = self.critic_target(next_states[:, -1, :], next_actions)
+        else:
+            Qvals = self.critic(states, actions)
+            next_Q = self.critic_target(next_states, next_actions)
+
+        Q_prime = rewards.unsqueeze(1) + (
+            self.gamma * next_Q.squeeze() * (~dones)
+        ).unsqueeze(1)
+
+        TD = (Q_prime - Qvals).squeeze()
+        critic_loss = (isw * TD ** 2).mean()
+
+        # update critic
+        self.critic_optimizer.zero_grad()
+        critic_loss.backward()
+        nn.utils.clip_grad_norm_(self.critic.parameters(), 0.2)
+        self.critic_optimizer.step()
+
+        if self.temporal_mech:
+            actor_loss = -self.critic(states[:, -1, :], self.actor(states)).mean()
+        else:
+            actor_loss = -self.critic(states, self.actor(states)).mean()
+        # update actor
+        self.actor_optimizer.zero_grad()
+        actor_loss.backward()
+        nn.utils.clip_grad_norm_(self.actor.parameters(), 0.2)
+        self.actor_optimizer.step()
+
+        if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
+            self.actor_scheduler.step()
+            self.critic_scheduler.step()
+
+        # print(f"Actor_loss: {actor_loss.item()}")
+        # print(f"Critic_loss: {critic_loss.item()}")
+
+        for target_param, param in zip(
+            self.actor_target.parameters(), self.actor.parameters()
+        ):
+            target_param.data.copy_(
+                param.data * self.tau + target_param.data * (1.0 - self.tau)
+            )
+
+        for target_param, param in zip(
+            self.critic_target.parameters(), self.critic.parameters()
+        ):
+            target_param.data.copy_(
+                param.data * self.tau + target_param.data * (1.0 - self.tau)
+            )
+
+        if self.q_of_tasks == 1:
+            self.replay_memory.update_priorities(idxs, TD.abs().detach().cpu().numpy())
+        else:
+            for i in set(indexs):
+                ith_idx = np.where(np.array(indexs) == i)[0]
+                js = np.array(inter_idxs)[ith_idx]
+                self.B[i].update_priorities(js, TD[js].abs().detach().cpu().numpy())
+
+        # Back to cpu
+        self.actor = self.actor.cpu().eval()
+        self.actor_target = self.actor_target.cpu().eval()
+        self.critic = self.critic.cpu().eval()
+        self.critic_target = self.critic_target.cpu().eval()
+
+    def _update(self):
+
+        # single task
+        if self.q_of_tasks == 1:
             if self.replay_memory.get_memory_size() < self.batch_size:
                 return
 
-        if self.type_RM in ["sequential", "random"]:
             (
                 states,
                 actions,
@@ -233,20 +372,26 @@ class DDPG:
                 next_states,
                 dones,
             ) = self.replay_memory.get_batch_for_replay()
-        elif self.type_RM in ["prioritized"]:
-            (
-                states,
-                actions,
-                rewards,
-                next_states,
-                done,
-                importance_sampling_weight,
-            ) = self.replay_memory.get_batch_for_replay(
-                self.actor_target, self.critic, self.critic_target, self.gamma
-            )
-            importance_sampling_weight = torch.FloatTensor(
-                importance_sampling_weight
-            ).to(self.device)
+
+        else:
+            # multi_task
+            if sum([len(rb) for rb in self.B]) < self.batch_size:
+                return
+            indexs = random.choices(len(self.B), k=self.cl_batch_size)
+            states = []
+            actions = []
+            rewards = []
+            next_states = []
+            dones = []
+            for i in indexs:
+                state, action, reward, next_state, done = self.B[
+                    i
+                ].get_batch_for_replay()
+                states += state
+                actions += action
+                rewards += reward
+                next_states += next_state
+                dones += done
 
         states = torch.FloatTensor(states).to(self.device)
         actions = torch.FloatTensor(actions).to(self.device)
@@ -277,18 +422,12 @@ class DDPG:
             self.gamma * next_Q.squeeze() * (~dones)
         ).unsqueeze(1)
 
-        critic_loss = 0
-        if self.type_RM in ["sequential", "random"]:
-            critic_loss = self.critic_criterion(
-                Q_prime, Qvals
-            )  # default mean reduction
-        elif self.type_RM in ["prioritized"]:
-            critic_loss = (importance_sampling_weight * (Qvals - Q_prime) ** 2).mean()
+        critic_loss = self.critic_criterion(Q_prime, Qvals)  # default mean reduction
 
         # update critic
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
-        nn.utils.clip_grad_norm_(self.critic.parameters(), 0.0005)
+        nn.utils.clip_grad_norm_(self.critic.parameters(), 0.2)
         self.critic_optimizer.step()
 
         if self.temporal_mech:
@@ -298,14 +437,15 @@ class DDPG:
         # update actor
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
-        nn.utils.clip_grad_norm_(self.actor.parameters(), 0.0005)
+        nn.utils.clip_grad_norm_(self.actor.parameters(), 0.2)
         self.actor_optimizer.step()
 
-        self.actor_scheduler.step()
-        self.critic_scheduler.step()
+        if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
+            self.actor_scheduler.step()
+            self.critic_scheduler.step()
 
-        print(f"Actor_loss: {actor_loss.item()}")
-        print(f"Critic_loss: {critic_loss.item()}")
+        # print(f"Actor_loss: {actor_loss.item()}")
+        # print(f"Critic_loss: {critic_loss.item()}")
 
         for target_param, param in zip(
             self.actor_target.parameters(), self.actor.parameters()
