@@ -31,7 +31,7 @@ train:
   wp_encode: False
   wp_encoder_size: 64
   rm_filename: "MC-1.npy" # folder's name for load many experiences tuples
-  temporal_mech: True
+  temporal_mech: False
   scheduler_step_size: 20
   scheduler_gamma: 0.1
   load_rm_name_c: ["1", "g"]

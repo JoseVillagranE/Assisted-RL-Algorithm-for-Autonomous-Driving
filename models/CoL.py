@@ -34,9 +34,11 @@ class CoL:
         self.lambdas = config.train.lambdas
         self.model_type = config.model.type
         self.temporal_mech = config.train.temporal_mech
+        self.q_of_tasks = config.cl_train.q_of_tasks
         self.min_lr = config.train.scheduler_min_lr
-
         self.enable_scheduler_lr = config.train.enable_scheduler_lr
+        self.actor_grad_clip = config.train.actor_grad_clip
+        self.critic_grad_clip = config.train.critic_grad_clip
         n_channel = 3
 
         # Networks
@@ -244,10 +246,6 @@ class CoL:
             min_sigma=config.train.ou_noise_min_sigma,
             decay_period=config.train.ou_noise_decay_period,
         )
-
-        # mse
-        self.mse = nn.MSELoss()  # mean reduction
-
         # Device
         self.device = torch.device(config.train.device)
         # load expert experience
@@ -276,7 +274,17 @@ class CoL:
 
             print(f"samples of expert rm: {self.replay_memory_e.get_memory_size()}")
 
-        self.update = self._update if self.type_RM == "random" else self.p_update
+        if self.type_RM == "random":
+            self.mse = nn.MSELoss(reduction="mean")
+            self.update = self._update
+        else:
+            self.update = self.p_update
+            self.mse = nn.MSELoss(reduction="none")
+
+        self.get_memory = (
+            self.get_single_memory if self.q_of_tasks == 1 else self.get_multi_memory
+        )
+
         # pretraining steps
         for l in range(config.train.pretraining_steps):
             self.update(is_pretraining=True)
@@ -303,7 +311,120 @@ class CoL:
 
     def p_update(self, is_pretraining=False):
 
-        pass
+        (
+            states,
+            actions,
+            rewards,
+            next_states,
+            dones,
+            states_e,
+            actions_e,
+            isw_a,
+            isw_e,
+            inter_idxs_a,
+            inter_idxs_e,
+            indexs_a,
+            indexs_e,
+        ) = self.get_memory(is_pretraining, self.type_RM)
+
+        states = Variable(torch.from_numpy(states).float())
+        actions = Variable(torch.from_numpy(actions).float())
+        rewards = Variable(torch.from_numpy(rewards).float())
+        next_states = Variable(torch.from_numpy(next_states).float())
+
+        states_e = Variable(torch.from_numpy(np.array(states_e)).float())
+        actions_e = Variable(torch.from_numpy(np.array(actions_e)).float())
+
+        if self.temporal_mech:
+            R_1 = (
+                rewards.squeeze()
+                + self.gamma
+                * self.critic_target(
+                    next_states[:, -1, :], self.actor_target(next_states).detach()
+                ).squeeze()
+            )
+            TD = self.mse(
+                R_1,
+                self.critic(states[:, -1, :], self.actor(states).detach()).squeeze(),
+            )  # reduction -> none
+            L_Q1 = (torch.cat((isw_a, isw_e), 0) * TD).mean()
+            L_A = -1 * self.critic(states[:, -1, :], self.actor(states)).detach().mean()
+        else:
+            R_1 = (
+                rewards.squeeze()
+                + self.gamma
+                * self.critic_target(
+                    next_states, self.actor_target(next_states).detach()
+                ).squeeze()
+            )
+            TD = self.mse(
+                R_1, self.critic(states, self.actor(states).detach()).squeeze()
+            )  # reduction -> none
+
+            L_Q1 = (torch.cat((isw_a, isw_e), 0) * TD).mean()
+            L_A = -1 * self.critic(states, self.actor(states)).detach().mean()
+
+        L_col_critic = self.lambdas[2] * L_Q1
+
+        # BC loss
+        pred_actions = self.actor(states_e)
+        L_BC = self.mse(pred_actions.squeeze(), actions_e)
+
+        # Actor Q_loss
+        L_col_actor = 1 * (self.lambdas[0] * L_BC + self.lambdas[1] * L_A)
+
+        self.actor_optimizer.zero_grad()
+        L_col_actor.backward()
+        nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_grad_clip)
+        self.actor_optimizer.step()
+
+        self.critic_optimizer.zero_grad()
+        L_col_critic.backward()
+        nn.utils.clip_grad_norm_(self.critic.parameters(), self.critic_grad_clip)
+        self.critic_optimizer.step()
+
+        if not is_pretraining and self.enable_scheduler_lr:
+            if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
+                self.actor_scheduler.step()
+                self.critic_scheduler.step()
+
+        for target_param, param in zip(
+            self.actor_target.parameters(), self.actor.parameters()
+        ):
+            target_param.data.copy_(
+                param.data * self.tau + target_param.data * (1.0 - self.tau)
+            )
+
+        for target_param, param in zip(
+            self.critic_target.parameters(), self.critic.parameters()
+        ):
+            target_param.data.copy_(
+                param.data * self.tau + target_param.data * (1.0 - self.tau)
+            )
+
+        if self.q_of_tasks == 1:
+            self.replay_memory.update_priorities(
+                inter_idxs_a, TD.abs().detach().cpu().numpy()
+            )
+            self.replay_memory_e.update_priorities(
+                inter_idxs_e, TD.abs().detach().cpu().numpy()
+            )
+        else:
+            for i in set(indexs_a):
+                ith_idx = np.where(np.array(indexs_a) == i)[0]
+                js = np.array(inter_idxs_a)[ith_idx]
+                self.B[i].update_priorities(js, TD[js].abs().detach().cpu().numpy())
+
+            for i in set(indexs_e):
+                ith_idx = np.where(np.array(indexs_e) == i)[0]
+                js = np.array(inter_idxs_e)[ith_idx]
+                self.B[i].update_priorities(js, TD[js].abs().detach().cpu().numpy())
+
+        # Back to cpu
+        self.actor = self.actor.cpu().eval()
+        self.actor_target = self.actor_target.cpu().eval()
+        self.critic = self.critic.cpu().eval()
+        self.critic_target = self.critic_target.cpu().eval()
 
     def _update(self, is_pretraining=False):
 
@@ -315,7 +436,13 @@ class CoL:
             dones,
             states_e,
             actions_e,
-        ) = self.get_single_memory(is_pretraining)
+            _,
+            _,
+            _,
+            _,
+            _,
+            _,
+        ) = self.get_memory(is_pretraining, self.type_RM)
         # # normalize action
         # actions = 2*(actions - self.action_min)/(self.action_max - self.action_min) - 1
 
@@ -366,16 +493,13 @@ class CoL:
 
         self.actor_optimizer.zero_grad()
         L_col_actor.backward()
-        nn.utils.clip_grad_norm_(self.actor.parameters(), 0.05)
+        nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_grad_clip)
         self.actor_optimizer.step()
 
         self.critic_optimizer.zero_grad()
         L_col_critic.backward()
-        nn.utils.clip_grad_norm_(self.critic.parameters(), 0.05)
+        nn.utils.clip_grad_norm_(self.critic.parameters(), self.critic_grad_clip)
         self.critic_optimizer.step()
-
-        print(L_col_actor.item())
-        print(L_col_critic.item())
 
         if not is_pretraining and self.enable_scheduler_lr:
             if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
@@ -408,10 +532,10 @@ class CoL:
     def lambda_decay(self, rd, n_lambda):
         self.lambdas[n_lambda] -= rd
 
-    def get_single_memory(self, is_pretraining):
+    def get_single_memory(self, is_pretraining, type_rm):
         if self.batch_size * self.agent_prop > self.replay_memory.get_memory_size():
 
-            if is_pretraining:
+            if is_pretraining and type_rm == "random":
                 (
                     states,
                     actions,
@@ -420,29 +544,72 @@ class CoL:
                     dones,
                 ) = self.replay_memory_e.get_batch_for_replay()
 
-                states_e = states = np.array(states)
-                actions_e = actions = np.array(actions)
-                rewards = np.array(rewards)
-                next_states = np.array(next_states)
-                dones = np.array(dones)
+                isw = idxs = 0
+
+            elif is_pretraining and type_rm == "prioritized":
+
+                (
+                    states,
+                    actions,
+                    rewards,
+                    next_states,
+                    dones,
+                    isw,
+                    idxs,
+                ) = self.replay_memory_e.get_batch_for_replay()
             else:
                 return
-        else:
-            (
-                states_e,
-                actions_e,
-                rewards_e,
-                next_states_e,
-                dones_e,
-            ) = self.replay_memory_e.get_batch_for_replay()
 
-            (
-                states_a,
-                actions_a,
-                rewards_a,
-                next_states_a,
-                dones_a,
-            ) = self.replay_memory.get_batch_for_replay()
+            states_e = states = np.array(states)
+            actions_e = actions = np.array(actions)
+            rewards = np.array(rewards)
+            next_states = np.array(next_states)
+            dones = np.array(dones)
+            isw_a = isw_e = isw
+            idxs_a = idxs_e = idxs
+
+        else:
+
+            if type_rm == "random":
+                (
+                    states_e,
+                    actions_e,
+                    rewards_e,
+                    next_states_e,
+                    dones_e,
+                ) = self.replay_memory_e.get_batch_for_replay()
+
+                (
+                    states_a,
+                    actions_a,
+                    rewards_a,
+                    next_states_a,
+                    dones_a,
+                ) = self.replay_memory.get_batch_for_replay()
+
+                isw_e = isw_a = idxs_e = idxs_a = 0
+
+            elif type_rm == "prioritized":
+
+                (
+                    states_e,
+                    actions_e,
+                    rewards_e,
+                    next_states_e,
+                    dones_e,
+                    isw_e,
+                    idxs_e,
+                ) = self.replay_memory_e.get_batch_for_replay()
+
+                (
+                    states_a,
+                    actions_a,
+                    rewards_a,
+                    next_states_a,
+                    dones_a,
+                    isw_a,
+                    idxs_a,
+                ) = self.replay_memory.get_batch_for_replay()
 
             states, actions, rewards, next_states, dones = cat_experience_tuple(
                 np.array(states_a),
@@ -457,7 +624,21 @@ class CoL:
                 np.array(dones_e),
             )
 
-        return states, actions, rewards, next_states, dones, states_e, actions_e
+        return (
+            states,
+            actions,
+            rewards,
+            next_states,
+            dones,
+            states_e,
+            actions_e,
+            isw_a,
+            isw_e,
+            idxs_a,
+            idxs_e,
+            0,
+            0,
+        )
 
     def get_multi_memory(self, is_pretraining):
         if self.batch_size * self.agent_prop > sum([rb for rb in self.B]):
@@ -561,6 +742,8 @@ class CoL:
             isw_e,
             inter_idxs_a,
             inter_idxs_e,
+            indexs_a,
+            indexs_e,
         )
 
 

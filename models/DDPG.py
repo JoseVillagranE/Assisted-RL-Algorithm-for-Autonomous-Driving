@@ -29,6 +29,8 @@ class DDPG:
         self.temporal_mech = config.train.temporal_mech
         self.min_lr = config.train.scheduler_min_lr
         self.q_of_tasks = config.cl_train.q_of_tasks
+        self.actor_grad_clip = config.train.actor_grad_clip
+        self.critic_grad_clip = config.train.critic_grad_clip
         n_channel = 3
 
         input_size = (
@@ -310,7 +312,7 @@ class DDPG:
         # update critic
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
-        nn.utils.clip_grad_norm_(self.critic.parameters(), 0.2)
+        nn.utils.clip_grad_norm_(self.critic.parameters(), self.critic_grad_clip)
         self.critic_optimizer.step()
 
         if self.temporal_mech:
@@ -320,7 +322,7 @@ class DDPG:
         # update actor
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
-        nn.utils.clip_grad_norm_(self.actor.parameters(), 0.2)
+        nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_grad_clip)
         self.actor_optimizer.step()
 
         if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
@@ -427,7 +429,7 @@ class DDPG:
         # update critic
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
-        nn.utils.clip_grad_norm_(self.critic.parameters(), 0.2)
+        nn.utils.clip_grad_norm_(self.critic.parameters(), self.critic_grad_clip)
         self.critic_optimizer.step()
 
         if self.temporal_mech:
@@ -437,7 +439,7 @@ class DDPG:
         # update actor
         self.actor_optimizer.zero_grad()
         actor_loss.backward()
-        nn.utils.clip_grad_norm_(self.actor.parameters(), 0.2)
+        nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_grad_clip)
         self.actor_optimizer.step()
 
         if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
