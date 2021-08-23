@@ -1,4 +1,13 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
 import numpy as np
+import random
+from copy import deepcopy
+import gym
+import numpy as np
+
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
@@ -10,29 +19,82 @@ from .ExperienceReplayMemory import (
 from .Conv_Actor_Critic import Conv_Actor, Conv_Critic
 from ConvVAE import VAE_Actor, VAE_Critic
 from utils.Network_utils import OUNoise
-import gym
-from copy import deepcopy
-import random
+from ExperienceReplayMemory import SequentialDequeMemory
 
 
-class DDPG:
+class PADDPG:
+    """
+    DDPG actor-critic agent for parameterised action spaces
+    [Hausknecht and Stone 2016]
+    """
+
     def __init__(self, config):
+        super().__init__()
 
-        self.action_space = config.train.action_space
-        self.state_dim = config.train.state_dim
-        self.gamma = config.train.gamma
-        self.tau = config.train.tau
-        self.max_memory_size = config.train.max_memory_size
-        self.batch_size = config.train.batch_size
-        self.std = 0.1
+        self.device = torch.device(config.train.device)
         self.model_type = config.model.type
+        self.q_of_tasks = config.cl_train.q_of_tasks
+        self.state_dim = config.train.state_dim
         self.temporal_mech = config.train.temporal_mech
         self.min_lr = config.train.scheduler_min_lr
-        self.q_of_tasks = config.cl_train.q_of_tasks
         self.actor_grad_clip = config.train.actor_grad_clip
         self.critic_grad_clip = config.train.critic_grad_clip
-        n_channel = 3
 
+        self.n_hl_actions = config.train.hrl.n_hl_actions
+        self.num_actions = config.train.action_space
+        print(self.num_actions)
+        # self.action_space = action_space
+        self.action_parameter_sizes = np.array(
+            [self.num_actions for i in range(self.num_actions)]
+        )
+        self.action_parameter_size = int(self.action_parameter_sizes.sum())
+        self.action_max = torch.ones(self.n_hl_actions).float().to(self.device)
+        self.action_min = torch.zeros(self.n_hl_actions).float().to(self.device)
+        self.action_range = (self.action_max - self.action_min).detach()
+
+        print(f"action_range: {self.action_range}")
+
+        self.action_parameter_max_numpy = np.array(
+            [config.train.hrl.high[i] for i in range(self.n_hl_actions)]
+        )
+        self.action_parameter_min_numpy = np.array(
+            [config.train.hrl.low[i] for i in range(self.n_hl_actions)]
+        )
+        self.action_parameter_range_numpy = (
+            self.action_parameter_max_numpy - self.action_parameter_min_numpy
+        )
+        self.action_parameter_max = (
+            torch.from_numpy(self.action_parameter_max_numpy).float().to(self.device)
+        )
+        self.action_parameter_min = (
+            torch.from_numpy(self.action_parameter_min_numpy).float().to(self.device)
+        )
+        self.action_parameter_range = (
+            torch.from_numpy(self.action_parameter_range_numpy).float().to(self.device)
+        )
+
+        print(f"action_parameter_max: {self.action_parameter_max}")
+        print(f"action_parameter_min: {self.action_parameter_min}")
+        print(f"action_parameter_range: {self.action_parameter_range}")
+
+        self.actor_clip_grad = config.train.actor_grad_clip
+        self.critic_clip_grad = config.train.critic_grad_clip
+        self.batch_size = config.train.batch_size
+        self.gamma = config.train.gamma
+        self.replay_memory_size = config.train.max_memory_size
+        self.actor_lr = config.train.actor_lr
+        self.critic_lr = config.train.critic_lr
+        self.inverting_gradients = config.train.hrl.ig
+        self.tau_actor = self.tau_critic = config.train.tau
+        self._step = 0
+        self._episode = 0
+        self.updates = 0
+
+        self.np_random = None
+
+        print(self.num_actions + self.action_parameter_size)
+
+        n_channel = 3
         input_size = (
             config.train.z_dim
             + len(config.train.measurements_to_include)
@@ -70,7 +132,7 @@ class DDPG:
         if self.model_type == "VAE":
             self.actor = VAE_Actor(
                 self.state_dim,
-                self.action_space,
+                self.n_hl_actions * self.num_actions,
                 n_channel,
                 config.train.z_dim,
                 VAE_weights_path=config.train.VAE_weights_path,
@@ -80,11 +142,12 @@ class DDPG:
                 beta=config.train.beta,
                 wp_encode=config.train.wp_encode,
                 wp_encoder_size=config.train.wp_encoder_size,
+                n_hl_actions=self.n_hl_actions,
             ).float()
 
             self.actor_target = VAE_Actor(
                 self.state_dim,
-                self.action_space,
+                self.n_hl_actions * self.num_actions,
                 n_channel,
                 config.train.z_dim,
                 VAE_weights_path=config.train.VAE_weights_path,
@@ -94,6 +157,7 @@ class DDPG:
                 beta=config.train.beta,
                 wp_encode=config.train.wp_encode,
                 wp_encoder_size=config.train.wp_encoder_size,
+                n_hl_actions=self.n_hl_actions,
             ).float()
 
             self.critic = VAE_Critic(
@@ -104,6 +168,7 @@ class DDPG:
                 config.train.state_dim, config.train.action_space
             ).float()
 
+        # must see !!
         else:
             self.actor = Conv_Actor(
                 self.num_actions,
@@ -215,16 +280,13 @@ class DDPG:
 
         # Noise
         self.ounoise = OUNoise(
-            self.action_space,
+            self.n_hl_actions * self.num_actions,
             mu=config.train.ou_noise_mu,
             theta=config.train.ou_noise_theta,
             max_sigma=config.train.ou_noise_max_sigma,
             min_sigma=config.train.ou_noise_min_sigma,
             decay_period=config.train.ou_noise_decay_period,
         )
-
-        # Device
-        self.device = torch.device(config.train.device)
 
         self.update = self._update if self.type_RM == "random" else self.p_update
 
@@ -233,7 +295,12 @@ class DDPG:
         state = torch.from_numpy(state).float()
         if self.temporal_mech:
             state = state.unsqueeze(0)
-        action = self.actor(state)
+        (probs, params) = self.actor(state)
+        action = np.argmax(probs.detach().numpy())
+        offset = np.array(
+            [self.action_parameter_sizes[i] for i in range(action)], dtype=int
+        ).sum()
+        action = params[offset : offset + self.action_parameter_sizes[action]]
         action = action.detach().numpy()  # [steer, throttle]
         if mode == "training":
             action = self.ounoise.get_action(action, step)
@@ -243,154 +310,18 @@ class DDPG:
         action[1] = np.clip(action[1], -1, 1)
         return action
 
-    def p_update(self):
-
-        if self.q_of_tasks == 1:
-            (
-                states,
-                actions,
-                rewards,
-                next_states,
-                dones,
-                isw,
-                idxs,
-            ) = self.replay_memory.get_batch_for_replay()
-
-        else:
-
-            # multi_task
-            if sum([len(rb) for rb in self.B]) < self.batch_size:
-                return
-            indexs = random.choices(len(self.B), k=self.cl_batch_size)
-            states = []
-            actions = []
-            rewards = []
-            next_states = []
-            dones = []
-            isw = []
-            inter_idxs = []
-            for i in indexs:
-                state, action, reward, next_state, done, isw_, idx = self.B[
-                    i
-                ].get_batch_for_replay()
-                states += state
-                actions += action
-                rewards += reward
-                next_states += next_state
-                dones += done
-                isw += isw_
-                inter_idxs += idx
-
-        isw = torch.FloatTensor(isw).to(self.device)
-
-        states = torch.FloatTensor(states).to(self.device)
-        actions = torch.FloatTensor(actions).to(self.device)
-        rewards = torch.FloatTensor(rewards).to(self.device)
-        next_states = torch.FloatTensor(next_states).to(self.device)
-        dones = torch.BoolTensor(dones).to(self.device)
-        self.actor = self.actor.to(self.device).train()
-        self.actor_target = self.actor_target.to(self.device).eval()
-        self.critic = self.critic.to(self.device).train()
-        self.critic_target = self.critic_target.to(self.device).eval()
-
-        next_actions = self.actor_target(next_states)
-
-        if self.temporal_mech:
-            Qvals = self.critic(states[:, -1, :], actions)
-            next_Q = self.critic_target(next_states[:, -1, :], next_actions)
-        else:
-            Qvals = self.critic(states, actions).squeeze()
-            next_Q = self.critic_target(next_states, next_actions).squeeze()
-
-        Q_prime = rewards + (self.gamma * next_Q.squeeze() * (~dones))
-
-        TD = Q_prime - Qvals
-        critic_loss = (isw * TD ** 2).mean()
-        # update critic
-        self.critic_optimizer.zero_grad()
-        critic_loss.backward()
-        nn.utils.clip_grad_norm_(self.critic.parameters(), self.critic_grad_clip)
-        self.critic_optimizer.step()
-
-        if self.temporal_mech:
-            actor_loss = -1 * self.critic(states[:, -1, :], self.actor(states)).mean()
-        else:
-            actor_loss = -1 * self.critic(states, self.actor(states)).mean()
-        # update actor
-        self.actor_optimizer.zero_grad()
-        actor_loss.backward()
-        nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_grad_clip)
-        self.actor_optimizer.step()
-
-        if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
-            self.actor_scheduler.step()
-            self.critic_scheduler.step()
-
-        # print(f"Actor_loss: {actor_loss.item()}")
-        # print(f"Critic_loss: {critic_loss.item()}")
-
-        for target_param, param in zip(
-            self.actor_target.parameters(), self.actor.parameters()
-        ):
-            target_param.data.copy_(
-                param.data * self.tau + target_param.data * (1.0 - self.tau)
-            )
-
-        for target_param, param in zip(
-            self.critic_target.parameters(), self.critic.parameters()
-        ):
-            target_param.data.copy_(
-                param.data * self.tau + target_param.data * (1.0 - self.tau)
-            )
-
-        if self.q_of_tasks == 1:
-            self.replay_memory.update_priorities(idxs, TD.abs().detach().cpu().numpy())
-        else:
-            for i in set(indexs):
-                ith_idx = np.where(np.array(indexs) == i)[0]
-                js = np.array(inter_idxs)[ith_idx]
-                self.B[i].update_priorities(js, TD[js].abs().detach().cpu().numpy())
-
-        # Back to cpu
-        self.actor = self.actor.cpu().eval()
-        self.actor_target = self.actor_target.cpu().eval()
-        self.critic = self.critic.cpu().eval()
-        self.critic_target = self.critic_target.cpu().eval()
-
     def _update(self):
 
-        # single task
-        if self.q_of_tasks == 1:
-            if self.replay_memory.get_memory_size() < self.batch_size:
-                return
+        if self.replay_memory.get_memory_size() < self.batch_size:
+            return
 
-            (
-                states,
-                actions,
-                rewards,
-                next_states,
-                dones,
-            ) = self.replay_memory.get_batch_for_replay()
-
-        else:
-            # multi_task
-            if sum([len(rb) for rb in self.B]) < self.batch_size:
-                return
-            indexs = random.choices(len(self.B), k=self.cl_batch_size)
-            states = []
-            actions = []
-            rewards = []
-            next_states = []
-            dones = []
-            for i in indexs:
-                state, action, reward, next_state, done = self.B[
-                    i
-                ].get_batch_for_replay()
-                states += state
-                actions += action
-                rewards += reward
-                next_states += next_state
-                dones += done
+        (
+            states,
+            actions,
+            rewards,
+            next_states,
+            dones,
+        ) = self.replay_memory.get_batch_for_replay()
 
         states = torch.FloatTensor(states).to(self.device)
         actions = torch.FloatTensor(actions).to(self.device)
@@ -405,46 +336,51 @@ class DDPG:
         self.critic = self.critic.to(self.device).train()
         self.critic_target = self.critic_target.to(self.device).train()
 
-        # if actions.dim() < 2:
-        #     actions = actions.unsqueeze(1)
-
-        next_actions = self.actor_target(next_states)
-
-        if self.temporal_mech:
-            Qvals = self.critic(states[:, -1, :], actions)
-            next_Q = self.critic_target(next_states[:, -1, :], next_actions)
-        else:
-            Qvals = self.critic(states, actions)
+        with torch.no_grad():
+            next_actions = self.actor_target.forward(next_states)
             next_Q = self.critic_target(next_states, next_actions)
+            Q_prime = rewards.unsqueeze(1) + (self.gamma * next_Q * (~dones)).unsqueeze(
+                1
+            )
 
-        Q_prime = rewards.unsqueeze(1) + (
-            self.gamma * next_Q.squeeze() * (~dones)
-        ).unsqueeze(1)
+        Q_val = self.critic(states, actions)
+        loss_critic = self.loss_func(Q_val, Q_prime)
 
-        critic_loss = self.critic_criterion(Q_prime, Qvals)  # default mean reduction
+        self.critic_optimiser.zero_grad()
+        loss_critic.backward()
+        torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.critic_clip_grad)
+        self.critic_optimiser.step()
 
-        # update critic
-        self.critic_optimizer.zero_grad()
-        critic_loss.backward()
-        nn.utils.clip_grad_norm_(self.critic.parameters(), self.critic_grad_clip)
-        self.critic_optimizer.step()
+        # 1 - calculate gradients from critic
+        with torch.no_grad():
+            actions, action_params = self.actor(states)
+            actions = torch.cat((actions, action_params), dim=1)
+        actions.requires_grad = True
+        Q_val = self.critic(states, actions).mean()
+        self.critic.zero_grad()
+        Q_val.backward()
+        delta_a = deepcopy(actions.grad.data)
+        # 2 - apply inverting gradients and combine with gradients from actor
+        actions, action_params = self.actor(Variable(states))
+        actions = torch.cat((actions, action_params), dim=1)
+        delta_a[:, self.num_actions :] = self._invert_gradients(
+            delta_a[:, self.num_actions :].cpu(),
+            action_params[:, self.num_actions :].cpu(),
+            grad_type="hl_actions",
+            inplace=True,
+        )
+        delta_a[:, : self.num_actions] = self._invert_gradients(
+            delta_a[:, : self.num_actions].cpu(),
+            action_params[:, : self.num_actions].cpu(),
+            grad_type="ll_actions",
+            inplace=True,
+        )
+        out = -torch.mul(delta_a, actions)
+        self.actor.zero_grad()
+        out.backward(torch.ones(out.shape).to(self.device))
 
-        if self.temporal_mech:
-            actor_loss = -1 * self.critic(states[:, -1, :], self.actor(states)).mean()
-        else:
-            actor_loss = -1 * self.critic(states, self.actor(states)).mean()
-        # update actor
-        self.actor_optimizer.zero_grad()
-        actor_loss.backward()
-        nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_grad_clip)
-        self.actor_optimizer.step()
-
-        if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
-            self.actor_scheduler.step()
-            self.critic_scheduler.step()
-
-        # print(f"Actor_loss: {actor_loss.item()}")
-        # print(f"Critic_loss: {critic_loss.item()}")
+        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_clip_grad)
+        self.actor_optimiser.step()
 
         for target_param, param in zip(
             self.actor_target.parameters(), self.actor.parameters()
@@ -463,13 +399,28 @@ class DDPG:
         # Back to cpu
         self.actor = self.actor.cpu().eval()
 
+    def p_update(self):
+        pass
+
+    def _invert_gradients(self, grad, vals, grad_type, inplace=True):
+
+        if grad_type == "hl_actions":
+            max_p = self.action_max.cpu()
+            min_p = self.action_min.cpu()
+            rnge = self.action_range.cpu()
+        elif grad_type == "ll_actions":
+            max_p = self.action_parameter_max.cpu()  # ?
+            min_p = self.action_parameter_min.cpu()
+            rnge = self.action_parameter_range.cpu()
+
+        if not inplace:
+            grad = grad.clone()
+        with torch.no_grad():
+            for n in range(grad.shape[0]):
+                idx = grad[n] > 0
+                grad[n][idx] *= (idx.float() * (max_p - vals[n]) / rnge)[idx]
+                grad[n][~idx] *= ((~idx).float() * (vals[n] - min_p) / rnge)[~idx]
+        return grad
+
     def feat_ext(self, state):
         return self.actor.feat_ext(state)
-
-    def load_state_dict(self, models_state_dict, optimizer_state_dict):
-        self.actor.load_state_dict(models_state_dict[0])
-        self.actor_target.load_state_dict(models_state_dict[1])
-        self.critic.load_state_dict(models_state_dict[2])
-        self.critic_target.load_state_dict(models_state_dict[3])
-        self.actor_optimizer.load_state_dict(optimizer_state_dict[0])
-        self.critic_optimizer.load_state_dict(optimizer_state_dict[1])

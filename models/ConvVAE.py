@@ -38,11 +38,14 @@ class VAE_Actor(nn.Module):
         is_freeze_params=True,
         wp_encode=False,
         wp_encoder_size=64,
+        n_hl_actions=0,
     ):
 
         super().__init__()
         self.num_actions = num_actions
         self.vae = ConvVAE(n_channel, z_dim, beta=beta)
+        self.n_hl_actions = n_hl_actions
+        self.softmax = nn.Softmax()
 
         self.lstm = None
         if temporal_mech:
@@ -106,6 +109,10 @@ class VAE_Actor(nn.Module):
                 print("Freezing RNN")
                 freeze_params(self.lstm)
 
+        self.linear_forward = (
+            self._linear_forward if self.n_hl_actions == 0 else self._hrl_linear_forward
+        )
+
     def forward(self, state):
 
         """
@@ -121,10 +128,21 @@ class VAE_Actor(nn.Module):
         action = self.linear_forward(input_linear)
         return action
 
-    def linear_forward(self, x):
+    def _linear_forward(self, x):
         for i, layer in enumerate(self.mlp):
             x = torch.tanh(layer(x))
         return x
+
+    def _hrl_linear_forward(self, x):
+        for i, layer in enumerate(self.mlp):
+            if i == len(self.mlp) - 1:
+                outp = layer(x)
+            else:
+                x = torch.tanh(layer(x))
+
+        probs = self.softmax(outp[: self.n_hl_actions])
+        p_actions = outp[self.n_hl_actions :]
+        return (probs, p_actions)
 
     def feat_ext(self, x):
         """
