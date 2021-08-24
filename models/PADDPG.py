@@ -45,7 +45,7 @@ class PADDPG:
         print(self.num_actions)
         # self.action_space = action_space
         self.action_parameter_sizes = np.array(
-            [self.num_actions for i in range(self.num_actions)]
+            [self.num_actions for i in range(self.n_hl_actions)]
         )
         self.action_parameter_size = int(self.action_parameter_sizes.sum())
         self.action_max = torch.ones(self.n_hl_actions).float().to(self.device)
@@ -55,10 +55,10 @@ class PADDPG:
         print(f"action_range: {self.action_range}")
 
         self.action_parameter_max_numpy = np.array(
-            [config.train.hrl.high[i] for i in range(self.n_hl_actions)]
+            [config.train.hrl.high[i] for i in range(self.action_parameter_size)]
         )
         self.action_parameter_min_numpy = np.array(
-            [config.train.hrl.low[i] for i in range(self.n_hl_actions)]
+            [config.train.hrl.low[i] for i in range(self.action_parameter_size)]
         )
         self.action_parameter_range_numpy = (
             self.action_parameter_max_numpy - self.action_parameter_min_numpy
@@ -86,11 +86,16 @@ class PADDPG:
         self.critic_lr = config.train.critic_lr
         self.inverting_gradients = config.train.hrl.ig
         self.tau_actor = self.tau_critic = config.train.tau
-        self._step = 0
-        self._episode = 0
-        self.updates = 0
 
-        self.np_random = None
+        self.np_random = np.random.RandomState(seed=config.seed)
+
+        self.epsilon = config.train.hrl.epsilon_initial
+        self.epsilon_initial = config.train.hrl.epsilon_initial
+        self.epsilon_final = config.train.hrl.epsilon_final
+        self.epsilon_steps = config.train.hrl.epsilon_steps
+        self.steps = 0
+
+        self.critic_criterion = nn.MSELoss()  # mean reduction
 
         print(self.num_actions + self.action_parameter_size)
 
@@ -132,7 +137,7 @@ class PADDPG:
         if self.model_type == "VAE":
             self.actor = VAE_Actor(
                 self.state_dim,
-                self.n_hl_actions * self.num_actions,
+                self.n_hl_actions + self.n_hl_actions * self.num_actions,
                 n_channel,
                 config.train.z_dim,
                 VAE_weights_path=config.train.VAE_weights_path,
@@ -147,7 +152,7 @@ class PADDPG:
 
             self.actor_target = VAE_Actor(
                 self.state_dim,
-                self.n_hl_actions * self.num_actions,
+                self.n_hl_actions + self.n_hl_actions * self.num_actions,
                 n_channel,
                 config.train.z_dim,
                 VAE_weights_path=config.train.VAE_weights_path,
@@ -161,11 +166,13 @@ class PADDPG:
             ).float()
 
             self.critic = VAE_Critic(
-                config.train.state_dim, config.train.action_space
+                config.train.state_dim,
+                self.n_hl_actions + self.n_hl_actions * self.num_actions,
             ).float()
 
             self.critic_target = VAE_Critic(
-                config.train.state_dim, config.train.action_space
+                config.train.state_dim,
+                self.n_hl_actions + self.n_hl_actions * self.num_actions,
             ).float()
 
         # must see !!
@@ -280,7 +287,7 @@ class PADDPG:
 
         # Noise
         self.ounoise = OUNoise(
-            self.n_hl_actions * self.num_actions,
+            self.num_actions,
             mu=config.train.ou_noise_mu,
             theta=config.train.ou_noise_theta,
             max_sigma=config.train.ou_noise_max_sigma,
@@ -292,23 +299,33 @@ class PADDPG:
 
     def predict(self, state, step, mode="training"):
         # if self.model_type != "VAE": state = Variable(state.unsqueeze(0)) # [1, C, H, W]
-        state = torch.from_numpy(state).float()
+        state = torch.from_numpy(state).float().unsqueeze(0)
         if self.temporal_mech:
             state = state.unsqueeze(0)
         (probs, params) = self.actor(state)
-        action = np.argmax(probs.detach().numpy())
+        probs = probs.detach().numpy().squeeze()
+        params = params.detach().numpy().squeeze()
+        if self.np_random.uniform() < self.epsilon:
+            probs = self.np_random.uniform(size=self.n_hl_actions)
+        hl_action = np.argmax(probs)
         offset = np.array(
-            [self.action_parameter_sizes[i] for i in range(action)], dtype=int
+            [self.action_parameter_sizes[i] for i in range(hl_action)], dtype=int
         ).sum()
-        action = params[offset : offset + self.action_parameter_sizes[action]]
-        action = action.detach().numpy()  # [steer, throttle]
+
+        action = params[
+            offset : offset + self.action_parameter_sizes[hl_action]
+        ]  # [steer, throttle]
         if mode == "training":
             action = self.ounoise.get_action(action, step)
-            # action[0] = np.clip(np.random.normal(action[0], self.std, 1), -1, 1)
-            # action[1] = np.clip(np.random.normal(action[1], self.std, 1), -1, 1)
-        action[0] = np.clip(action[0], -1, 1)
-        action[1] = np.clip(action[1], -1, 1)
-        return action
+        action[0] = np.clip(
+            action[0],
+            self.action_parameter_min_numpy[hl_action],
+            self.action_parameter_max_numpy[hl_action],
+        )
+        action[1] = np.clip(action[1], -1, 1)  # no limit
+
+        full_action = np.concatenate([probs, params])
+        return action, full_action
 
     def _update(self):
 
@@ -337,19 +354,22 @@ class PADDPG:
         self.critic_target = self.critic_target.to(self.device).train()
 
         with torch.no_grad():
-            next_actions = self.actor_target.forward(next_states)
-            next_Q = self.critic_target(next_states, next_actions)
-            Q_prime = rewards.unsqueeze(1) + (self.gamma * next_Q * (~dones)).unsqueeze(
-                1
-            )
+            probs_next_actions, params_next_actions = self.actor_target(next_states)
 
-        Q_val = self.critic(states, actions)
-        loss_critic = self.loss_func(Q_val, Q_prime)
+            next_Q = self.critic_target(
+                next_states, torch.cat([probs_next_actions, params_next_actions], dim=1)
+            ).squeeze()
 
-        self.critic_optimiser.zero_grad()
+            Q_prime = rewards + (self.gamma * next_Q * (~dones))
+
+        Q_val = self.critic(states, actions).squeeze()
+
+        loss_critic = self.critic_criterion(Q_val, Q_prime)
+
+        self.critic_optimizer.zero_grad()
         loss_critic.backward()
         torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.critic_clip_grad)
-        self.critic_optimiser.step()
+        self.critic_optimizer.step()
 
         # 1 - calculate gradients from critic
         with torch.no_grad():
@@ -362,25 +382,27 @@ class PADDPG:
         delta_a = deepcopy(actions.grad.data)
         # 2 - apply inverting gradients and combine with gradients from actor
         actions, action_params = self.actor(Variable(states))
-        actions = torch.cat((actions, action_params), dim=1)
-        delta_a[:, self.num_actions :] = self._invert_gradients(
-            delta_a[:, self.num_actions :].cpu(),
-            action_params[:, self.num_actions :].cpu(),
+        delta_a[:, : self.n_hl_actions] = self._invert_gradients(
+            delta_a[:, : self.n_hl_actions].cpu(),
+            actions.cpu(),
             grad_type="hl_actions",
             inplace=True,
         )
-        delta_a[:, : self.num_actions] = self._invert_gradients(
-            delta_a[:, : self.num_actions].cpu(),
-            action_params[:, : self.num_actions].cpu(),
+        delta_a[:, self.n_hl_actions :] = self._invert_gradients(
+            delta_a[:, self.n_hl_actions :].cpu(),
+            action_params.cpu(),
             grad_type="ll_actions",
             inplace=True,
         )
+        actions = torch.cat((actions, action_params), dim=1)
         out = -torch.mul(delta_a, actions)
-        self.actor.zero_grad()
+        self.actor_optimizer.zero_grad()
         out.backward(torch.ones(out.shape).to(self.device))
-
         torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_clip_grad)
-        self.actor_optimiser.step()
+        self.actor_optimizer.step()
+
+        print(f"actor loss: {out.item()}")
+        print(f"critic loss: {loss_critic.item()}")
 
         for target_param, param in zip(
             self.actor_target.parameters(), self.actor.parameters()
@@ -398,6 +420,14 @@ class PADDPG:
 
         # Back to cpu
         self.actor = self.actor.cpu().eval()
+
+        if self.steps < self.epsilon_steps:
+            self.epsilon = self.epsilon_initial - (
+                self.epsilon_initial - self.epsilon_final
+            ) * (self.steps / self.epsilon_steps)
+        else:
+            self.epsilon = self.epsilon_final
+        self.steps += 1
 
     def p_update(self):
         pass

@@ -172,7 +172,11 @@ def train():
                             states_deque.append(state)
                         state = np.array(states_deque)  # (S, Z_dim+Compl)
 
-                    action = model.predict(state, episode)  # return a np. action
+                    if config.train.hrl.n_hl_actions > 0:
+                        action, full_actions = model.predict(state, episode)
+                    else:
+                        action = model.predict(state, episode)  # return a np. action
+
                     next_state, reward, terminal_state, info = env.step(action)
 
                     if config.train.temporal_mech:
@@ -214,6 +218,17 @@ def train():
                                 )
                             )
 
+                    elif config.run_type == "PADDPG":
+                        model.replay_memory.add_to_memory(
+                            (
+                                state.copy(),
+                                full_actions,
+                                reward.copy(),
+                                next_state.copy(),
+                                terminal_state,
+                            )
+                        )
+
                     episode_reward.append(reward)
                     state = deepcopy(next_state)
 
@@ -246,6 +261,7 @@ def train():
 
             if episode > config.train.start_to_update and config.run_type in [
                 "DDPG",
+                "PADDPG",
                 "CoL",
             ]:
                 for _ in range(config.train.optimization_steps):
@@ -277,7 +293,10 @@ def train():
                             states_deque.append(state)
                         state = np.array(states_deque)  # (S, Z_dim+Compl)
 
-                    action = model.predict(state, episode, mode="testing")
+                    if config.train.hrl.n_hl_actions > 0:
+                        action, _ = model.predict(state, episode, mode="testing")
+                    else:
+                        action = model.predict(state, episode, mode="testing")
                     next_state, reward, terminal_state, info = env.step(action)
                     if info["closed"] == True:
                         exit(0)

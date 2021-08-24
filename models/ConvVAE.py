@@ -140,8 +140,8 @@ class VAE_Actor(nn.Module):
             else:
                 x = torch.tanh(layer(x))
 
-        probs = self.softmax(outp[: self.n_hl_actions])
-        p_actions = outp[self.n_hl_actions :]
+        probs = self.softmax(outp[:, : self.n_hl_actions])
+        p_actions = outp[:, self.n_hl_actions :]
         return (probs, p_actions)
 
     def feat_ext(self, x):

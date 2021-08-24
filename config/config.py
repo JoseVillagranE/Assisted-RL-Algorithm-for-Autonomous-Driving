@@ -58,13 +58,13 @@ config.train = edict()
 config.train.checkpoint_every = 0
 config.train.batch_size = 10
 config.train.episodes = 100
-config.train.steps = 300  # es una especie de time-out
+config.train.steps = 1000  # es una especie de time-out
 config.train.optimizer = "Adam"
 config.train.actor_lr = 1e-4
 config.train.critic_lr = 1e-3
 config.train.actor_grad_clip = 0.2
 config.train.critic_grad_clip = 0.2
-config.train.max_memory_size = 10000  # 4e5
+config.train.max_memory_size = 50000  # 4e5
 config.train.tau = 0.001
 config.train.gamma = 0.99
 config.train.alpha = 0.7  # Prioritized Experience Replay
@@ -78,8 +78,8 @@ config.train.start_to_update = 0
 config.train.optimization_steps = 1
 config.train.action_space = 2  # [steer, throttle]
 config.train.measurements_to_include = set(
-    ["steer"]
-    + ["throttle"]
+    # # ["steer"]
+    # + ["throttle"]
     # ["speed"] +
     # ["orientation"]
 )
@@ -98,7 +98,7 @@ config.train.expert_prop = 0.25  # CoL
 config.train.agent_prop = 0.75
 config.train.rm_filename = "BC-1.npy"
 config.train.VAE_weights_path = os.path.join(
-    root_dir, "models/weights/segmodel_expert_samples_sem_all.pt"
+    root_dir, "models/weights/segmodel_rollouts.pt"
 )
 # RNN
 config.train.temporal_mech = False
@@ -132,6 +132,16 @@ config.train.load_rm_idxs = [0, 1]
 config.train.load_rm_num_rolls = 20
 config.train.load_rm_choice = "random"
 config.train.load_rm_name_c = ["0", "g"]
+
+config.train.hrl = edict()
+config.train.hrl.n_hl_actions = 0
+config.train.hrl.high = [0, 1, 0, 1, 1, 1]  # steer, th, steer, th ..
+config.train.hrl.low = [-1, -1, 0, -1, 0, -1]
+config.train.hrl.ig = True
+config.train.hrl.epsilon_initial = 1.0
+config.train.hrl.epsilon_final = 0.01
+config.train.hrl.epsilon_steps = 1000
+
 
 config.cl_train = edict()
 config.cl_train.q_of_tasks = 1
@@ -243,7 +253,7 @@ config.reward_fn.weight_distance_to_goal = 5
 # Test Defaults
 config.test = edict()
 config.test.every = 10
-config.test.steps = 300
+config.test.steps = 1000
 
 # Eval Defaults
 config.eval = edict()
