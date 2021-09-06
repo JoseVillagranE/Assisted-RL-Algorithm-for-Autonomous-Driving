@@ -62,6 +62,10 @@ config.train.steps = 1000  # es una especie de time-out
 config.train.optimizer = "Adam"
 config.train.actor_lr = 1e-4
 config.train.critic_lr = 1e-3
+config.train.actor_agent_lr = 1e-4
+config.train.critic_agent_lr = 1e-4 # CoL
+config.train.actor_expert_lr = 1e-4
+config.train.critic_expert_lr = 1e-4
 config.train.actor_grad_clip = 0.2
 config.train.critic_grad_clip = 0.2
 config.train.max_memory_size = 50000  # 4e5
@@ -78,7 +82,7 @@ config.train.start_to_update = 0
 config.train.optimization_steps = 1
 config.train.action_space = 2  # [steer, throttle]
 config.train.measurements_to_include = set(
-    # # ["steer"]
+    # ["steer"]
     # + ["throttle"]
     # ["speed"] +
     # ["orientation"]
@@ -141,6 +145,13 @@ config.train.hrl.ig = True
 config.train.hrl.epsilon_initial = 1.0
 config.train.hrl.epsilon_final = 0.01
 config.train.hrl.epsilon_steps = 1000
+
+config.train.trauma_memory = edict()
+config.train.trauma_memory.enable = False
+config.train.trauma_memory.memory_size = 1000
+config.train.trauma_memory.situations = ["Collision Veh", "Collision Other"]
+config.train.trauma_memory.prop =  0.1
+
 
 
 config.cl_train = edict()

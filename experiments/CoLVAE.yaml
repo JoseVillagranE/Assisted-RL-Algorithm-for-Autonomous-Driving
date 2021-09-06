@@ -8,35 +8,47 @@ simulation:
 
 train:
   checkpoint_every: 100000
-  episodes: 100
+  episodes: 200
   device: "cpu"
-  actor_lr: 0.0001
-  critic_lr: 0.0001
+  actor_agent_lr: 0.001
+  critic_agent_lr: 0.001
+  actor_expert_lr: 0.00001
+  critic_expert_lr: 0.00001
   optimizer: "Adam"
-  type_RM: "random"
+  type_RM: "prioritized"
   batch_size: 128
-  start_to_update: 5
-  optimization_steps: 1
+  temporal_mech: False
+  start_to_update: 1
+  optimization_steps: 50
   lambdas: [1, 1, 1]
   expert_prop: 0.25
   agent_prop: 0.75
   ou_noise_mu: 0.0
-  ou_noise_theta: 0.6
-  ou_noise_max_sigma: 0.4
-  ou_noise_min_sigma: 0.0
-  ou_noise_decay_period: 50
-  pretraining_steps: 5000
-  tau: 0.005
+  ou_noise_theta: 0.15
+  ou_noise_max_sigma: 0.01
+  ou_noise_min_sigma: 0.0001
+  ou_noise_decay_period: 100 # episode
+  pretraining_steps: 10
+  tau: 0.0001
   gamma: 0.99
   wp_encode: False
   wp_encoder_size: 64
-  rm_filename: "MC-1.npy" # folder's name for load many experiences tuples
-  temporal_mech: False
-  scheduler_step_size: 20
+  rm_filename: "" # folder's name for load many experiences tuples
+  scheduler_step_size: 2000
+  scheduler_min_lr : 0.000001 # 10-6
   scheduler_gamma: 0.1
-  load_rm_name_c: ["1", "g"]
-  load_rm_idxs: [0, 1]
+  load_rm_choice: "name"
+  load_rm_name_c: ["2", "g"]
+  load_rm_idxs: [] # compl states [steer, thr, speed, ..]
   enable_scheduler_lr: True
+  alpha: 0.3
+  beta: 1
+  actor_grad_clip: 0.05
+  critic_grad_clip: 0.5
+  trauma_memory:
+      enable: True
+      prop: 0.1
+      
 
 agent:
   sensor:
@@ -51,13 +63,13 @@ exo_agents:
     spawn: False
 
   vehicle:
-    n: 1
+    n: 2
     spawn: True
     initial_position:
-      x: [149]
-      y: [63]
-      z: [1]
-      yaw: [180]
+      x: [149, 190]
+      y: [63, 63]
+      z: [1, 1]
+      yaw: [180, 180]
 
 model:
   type: "VAE"

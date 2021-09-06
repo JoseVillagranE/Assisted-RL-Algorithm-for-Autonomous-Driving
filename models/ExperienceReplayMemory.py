@@ -283,7 +283,8 @@ class RandomDequeMemory(ExperienceReplayMemory):
 # Prioritized Experience Replay (Schaul et al., 2015)
 class PrioritizedDequeMemory(ExperienceReplayMemory):
     def __init__(
-        self, queue_capacity=2000, alpha=0.7, beta=0.5, rw_weights=None, batch_size=64
+        self, queue_capacity=2000, alpha=0.7, beta=0.5, rw_weights=None, batch_size=64,
+        temporal=False
     ):
 
         self.queue_capacity = queue_capacity
@@ -293,6 +294,7 @@ class PrioritizedDequeMemory(ExperienceReplayMemory):
         self.beta = beta
         self.rw_weights = rw_weights
         self.batch_size = batch_size
+        self.temporal = temporal
 
     def add_to_memory(self, experience_tuple):
         self.memory.append(experience_tuple)
@@ -332,7 +334,7 @@ class PrioritizedDequeMemory(ExperienceReplayMemory):
             sampled_rewards,
             sampled_next_states,
             sampled_dones,
-            isw,
+            list(map(lambda x: x / max(isw), isw)),
             idxs,
         )
 
@@ -340,9 +342,104 @@ class PrioritizedDequeMemory(ExperienceReplayMemory):
 
         for idx, priority in zip(idxs, priorities):
             self.priority[idx] = priority
+            
+    def load_rm_folder(
+        self,
+        path,
+        complt_states_idx,
+        nums_roll=10,
+        transform=None,
+        choice_form="random",
+        idxs=None,
+        name_c=None,
+        vae_encode=None,  # little bit ugly
+    ):
+        print("Load Replay memory")
+        files = glob.glob(path + "/*.npz")
+        assert (
+            len(files) >= nums_roll
+        ), "Numbers of rollouts required is higher than the dataset"
+        if choice_form == "random":
+            files = random.sample(files, nums_roll)
+        elif choice_form == "name":
+            assert name_c is not None
+            files = list(
+                filter(
+                    lambda x: x.split("_")[2] == name_c[0]
+                    and x.split("_")[-1].split(".")[0] == name_c[1],
+                    files,
+                )
+            )
+        elif choice_form == "idx":
+            assert idxs is not None
+            files = [files[idx] for idx in idxs]
+        else:
+            files = files[:nums_roll]
+
+        for i, file in enumerate(files):
+            with np.load(file) as data:
+                obs_data = data["states"].astype(np.float32)
+                obs_data = np.transpose(obs_data, (0, 2, 3, 1))  # [S, H, W, C]
+                obs_data = [Image.fromarray(np.uint8(obs * 255)) for obs in obs_data]
+                if transform:
+                    obs_data = [transform(obs).unsqueeze(0) for obs in obs_data]
+                    obs_data = torch.cat(obs_data, axis=0)
+                obs, next_obs = obs_data[:-1], obs_data[1:]
+                actions = data["actions"].astype(np.float32)
+                rewards = data["rewards"].astype(np.float32)
+                terminals = data["terminals"]
+                if len(complt_states_idx) > 0:
+                    complt_states = data["complementary_states"]
+                    idxs = list(set(list(range(6))) - set(complt_states_idx))
+                    complt_states = np.delete(complt_states, idxs, axis=1)
+                    complt_states = complt_states.astype(np.float32)
+                    complt_states, next_complt_states = (
+                        complt_states[:-1],
+                        complt_states[1:],
+                    )
+            if vae_encode:
+                # obs -> (S, C, H, W)
+                obs = vae_encode(obs).detach().numpy()  # (S, Z_dim)
+                next_obs = vae_encode(next_obs).detach().numpy()
+                if len(complt_states_idx) > 0:
+                    obs = np.append(obs, complt_states, axis=-1)
+                    next_obs = np.append(next_obs, next_complt_states, axis=-1)
+
+            if self.temporal:
+                obs_list, next_obs_list = [], []
+                obs_array = np.zeros(
+                    (self.win, obs[0].shape[-1])
+                )  # (B, S , Z_dim+Compl)
+                next_obs_array = np.zeros(
+                    (self.win, obs[0].shape[-1])
+                )  # (B, S , Z_dim+Compl)
+                for i in range(len(obs)):
+                    if i == 0:
+                        for j in range(self.win):
+                            obs_array[j, :] = obs[i]
+                            next_obs_array[j, :] = next_obs[i]
+                    else:
+                        obs_array[:-1, :] = obs_array[1:, :].copy()
+                        obs_array[:-1, :] = obs[i]
+                        next_obs_array[:-1, :] = next_obs_array[1:, :].copy()
+                        next_obs_array[:-1, :] = next_obs[i]
+
+                    obs_list.append(obs_array.copy())
+                    next_obs_list.append(next_obs_array.copy())
+                obs = obs_list
+                next_obs = next_obs_list
+            tuples = [x for x in zip(obs, actions, rewards, next_obs, terminals)]
+            if i == 0:
+                self.memory = deque(tuples, maxlen=self.queue_capacity)
+                self.priority = deque([1]*len(self.memory), maxlen=self.queue_capacity)
+            else:
+                self.memory.extend(tuples)
+                self.priority.extend([1]*len(tuples))
 
     def get_memory_size(self):
         return len(self.memory)
+    def set_batch_size(self, batch_size):
+        self.batch_size = batch_size
 
 
 if __name__ == "__main__":

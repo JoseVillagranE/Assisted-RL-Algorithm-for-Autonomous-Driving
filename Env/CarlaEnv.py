@@ -134,7 +134,7 @@ class CarlaEnv(gym.Env):
         self.exo_driving = exo_driving
 
         self.terminal_state = False
-        self.extra_info = []  # List of extra info shown of the HUD
+        self.extra_info = ["start"]  # List of extra info shown of the HUD
 
         self.initial_location = carla.Location(
             config.agent.initial_position.x,
@@ -614,8 +614,20 @@ class CarlaEnv(gym.Env):
         steer = self.agent.control.steer
         throttle = self.agent.control.throttle
         orientation = vector(self.agent.get_forward_vector())
-        extra_info = np.array([steer, throttle, speed, *orientation])
+        pos = self.agent.get_position()
+        extra_info = np.array([*pos, speed, steer, throttle, *orientation])
         return extra_info
+
+    def get_exo_agent_extra_info(self):
+        # for the moment is only vehicles
+        l = []
+        for exo_veh in self.exo_vehs:
+            speed = exo_veh.get_speed() * 3.6  # [km/h]
+            steer = exo_veh.control.steer
+            throttle = exo_veh.control.throttle
+            orientation = vector(exo_veh.get_forward_vector())
+            l.append(np.array([*orientation, speed, steer, throttle]))
+        return l
 
 
 def game_loop():

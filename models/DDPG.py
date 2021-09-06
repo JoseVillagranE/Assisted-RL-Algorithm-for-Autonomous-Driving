@@ -6,6 +6,7 @@ from .ExperienceReplayMemory import (
     SequentialDequeMemory,
     RandomDequeMemory,
     PrioritizedDequeMemory,
+    cat_experience_tuple
 )
 from .Conv_Actor_Critic import Conv_Actor, Conv_Critic
 from ConvVAE import VAE_Actor, VAE_Critic
@@ -31,6 +32,7 @@ class DDPG:
         self.q_of_tasks = config.cl_train.q_of_tasks
         self.actor_grad_clip = config.train.actor_grad_clip
         self.critic_grad_clip = config.train.critic_grad_clip
+        self.enable_trauma_memory = config.train.trauma_memory.enable
         n_channel = 3
 
         input_size = (
@@ -147,7 +149,18 @@ class DDPG:
             self.B = []
             batch_size = 1
             self.cl_batch_size = config.train.batch_size
-
+        
+        rm_prop = 1
+        if self.enable_trauma_memory:
+            self.trauma_replay_memory = RandomDequeMemory(
+                    queue_capacity=config.train.trauma_memory.memory_size,
+                    rw_weights=rw_weights,
+                    batch_size=round(config.train.trauma_memory.prop*batch_size),
+                    temporal=self.temporal_mech,
+                    win=config.train.rnn_nsteps,
+                )
+            rm_prop = 1 - config.train.trauma_memory.prop
+            
         for i in range(self.q_of_tasks):
             if self.type_RM == "sequential":
                 self.replay_memory = SequentialDequeMemory(rw_weights)
@@ -155,7 +168,7 @@ class DDPG:
                 self.replay_memory = RandomDequeMemory(
                     queue_capacity=config.train.max_memory_size,
                     rw_weights=rw_weights,
-                    batch_size=batch_size,
+                    batch_size=round(rm_prop*batch_size),
                     temporal=self.temporal_mech,
                     win=config.train.rnn_nsteps,
                 )
@@ -165,7 +178,7 @@ class DDPG:
                     alpha=config.train.alpha,
                     beta=config.train.beta,
                     rw_weights=rw_weights,
-                    batch_size=batch_size,
+                    batch_size=round(rm_prop*batch_size),
                 )
             else:
                 raise NotImplementedError(f"{self.type_RM} is not implemented")
@@ -237,49 +250,16 @@ class DDPG:
         action = action.detach().numpy()  # [steer, throttle]
         if mode == "training":
             action = self.ounoise.get_action(action, step)
-            # action[0] = np.clip(np.random.normal(action[0], self.std, 1), -1, 1)
-            # action[1] = np.clip(np.random.normal(action[1], self.std, 1), -1, 1)
         action[0] = np.clip(action[0], -1, 1)
         action[1] = np.clip(action[1], -1, 1)
         return action
 
     def p_update(self):
+        
+        if self.replay_memory.get_memory_size() < self.batch_size:
+            return
 
-        if self.q_of_tasks == 1:
-            (
-                states,
-                actions,
-                rewards,
-                next_states,
-                dones,
-                isw,
-                idxs,
-            ) = self.replay_memory.get_batch_for_replay()
-
-        else:
-
-            # multi_task
-            if sum([len(rb) for rb in self.B]) < self.batch_size:
-                return
-            indexs = random.choices(len(self.B), k=self.cl_batch_size)
-            states = []
-            actions = []
-            rewards = []
-            next_states = []
-            dones = []
-            isw = []
-            inter_idxs = []
-            for i in indexs:
-                state, action, reward, next_state, done, isw_, idx = self.B[
-                    i
-                ].get_batch_for_replay()
-                states += state
-                actions += action
-                rewards += reward
-                next_states += next_state
-                dones += done
-                isw += isw_
-                inter_idxs += idx
+        states, actions, rewards, next_states, dones, isw, idxs = self.p_get_memory()
 
         isw = torch.FloatTensor(isw).to(self.device)
 
@@ -346,9 +326,9 @@ class DDPG:
         if self.q_of_tasks == 1:
             self.replay_memory.update_priorities(idxs, TD.abs().detach().cpu().numpy())
         else:
-            for i in set(indexs):
-                ith_idx = np.where(np.array(indexs) == i)[0]
-                js = np.array(inter_idxs)[ith_idx]
+            for i in set(idxs[0]):
+                ith_idx = np.where(np.array(idxs[0]) == i)[0]
+                js = np.array(idxs[1])[ith_idx]
                 self.B[i].update_priorities(js, TD[js].abs().detach().cpu().numpy())
 
         # Back to cpu
@@ -359,38 +339,10 @@ class DDPG:
 
     def _update(self):
 
-        # single task
-        if self.q_of_tasks == 1:
-            if self.replay_memory.get_memory_size() < self.batch_size:
-                return
+        if self.replay_memory.get_memory_size() < self.batch_size:
+            return        
 
-            (
-                states,
-                actions,
-                rewards,
-                next_states,
-                dones,
-            ) = self.replay_memory.get_batch_for_replay()
-
-        else:
-            # multi_task
-            if sum([len(rb) for rb in self.B]) < self.batch_size:
-                return
-            indexs = random.choices(len(self.B), k=self.cl_batch_size)
-            states = []
-            actions = []
-            rewards = []
-            next_states = []
-            dones = []
-            for i in indexs:
-                state, action, reward, next_state, done = self.B[
-                    i
-                ].get_batch_for_replay()
-                states += state
-                actions += action
-                rewards += reward
-                next_states += next_state
-                dones += done
+        states, actions, rewards, next_states, dones = self.get_memory()
 
         states = torch.FloatTensor(states).to(self.device)
         actions = torch.FloatTensor(actions).to(self.device)
@@ -465,6 +417,101 @@ class DDPG:
 
     def feat_ext(self, state):
         return self.actor.feat_ext(state)
+    
+    def get_memory(self):
+        # single task
+        if self.q_of_tasks == 1:
+            (
+                states,
+                actions,
+                rewards,
+                next_states,
+                dones,
+            ) = self.replay_memory.get_batch_for_replay()
+            
+            if self.enable_trauma_memory:
+                (
+                    t_states,
+                    t_actions,
+                    t_rewards,
+                    t_next_states,
+                    t_dones,
+                ) = self.trauma_replay_memory.get_batch_for_replay()
+                
+                states, actions, rewards, next_states, dones = cat_experience_tuple(
+                    np.array(states),
+                    np.array(t_states),
+                    np.array(actions),
+                    np.array(t_actions),
+                    np.array(rewards),
+                    np.array(t_rewards),
+                    np.array(next_states),
+                    np.array(t_next_states),
+                    np.array(dones),
+                    np.array(t_dones),
+                )
+
+        else:
+            # multi_task
+            if sum([len(rb) for rb in self.B]) < self.batch_size:
+                return
+            indexs = random.choices(len(self.B), k=self.cl_batch_size)
+            states = []
+            actions = []
+            rewards = []
+            next_states = []
+            dones = []
+            for i in indexs:
+                state, action, reward, next_state, done = self.B[
+                    i
+                ].get_batch_for_replay()
+                states += state
+                actions += action
+                rewards += reward
+                next_states += next_state
+                dones += done
+        return states, actions, rewards, next_states, dones
+    
+    def p_get_memory(self):
+        if self.q_of_tasks == 1:
+            (
+                states,
+                actions,
+                rewards,
+                next_states,
+                dones,
+                isw,
+                idxs,
+            ) = self.replay_memory.get_batch_for_replay()
+            
+            return states, actions, rewards, next_states, dones, isw, idxs
+
+        else:
+
+            # multi_task
+            if sum([len(rb) for rb in self.B]) < self.batch_size:
+                return
+            indexs = random.choices(len(self.B), k=self.cl_batch_size)
+            states = []
+            actions = []
+            rewards = []
+            next_states = []
+            dones = []
+            isw = []
+            inter_idxs = []
+            for i in indexs:
+                state, action, reward, next_state, done, isw_, idx = self.B[
+                    i
+                ].get_batch_for_replay()
+                states += state
+                actions += action
+                rewards += reward
+                next_states += next_state
+                dones += done
+                isw += isw_
+                inter_idxs += idx
+                
+            return states, actions, rewards, next_states, dones, isw, (indexs, inter_idxs)
 
     def load_state_dict(self, models_state_dict, optimizer_state_dict):
         self.actor.load_state_dict(models_state_dict[0])

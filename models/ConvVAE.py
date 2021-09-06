@@ -109,9 +109,22 @@ class VAE_Actor(nn.Module):
                 print("Freezing RNN")
                 freeze_params(self.lstm)
 
-        self.linear_forward = (
-            self._linear_forward if self.n_hl_actions == 0 else self._hrl_linear_forward
-        )
+        if self.n_hl_actions == 0:
+            self.linear_forward = self._linear_forward
+        else:
+
+            self.n_actions_params = num_actions - self.n_hl_actions
+
+            self.linear_forward = self._hrl_linear_forward
+            self.action_outp_layer = nn.Linear(
+                input_linear_layer_dim, self.n_hl_actions
+            )
+            self.action_parameters_outp_layer = nn.Linear(
+                input_linear_layer_dim, self.n_actions_params
+            )
+            self.action_parameters_passthrough_layer = nn.Linear(
+                input_linear_layer_dim, self.n_actions_params
+            )
 
     def forward(self, state):
 
@@ -134,14 +147,8 @@ class VAE_Actor(nn.Module):
         return x
 
     def _hrl_linear_forward(self, x):
-        for i, layer in enumerate(self.mlp):
-            if i == len(self.mlp) - 1:
-                outp = layer(x)
-            else:
-                x = torch.tanh(layer(x))
-
-        probs = self.softmax(outp[:, : self.n_hl_actions])
-        p_actions = outp[:, self.n_hl_actions :]
+        probs = self.action_outp_layer(x)
+        p_actions = self.action_parameters_outp_layer(x)
         return (probs, p_actions)
 
     def feat_ext(self, x):
@@ -225,7 +232,7 @@ class ConvVAE(nn.Module):
         logvar = self.logvar(x)
         return mu, logvar
 
-    def reparametrize(self, mu, logvar):
+    def reparametrize(self, mu, logvar, mode="testing"):
 
         sigma = torch.exp(0.5 * logvar)
         eps = torch.rand_like(sigma)

@@ -40,6 +40,17 @@ def plot_data(data, x_axis, value, is_test=False, condition=None, smooth=1, **kw
 
     plt.tight_layout(pad=0.5)
 
+def plot_extra_info(data):
+
+    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    axes = axes.flatten()
+    idxs = [[0, 1], 3]
+    for episode, d in enumerate(data):
+        color = (episode / len(data), 0, 0)
+        axes[0].plot(d[:, 0], d[:, 1], color=color) # pos
+        axes[1].plot(d[:, 3], color=color)
+
+    plt.show()
 
 if __name__ == "__main__":
 
@@ -60,3 +71,6 @@ if __name__ == "__main__":
     #plot_data(rewards_wout, "Episodes", "Rewards", smooth=5, label="Train Reward Wout",
     #          markers=True, dashes=False)
     plt.show()
+
+    data = np.load("train_agent_extra_info.npy", allow_pickle=True)
+    plot_extra_info(data)

@@ -38,7 +38,6 @@ def parse_args():
 
 # TODO: With more than one steps you should manage next_latent state dimensions
 
-
 def train():
 
     if isinstance(config.seed, int):
@@ -49,7 +48,7 @@ def train():
 
     # Setup the paths and dirs
     save_path = os.path.join(
-        config.model_logs.root_dir, config.model.type
+        config.model_logs.root_dir, config.model.type, config.run_type
     )  # model_logs/model_type
 
     if not os.path.exists(save_path):
@@ -139,6 +138,8 @@ def train():
     test_rewards = []
     info_finals_state = []
     test_info_finals_state = []
+    agent_extra_info = []
+    test_agent_extra_info = []
 
     # load checkpoint if is necessary
     model_dicts, optimizers_dicts, rewards, start_episode = load_checkpoint(
@@ -159,6 +160,7 @@ def train():
             terminal_state_info = ""
             states_deque = deque(maxlen=config.train.rnn_nsteps)
             next_states_deque = deque(maxlen=config.train.rnn_nsteps)
+            agent_stats = env.get_agent_extra_info()
             while not terminal_state:
                 for step in range(config.train.steps):
                     if env.controller.parse_events():
@@ -195,42 +197,26 @@ def train():
                     weighted_rw = weighted_rw_fn(reward, rw_weights)
                     if not config.reward_fn.normalize:
                         reward = weighted_rw  # rw is only a scalar value
-                    # Because exist manual and straight control also
-                    if config.run_type in ["DDPG", "CoL"]:
-                        if config.train.temporal_mech:
-                            model.replay_memory.add_to_memory(
-                                (
-                                    state,
-                                    action.copy(),
-                                    reward,
-                                    next_state_,
-                                    terminal_state,
-                                )
-                            )
-                        else:
-                            model.replay_memory.add_to_memory(
-                                (
-                                    state.copy(),
-                                    action.copy(),
-                                    reward.copy(),
-                                    next_state.copy(),
-                                    terminal_state,
-                                )
-                            )
-
-                    elif config.run_type == "PADDPG":
-                        model.replay_memory.add_to_memory(
-                            (
-                                state.copy(),
-                                full_actions,
-                                reward.copy(),
-                                next_state.copy(),
-                                terminal_state,
-                            )
-                        )
+                        
+                    _action = action if config.run_type in ["DDPG", "CoL"] else full_actions
+                    _next_state = next_state_ if config.train.temporal_mech else next_state
+                    
+                    if config.train.trauma_memory.enable and env.extra_info[-1] in config.train.trauma_memory.situations:
+                        model.trauma_replay_memory.add_to_memory((state.copy(),
+                                                       _action.copy(),
+                                                       reward.copy(),
+                                                       _next_state.copy(),
+                                                       terminal_state))
+                    else:
+                        model.replay_memory.add_to_memory((state.copy(),
+                                                       _action.copy(),
+                                                       reward.copy(),
+                                                       _next_state.copy(),
+                                                       terminal_state))
 
                     episode_reward.append(reward)
                     state = deepcopy(next_state)
+                    agent_stats = np.vstack((agent_stats, env.get_agent_extra_info()))
 
                     if config.vis.render:
                         env.render()
@@ -258,6 +244,7 @@ def train():
 
             rewards.append(episode_reward)
             info_finals_state.append((episode, terminal_state_info))
+            agent_extra_info.append(agent_stats)
 
             if episode > config.train.start_to_update and config.run_type in [
                 "DDPG",
@@ -280,6 +267,7 @@ def train():
                 )
                 states_deque = deque(maxlen=config.train.rnn_nsteps)
                 terminal_state_info = ""
+                agent_stats = env.get_agent_extra_info()
                 print("Running a test episode")
                 for step in range(config.test.steps):
                     if env.controller.parse_events():
@@ -303,6 +291,8 @@ def train():
                     weighted_rw = weighted_rw_fn(reward, rw_weights)
                     episode_reward_test += weighted_rw
                     state = deepcopy(next_state)
+                    agent_stats = np.vstack((agent_stats, env.get_agent_extra_info()))
+
                     if config.vis.render:
                         env.render()
 
@@ -310,24 +300,25 @@ def train():
                         if len(env.extra_info) > 0:
                             terminal_state_info = env.extra_info[-1]
                             print(
-                                f"episode_test: {episode_test}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}"
+                                f"episode_test: {episode_test}, step: {step}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}"
                             )
                             logger.info(
-                                f"episode_test: {episode_test}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}"
+                                f"episode_test: {episode_test}, step: {step}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}"
                             )
                         else:
                             terminal_state_info = "Time Out"
                             print(
-                                f"episode_test: {episode_test}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: TimeOut"
+                                f"episode_test: {episode_test}, step: {step}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: TimeOut"
                             )
                             logger.info(
-                                f"episode_test: {episode_test}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: TimeOut"
+                                f"episode_test: {episode_test}, step: {step}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: TimeOut"
                             )
                         break
                 episode_test += 1
 
                 test_rewards.append(episode_reward_test)
                 test_info_finals_state.append((episode, terminal_state_info))
+                test_agent_extra_info.append(agent_stats)
 
             if (
                 config.train.checkpoint_every > 0
@@ -367,6 +358,15 @@ def train():
         np.save(
             os.path.join(particular_save_path, "test_info_finals_state.npy"),
             np.array(test_info_finals_state),
+        )
+
+        np.save(
+            os.path.join(particular_save_path, "train_agent_extra_info.npy"),
+            agent_extra_info,
+        )
+        np.save(
+            os.path.join(particular_save_path, "test_agent_extra_info.npy"),
+            test_agent_extra_info,
         )
 
         # Last checkpoint to save

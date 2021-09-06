@@ -15,6 +15,7 @@ from .ExperienceReplayMemory import (
     SequentialDequeMemory,
     RandomDequeMemory,
     PrioritizedDequeMemory,
+    cat_experience_tuple
 )
 from .Conv_Actor_Critic import Conv_Actor, Conv_Critic
 from ConvVAE import VAE_Actor, VAE_Critic
@@ -51,7 +52,6 @@ class PADDPG:
         self.action_max = torch.ones(self.n_hl_actions).float().to(self.device)
         self.action_min = torch.zeros(self.n_hl_actions).float().to(self.device)
         self.action_range = (self.action_max - self.action_min).detach()
-
         print(f"action_range: {self.action_range}")
 
         self.action_parameter_max_numpy = np.array(
@@ -73,6 +73,8 @@ class PADDPG:
             torch.from_numpy(self.action_parameter_range_numpy).float().to(self.device)
         )
 
+        self.action_parameter_range[2] = 1
+
         print(f"action_parameter_max: {self.action_parameter_max}")
         print(f"action_parameter_min: {self.action_parameter_min}")
         print(f"action_parameter_range: {self.action_parameter_range}")
@@ -85,7 +87,7 @@ class PADDPG:
         self.actor_lr = config.train.actor_lr
         self.critic_lr = config.train.critic_lr
         self.inverting_gradients = config.train.hrl.ig
-        self.tau_actor = self.tau_critic = config.train.tau
+        self.tau = config.train.tau
 
         self.np_random = np.random.RandomState(seed=config.seed)
 
@@ -220,6 +222,18 @@ class PADDPG:
             batch_size = 1
             self.cl_batch_size = config.train.batch_size
 
+        rm_prop = 1
+        if self.enable_trauma_memory:
+            self.trauma_replay_memory = RandomDequeMemory(
+                    queue_capacity=config.train.trauma_memory.memory_size,
+                    rw_weights=rw_weights,
+                    batch_size=round(config.train.trauma_memory.prop*batch_size),
+                    temporal=self.temporal_mech,
+                    win=config.train.rnn_nsteps,
+                )
+            rm_prop = 1 - config.train.trauma_memory.prop
+
+
         for i in range(self.q_of_tasks):
             if self.type_RM == "sequential":
                 self.replay_memory = SequentialDequeMemory(rw_weights)
@@ -227,7 +241,7 @@ class PADDPG:
                 self.replay_memory = RandomDequeMemory(
                     queue_capacity=config.train.max_memory_size,
                     rw_weights=rw_weights,
-                    batch_size=batch_size,
+                    batch_size=round(rm_prop*batch_size),
                     temporal=self.temporal_mech,
                     win=config.train.rnn_nsteps,
                 )
@@ -237,7 +251,7 @@ class PADDPG:
                     alpha=config.train.alpha,
                     beta=config.train.beta,
                     rw_weights=rw_weights,
-                    batch_size=batch_size,
+                    batch_size=round(rm_prop*batch_size),
                 )
             else:
                 raise NotImplementedError(f"{self.type_RM} is not implemented")
@@ -300,12 +314,10 @@ class PADDPG:
     def predict(self, state, step, mode="training"):
         # if self.model_type != "VAE": state = Variable(state.unsqueeze(0)) # [1, C, H, W]
         state = torch.from_numpy(state).float().unsqueeze(0)
-        if self.temporal_mech:
-            state = state.unsqueeze(0)
         (probs, params) = self.actor(state)
         probs = probs.detach().numpy().squeeze()
         params = params.detach().numpy().squeeze()
-        if self.np_random.uniform() < self.epsilon:
+        if self.np_random.uniform() < self.epsilon and mode == "training":
             probs = self.np_random.uniform(size=self.n_hl_actions)
         hl_action = np.argmax(probs)
         offset = np.array(
@@ -319,8 +331,8 @@ class PADDPG:
             action = self.ounoise.get_action(action, step)
         action[0] = np.clip(
             action[0],
-            self.action_parameter_min_numpy[hl_action],
-            self.action_parameter_max_numpy[hl_action],
+            self.action_parameter_min_numpy[2 * hl_action],
+            self.action_parameter_max_numpy[2 * hl_action],
         )
         action[1] = np.clip(action[1], -1, 1)  # no limit
 
@@ -332,13 +344,7 @@ class PADDPG:
         if self.replay_memory.get_memory_size() < self.batch_size:
             return
 
-        (
-            states,
-            actions,
-            rewards,
-            next_states,
-            dones,
-        ) = self.replay_memory.get_batch_for_replay()
+        states, actions, rewards, next_states, dones = self.get_memory()
 
         states = torch.FloatTensor(states).to(self.device)
         actions = torch.FloatTensor(actions).to(self.device)
@@ -353,19 +359,33 @@ class PADDPG:
         self.critic = self.critic.to(self.device).train()
         self.critic_target = self.critic_target.to(self.device).train()
 
-        with torch.no_grad():
-            probs_next_actions, params_next_actions = self.actor_target(next_states)
+        if self.temporal_mech:
+            with torch.no_grad():
+                probs_next_actions, params_next_actions = self.actor_target(
+                    next_states[:, :, :]
+                )
+                next_Q = self.critic_target(
+                    next_states[:, -1, :],
+                    torch.cat([probs_next_actions, params_next_actions], dim=1),
+                ).squeeze()
 
-            next_Q = self.critic_target(
-                next_states, torch.cat([probs_next_actions, params_next_actions], dim=1)
-            ).squeeze()
+                Q_prime = rewards + (self.gamma * next_Q * (~dones))
+            Q_val = self.critic(states[:, -1, :], actions).squeeze()
 
-            Q_prime = rewards + (self.gamma * next_Q * (~dones))
+        else:
+            with torch.no_grad():
+                probs_next_actions, params_next_actions = self.actor_target(next_states)
 
-        Q_val = self.critic(states, actions).squeeze()
+                next_Q = self.critic_target(
+                    next_states,
+                    torch.cat([probs_next_actions, params_next_actions], dim=1),
+                ).squeeze()
+
+                Q_prime = rewards + (self.gamma * next_Q * (~dones))
+
+            Q_val = self.critic(states, actions).squeeze()
 
         loss_critic = self.critic_criterion(Q_val, Q_prime)
-
         self.critic_optimizer.zero_grad()
         loss_critic.backward()
         torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.critic_clip_grad)
@@ -373,26 +393,32 @@ class PADDPG:
 
         # 1 - calculate gradients from critic
         with torch.no_grad():
-            actions, action_params = self.actor(states)
+            if self.temporal_mech:
+                actions, action_params = self.actor(states[:, :, :])
+            else:
+                actions, action_params = self.actor(states)
             actions = torch.cat((actions, action_params), dim=1)
         actions.requires_grad = True
-        Q_val = self.critic(states, actions).mean()
+        Q_val = self.critic(states[:, -1, :], actions).mean()
         self.critic.zero_grad()
         Q_val.backward()
         delta_a = deepcopy(actions.grad.data)
         # 2 - apply inverting gradients and combine with gradients from actor
-        actions, action_params = self.actor(Variable(states))
+        if self.temporal_mech:
+            actions, actions_params = self.actor(Variable(states[:, :, :]))
+        else:
+            actions, action_params = self.actor(Variable(states))
         delta_a[:, : self.n_hl_actions] = self._invert_gradients(
             delta_a[:, : self.n_hl_actions].cpu(),
             actions.cpu(),
             grad_type="hl_actions",
-            inplace=True,
+            inplace=False,
         )
         delta_a[:, self.n_hl_actions :] = self._invert_gradients(
             delta_a[:, self.n_hl_actions :].cpu(),
             action_params.cpu(),
             grad_type="ll_actions",
-            inplace=True,
+            inplace=False,
         )
         actions = torch.cat((actions, action_params), dim=1)
         out = -torch.mul(delta_a, actions)
@@ -400,9 +426,6 @@ class PADDPG:
         out.backward(torch.ones(out.shape).to(self.device))
         torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_clip_grad)
         self.actor_optimizer.step()
-
-        print(f"actor loss: {out.item()}")
-        print(f"critic loss: {loss_critic.item()}")
 
         for target_param, param in zip(
             self.actor_target.parameters(), self.actor.parameters()
@@ -418,6 +441,9 @@ class PADDPG:
                 param.data * self.tau + target_param.data * (1.0 - self.tau)
             )
 
+        # print(f"critic_loss: {loss_critic.item()}")
+        # print(f"actor_loss: {out}")
+
         # Back to cpu
         self.actor = self.actor.cpu().eval()
 
@@ -430,7 +456,113 @@ class PADDPG:
         self.steps += 1
 
     def p_update(self):
-        pass
+        if self.replay_memory.get_memory_size() < self.batch_size:
+            return
+
+        (
+            states,
+            actions,
+            rewards,
+            next_states,
+            dones,
+            isw,
+            idxs) = self.p_get_memory()
+
+        isw = torch.FloatTensor(isw).to(self.device)
+
+        states = torch.FloatTensor(states).to(self.device)
+        actions = torch.FloatTensor(actions).to(self.device)
+        rewards = torch.FloatTensor(rewards).to(self.device)
+        next_states = torch.FloatTensor(next_states).to(self.device)
+        dones = torch.BoolTensor(dones).to(self.device)
+
+        self.actor = self.actor.to(
+            self.device
+        ).train()  # Because is used for predict actions
+        self.actor_target = self.actor_target.to(self.device).train()
+        self.critic = self.critic.to(self.device).train()
+        self.critic_target = self.critic_target.to(self.device).train()
+
+        probs_next_actions, params_next_actions = self.actor_target(next_states)
+
+        if self.temporal_mech:
+            Qvals = self.critic(states[:, -1, :], actions).squeeze()
+            next_Q = self.critic_target(next_states[:, -1, :],
+                                        torch.cat([probs_next_actions, params_next_actions], dim=1)).squeeze()
+        else:
+            Qvals = self.critic(states, actions).squeeze()
+            next_Q = self.critic_target(next_states,
+                                        torch.cat([probs_next_actions, params_next_actions], dim=1)).squeeze()
+
+        Q_prime = rewards + (self.gamma * next_Q * (~dones))
+
+        TD = Q_prime - Qvals
+        critic_loss = (isw * TD ** 2).mean()
+        # update critic
+        self.critic_optimizer.zero_grad()
+        critic_loss.backward()
+        nn.utils.clip_grad_norm_(self.critic.parameters(), self.critic_grad_clip)
+        self.critic_optimizer.step()
+
+        if self.temporal_mech:
+            with torch.no_grad():
+                actions, action_params = self.actor(states)
+                actions = torch.cat((actions, action_params), dim=1)
+            actions.requires_grad = True
+            Q_val = self.critic(states[:, -1, :], actions).mean()
+        else:
+            with torch.no_grad():
+                actions, action_params = self.actor(states)
+                actions = torch.cat((actions, action_params), dim=1)
+            actions.requires_grad = True
+            Q_val = self.critic(states, actions).mean()
+
+        self.critic.zero_grad()
+        Q_val.backward()
+        delta_a = deepcopy(actions.grad.data)
+
+        actions, action_params = self.actor(Variable(states))
+        delta_a[:, : self.n_hl_actions] = self._invert_gradients(
+            delta_a[:, : self.n_hl_actions].cpu(),
+            actions.cpu(),
+            grad_type="hl_actions",
+            inplace=False,
+        )
+        delta_a[:, self.n_hl_actions :] = self._invert_gradients(
+            delta_a[:, self.n_hl_actions :].cpu(),
+            action_params.cpu(),
+            grad_type="ll_actions",
+            inplace=False,
+        )
+        actions = torch.cat((actions, action_params), dim=1)
+        out = -torch.mul(delta_a, actions)
+        self.actor_optimizer.zero_grad()
+        out.backward(torch.ones(out.shape).to(self.device))
+        torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_clip_grad)
+        self.actor_optimizer.step()
+
+        if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
+            self.actor_scheduler.step()
+            self.critic_scheduler.step()
+
+        for target_param, param in zip(
+            self.actor_target.parameters(), self.actor.parameters()
+        ):
+            target_param.data.copy_(
+                param.data * self.tau + target_param.data * (1.0 - self.tau)
+            )
+
+        for target_param, param in zip(
+            self.critic_target.parameters(), self.critic.parameters()
+        ):
+            target_param.data.copy_(
+                param.data * self.tau + target_param.data * (1.0 - self.tau)
+            )
+
+        self.replay_memory.update_priorities(idxs, TD.abs().detach().cpu().numpy())
+
+        # Back to cpu
+        self.actor = self.actor.cpu().eval()
 
     def _invert_gradients(self, grad, vals, grad_type, inplace=True):
 
@@ -454,3 +586,95 @@ class PADDPG:
 
     def feat_ext(self, state):
         return self.actor.feat_ext(state)
+    
+    def get_memory(self):
+        # single task
+        if self.q_of_tasks == 1:
+            (
+                states,
+                actions,
+                rewards,
+                next_states,
+                dones,
+            ) = self.replay_memory.get_batch_for_replay()
+            
+            if self.enable_trauma_memory:
+                (
+                    t_states,
+                    t_actions,
+                    t_rewards,
+                    t_next_states,
+                    t_dones,
+                ) = self.trauma_replay_memory.get_batch_for_replay()
+                
+                states, actions, rewards, next_states, dones = cat_experience_tuple(
+                    np.array(states),
+                    np.array(t_states),
+                    np.array(actions),
+                    np.array(t_actions),
+                    np.array(rewards),
+                    np.array(t_rewards),
+                    np.array(next_states),
+                    np.array(t_next_states),
+                    np.array(dones),
+                    np.array(t_dones),
+                )
+
+        else:
+            # multi_task
+            if sum([len(rb) for rb in self.B]) < self.batch_size:
+                return
+            indexs = random.choices(len(self.B), k=self.cl_batch_size)
+            states = []
+            actions = []
+            rewards = []
+            next_states = []
+            dones = []
+            for i in indexs:
+                state, action, reward, next_state, done = self.B[
+                    i
+                ].get_batch_for_replay()
+                states += state
+                actions += action
+                rewards += reward
+                next_states += next_state
+                dones += done
+        return states, actions, rewards, next_states, dones
+    
+    def p_get_memory(self):
+        if self.q_of_tasks == 1:
+            (
+                states,
+                actions,
+                rewards,
+                next_states,
+                dones,
+                isw,
+                idxs,
+            ) = self.replay_memory.get_batch_for_replay()
+
+        else:
+            # multi_task
+            if sum([len(rb) for rb in self.B]) < self.batch_size:
+                return
+            indexs = random.choices(len(self.B), k=self.cl_batch_size)
+            states = []
+            actions = []
+            rewards = []
+            next_states = []
+            dones = []
+            isw = []
+            idxs = []
+            for i in indexs:
+                state, action, reward, next_state, done, isw_, idx = self.B[
+                    i
+                ].get_batch_for_replay()
+                states += state
+                actions += action
+                rewards += reward
+                next_states += next_state
+                dones += done
+                isw += isw_
+                idxs += idx
+        return states, actions, rewards, next_states, dones, isw, idxs
+        

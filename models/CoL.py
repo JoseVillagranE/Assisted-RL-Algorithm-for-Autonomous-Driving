@@ -39,6 +39,7 @@ class CoL:
         self.enable_scheduler_lr = config.train.enable_scheduler_lr
         self.actor_grad_clip = config.train.actor_grad_clip
         self.critic_grad_clip = config.train.critic_grad_clip
+        self.enable_trauma_memory = config.train.trauma_memory.enable
         n_channel = 3
 
         # Networks
@@ -157,6 +158,27 @@ class CoL:
             self.B_e = []
             batch_size = 1
             self.cl_batch_size = config.train.batch_size
+            
+        rm_prop = 1
+        if self.enable_trauma_memory:
+            if self.type_RM == "random":
+                self.trauma_replay_memory = RandomDequeMemory(
+                        queue_capacity=config.train.trauma_memory.memory_size,
+                        rw_weights=rw_weights,
+                        batch_size=round(config.train.trauma_memory.prop*batch_size),
+                        temporal=self.temporal_mech,
+                        win=config.train.rnn_nsteps,
+                    )
+            else:
+                self.trauma_replay_memory = PrioritizedDequeMemory(
+                    queue_capacity=config.train.trauma_memory.memory_size,
+                    alpha=config.train.alpha,
+                    beta=config.train.beta,
+                    rw_weights=rw_weights,
+                    batch_size=round(config.train.trauma_memory.prop*batch_size),
+                )
+            rm_prop = 1 - config.train.trauma_memory.prop    
+        
 
         for i in range(self.q_of_tasks):
             if self.type_RM == "sequential":
@@ -166,14 +188,14 @@ class CoL:
                 self.replay_memory = RandomDequeMemory(
                     queue_capacity=config.train.max_memory_size,
                     rw_weights=rw_weights,
-                    batch_size=round(config.train.batch_size * self.agent_prop),
+                    batch_size=round(config.train.batch_size * self.agent_prop*rm_prop),
                     temporal=self.temporal_mech,
                     win=config.train.rnn_nsteps,
                 )
                 self.replay_memory_e = RandomDequeMemory(
                     queue_capacity=config.train.max_memory_size,
                     rw_weights=rw_weights,
-                    batch_size=config.train.batch_size,
+                    batch_size=round(config.train.batch_size),
                     temporal=self.temporal_mech,
                     win=config.train.rnn_nsteps,
                 )
@@ -184,14 +206,14 @@ class CoL:
                     alpha=config.train.alpha,
                     beta=config.train.beta,
                     rw_weights=rw_weights,
-                    batch_size=config.train.batch_size,
+                    batch_size=round(config.train.batch_size*self.agent_prop*rm_prop),
                 )
                 self.replay_memory_e = PrioritizedDequeMemory(
                     queue_capacity=config.train.max_memory_size,
                     alpha=config.train.alpha,
                     beta=config.train.beta,
                     rw_weights=rw_weights,
-                    batch_size=config.train.batch_size,
+                    batch_size=round(config.train.batch_size),
                 )
 
             if self.q_of_tasks > 1:
@@ -201,23 +223,23 @@ class CoL:
         if self.optim == "SGD":
             self.actor_optimizer = torch.optim.SGD(
                 filter(lambda p: p.requires_grad, self.actor.parameters()),
-                lr=config.train.actor_lr,
+                lr=config.train.actor_expert_lr,
                 weight_decay=1e-5,
             )
             self.critic_optimizer = torch.optim.SGD(
                 filter(lambda p: p.requires_grad, self.critic.parameters()),
-                lr=config.train.critic_lr,
+                lr=config.train.critic_expert_lr,
                 weight_decay=1e-5,
             )
         elif self.optim == "Adam":
             self.actor_optimizer = torch.optim.Adam(
                 filter(lambda p: p.requires_grad, self.actor.parameters()),
-                lr=config.train.actor_lr,
+                lr=config.train.actor_expert_lr,
                 weight_decay=1e-5,
             )
             self.critic_optimizer = torch.optim.Adam(
                 filter(lambda p: p.requires_grad, self.critic.parameters()),
-                lr=config.train.critic_lr,
+                lr=config.train.critic_expert_lr,
                 weight_decay=1e-5,
             )
         else:
@@ -274,12 +296,12 @@ class CoL:
 
             print(f"samples of expert rm: {self.replay_memory_e.get_memory_size()}")
 
+        self.mse = nn.MSELoss(reduction="mean")
         if self.type_RM == "random":
-            self.mse = nn.MSELoss(reduction="mean")
             self.update = self._update
         else:
             self.update = self.p_update
-            self.mse = nn.MSELoss(reduction="none")
+            self.mse_wout_reduction = nn.MSELoss(reduction="none")
 
         self.get_memory = (
             self.get_single_memory if self.q_of_tasks == 1 else self.get_multi_memory
@@ -289,7 +311,14 @@ class CoL:
         for l in range(config.train.pretraining_steps):
             self.update(is_pretraining=True)
 
-        self.replay_memory_e.set_batch_size(round(self.batch_size * self.expert_prop))
+        self.replay_memory_e.set_batch_size(round(self.batch_size * self.expert_prop*rm_prop))
+        
+        for g in self.actor_optimizer.param_groups:
+            g['lr'] = config.train.actor_agent_lr
+        for g in self.critic_optimizer.param_groups:
+            g['lr'] = config.train.critic_agent_lr
+        
+
 
     def predict(self, state, step, mode="training"):
 
@@ -319,8 +348,7 @@ class CoL:
             dones,
             states_e,
             actions_e,
-            isw_a,
-            isw_e,
+            isw,
             inter_idxs_a,
             inter_idxs_e,
             indexs_a,
@@ -334,6 +362,8 @@ class CoL:
 
         states_e = Variable(torch.from_numpy(np.array(states_e)).float())
         actions_e = Variable(torch.from_numpy(np.array(actions_e)).float())
+        isw = Variable(torch.from_numpy(np.array(isw)).float())
+        
 
         if self.temporal_mech:
             R_1 = (
@@ -347,7 +377,7 @@ class CoL:
                 R_1,
                 self.critic(states[:, -1, :], self.actor(states).detach()).squeeze(),
             )  # reduction -> none
-            L_Q1 = (torch.cat((isw_a, isw_e), 0) * TD).mean()
+            L_Q1 = (isw * TD).mean()
             L_A = -1 * self.critic(states[:, -1, :], self.actor(states)).detach().mean()
         else:
             R_1 = (
@@ -357,11 +387,17 @@ class CoL:
                     next_states, self.actor_target(next_states).detach()
                 ).squeeze()
             )
-            TD = self.mse(
+            TD = self.mse_wout_reduction(
                 R_1, self.critic(states, self.actor(states).detach()).squeeze()
             )  # reduction -> none
 
-            L_Q1 = (torch.cat((isw_a, isw_e), 0) * TD).mean()
+            
+            # if is_pretraining:
+            #     isw = isw_e
+            # else:
+            #     isw = torch.cat((isw_a, isw_e), 0)
+                
+            L_Q1 = (isw * TD).mean()
             L_A = -1 * self.critic(states, self.actor(states)).detach().mean()
 
         L_col_critic = self.lambdas[2] * L_Q1
@@ -372,7 +408,6 @@ class CoL:
 
         # Actor Q_loss
         L_col_actor = 1 * (self.lambdas[0] * L_BC + self.lambdas[1] * L_A)
-
         self.actor_optimizer.zero_grad()
         L_col_actor.backward()
         nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_grad_clip)
@@ -403,12 +438,14 @@ class CoL:
             )
 
         if self.q_of_tasks == 1:
-            self.replay_memory.update_priorities(
-                inter_idxs_a, TD.abs().detach().cpu().numpy()
-            )
             self.replay_memory_e.update_priorities(
                 inter_idxs_e, TD.abs().detach().cpu().numpy()
             )
+            if not is_pretraining:
+                self.replay_memory.update_priorities(
+                inter_idxs_a, TD.abs().detach().cpu().numpy()
+            )
+            
         else:
             for i in set(indexs_a):
                 ith_idx = np.where(np.array(indexs_a) == i)[0]
@@ -427,6 +464,7 @@ class CoL:
         self.critic_target = self.critic_target.cpu().eval()
 
     def _update(self, is_pretraining=False):
+        
 
         (
             states,
@@ -533,9 +571,12 @@ class CoL:
         self.lambdas[n_lambda] -= rd
 
     def get_single_memory(self, is_pretraining, type_rm):
+        
+        # pretraining
         if self.batch_size * self.agent_prop > self.replay_memory.get_memory_size():
+            
 
-            if is_pretraining and type_rm == "random":
+            if type_rm == "random":
                 (
                     states,
                     actions,
@@ -546,7 +587,7 @@ class CoL:
 
                 isw = idxs = 0
 
-            elif is_pretraining and type_rm == "prioritized":
+            elif type_rm == "prioritized":
 
                 (
                     states,
@@ -569,7 +610,6 @@ class CoL:
             idxs_a = idxs_e = idxs
 
         else:
-
             if type_rm == "random":
                 (
                     states_e,
@@ -586,8 +626,18 @@ class CoL:
                     next_states_a,
                     dones_a,
                 ) = self.replay_memory.get_batch_for_replay()
-
-                isw_e = isw_a = idxs_e = idxs_a = 0
+    
+                isw = idxs_e = idxs_a = 0
+                
+                if self.enable_trauma_memory:
+                    (
+                    t_states,
+                    t_actions,
+                    t_rewards,
+                    t_next_states,
+                    t_dones,
+                    ) = self.trauma_replay_memory.get_batch_for_replay()
+                
 
             elif type_rm == "prioritized":
 
@@ -610,6 +660,22 @@ class CoL:
                     isw_a,
                     idxs_a,
                 ) = self.replay_memory.get_batch_for_replay()
+                
+                isw = np.vstack((np.array(isw_a)[:, np.newaxis], np.array(isw_e)[:, np.newaxis]))
+                
+                if self.enable_trauma_memory:
+                    (
+                    t_states,
+                    t_actions,
+                    t_rewards,
+                    t_next_states,
+                    t_dones,
+                    t_isw,
+                    t_idxs
+                    ) = self.trauma_replay_memory.get_batch_for_replay()
+                    
+                    isw = np.vstack((isw, np.array(t_isw)[:, np.newaxis])).squeeze()
+                
 
             states, actions, rewards, next_states, dones = cat_experience_tuple(
                 np.array(states_a),
@@ -623,6 +689,29 @@ class CoL:
                 np.array(dones_a),
                 np.array(dones_e),
             )
+            
+            
+            if self.enable_trauma_memory:
+                
+                t_states = np.array(t_states)
+                t_actions = np.array(t_actions)
+                t_rewards = np.array(t_rewards)
+                t_next_states = np.array(t_next_states)
+                t_dones = np.array(t_dones)
+                
+                states, actions, rewards, next_states, dones = cat_experience_tuple(
+                    states,
+                    t_states,
+                    actions.squeeze(),
+                    t_actions,
+                    rewards.squeeze(),
+                    t_rewards,
+                    next_states,
+                    t_next_states,
+                    dones.squeeze(),
+                    t_dones,
+                )
+            
 
         return (
             states,
@@ -632,8 +721,7 @@ class CoL:
             dones,
             states_e,
             actions_e,
-            isw_a,
-            isw_e,
+            isw,
             idxs_a,
             idxs_e,
             0,
@@ -738,8 +826,7 @@ class CoL:
             dones,
             states_e,
             actions_e,
-            isw_a,
-            isw_e,
+            (isw_a, isw_e),
             inter_idxs_a,
             inter_idxs_e,
             indexs_a,
