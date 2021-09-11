@@ -85,10 +85,13 @@ class VAE_Actor(nn.Module):
                     self.mlp.append(nn.Linear(input_linear_layer_dim, dim_layer))
                 else:
                     self.mlp.append(nn.Linear(linear_layers[i - 1], dim_layer))
-            self.mlp.append(nn.Linear(linear_layers[-1], num_actions))
+                    
+            if self.n_hl_actions == 0:
+                self.mlp.append(nn.Linear(linear_layers[-1], num_actions))
 
         else:
-            self.mlp.append(nn.Linear(input_linear_layer_dim, num_actions))
+            if self.n_hl_actions == 0:
+                self.mlp.append(nn.Linear(input_linear_layer_dim, num_actions))
 
         if wp_encode:
             self.wp_encoder = nn.Linear(1, wp_encoder_size)
@@ -114,6 +117,13 @@ class VAE_Actor(nn.Module):
         else:
 
             self.n_actions_params = num_actions - self.n_hl_actions
+            
+            self.action_parameters_passthrough_layer = nn.Linear(
+                input_linear_layer_dim, self.n_actions_params
+            )
+
+            if len(linear_layers) > 0:
+                input_linear_layer_dim = linear_layers[-1]
 
             self.linear_forward = self._hrl_linear_forward
             self.action_outp_layer = nn.Linear(
@@ -122,9 +132,7 @@ class VAE_Actor(nn.Module):
             self.action_parameters_outp_layer = nn.Linear(
                 input_linear_layer_dim, self.n_actions_params
             )
-            self.action_parameters_passthrough_layer = nn.Linear(
-                input_linear_layer_dim, self.n_actions_params
-            )
+            
 
     def forward(self, state):
 
@@ -143,12 +151,19 @@ class VAE_Actor(nn.Module):
 
     def _linear_forward(self, x):
         for i, layer in enumerate(self.mlp):
-            x = torch.tanh(layer(x))
+            if i == len(self.mlp) - 1:
+                x = torch.tanh(layer(x))
+            else:
+                x = torch.relu(layer(x))
         return x
 
-    def _hrl_linear_forward(self, x):
+    def _hrl_linear_forward(self, state):
+        x = state
+        for i, layer in enumerate(self.mlp):
+            x = torch.relu(layer(x))
         probs = self.action_outp_layer(x)
         p_actions = self.action_parameters_outp_layer(x)
+        p_actions += self.action_parameters_passthrough_layer(state)
         return (probs, p_actions)
 
     def feat_ext(self, x):

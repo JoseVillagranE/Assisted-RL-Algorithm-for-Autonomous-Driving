@@ -84,7 +84,7 @@ config.train.action_space = 2  # [steer, throttle]
 config.train.measurements_to_include = set(
     # ["steer"]
     # + ["throttle"]
-    # ["speed"] +
+    # + ["speed"]
     # ["orientation"]
 )
 config.train.wp_encode = False  # harcoded

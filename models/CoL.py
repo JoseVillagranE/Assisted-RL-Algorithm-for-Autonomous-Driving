@@ -206,6 +206,8 @@ class CoL:
                     alpha=config.train.alpha,
                     beta=config.train.beta,
                     rw_weights=rw_weights,
+                    temporal=self.temporal_mech,
+                    win=config.train.rnn_nsteps,
                     batch_size=round(config.train.batch_size*self.agent_prop*rm_prop),
                 )
                 self.replay_memory_e = PrioritizedDequeMemory(
@@ -213,6 +215,8 @@ class CoL:
                     alpha=config.train.alpha,
                     beta=config.train.beta,
                     rw_weights=rw_weights,
+                    temporal=self.temporal_mech,
+                    win=config.train.rnn_nsteps,
                     batch_size=round(config.train.batch_size),
                 )
 
@@ -373,7 +377,7 @@ class CoL:
                     next_states[:, -1, :], self.actor_target(next_states).detach()
                 ).squeeze()
             )
-            TD = self.mse(
+            TD = self.mse_wout_reduction(
                 R_1,
                 self.critic(states[:, -1, :], self.actor(states).detach()).squeeze(),
             )  # reduction -> none
@@ -474,7 +478,6 @@ class CoL:
             dones,
             states_e,
             actions_e,
-            _,
             _,
             _,
             _,

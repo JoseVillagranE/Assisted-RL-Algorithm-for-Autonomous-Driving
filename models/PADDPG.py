@@ -40,10 +40,10 @@ class PADDPG:
         self.min_lr = config.train.scheduler_min_lr
         self.actor_grad_clip = config.train.actor_grad_clip
         self.critic_grad_clip = config.train.critic_grad_clip
+        self.enable_trauma_memory = config.train.trauma_memory.enable
 
         self.n_hl_actions = config.train.hrl.n_hl_actions
         self.num_actions = config.train.action_space
-        print(self.num_actions)
         # self.action_space = action_space
         self.action_parameter_sizes = np.array(
             [self.num_actions for i in range(self.n_hl_actions)]
@@ -99,7 +99,7 @@ class PADDPG:
 
         self.critic_criterion = nn.MSELoss()  # mean reduction
 
-        print(self.num_actions + self.action_parameter_size)
+        print(f"n_full_actions: {self.n_hl_actions + self.action_parameter_size}")
 
         n_channel = 3
         input_size = (
@@ -139,7 +139,7 @@ class PADDPG:
         if self.model_type == "VAE":
             self.actor = VAE_Actor(
                 self.state_dim,
-                self.n_hl_actions + self.n_hl_actions * self.num_actions,
+                self.n_hl_actions + self.action_parameter_size,
                 n_channel,
                 config.train.z_dim,
                 VAE_weights_path=config.train.VAE_weights_path,
@@ -154,7 +154,7 @@ class PADDPG:
 
             self.actor_target = VAE_Actor(
                 self.state_dim,
-                self.n_hl_actions + self.n_hl_actions * self.num_actions,
+                self.n_hl_actions + self.action_parameter_size,
                 n_channel,
                 config.train.z_dim,
                 VAE_weights_path=config.train.VAE_weights_path,
@@ -169,12 +169,12 @@ class PADDPG:
 
             self.critic = VAE_Critic(
                 config.train.state_dim,
-                self.n_hl_actions + self.n_hl_actions * self.num_actions,
+                self.n_hl_actions + self.action_parameter_size,
             ).float()
 
             self.critic_target = VAE_Critic(
                 config.train.state_dim,
-                self.n_hl_actions + self.n_hl_actions * self.num_actions,
+                self.n_hl_actions + self.action_parameter_size,
             ).float()
 
         # must see !!
@@ -329,12 +329,12 @@ class PADDPG:
         ]  # [steer, throttle]
         if mode == "training":
             action = self.ounoise.get_action(action, step)
-        action[0] = np.clip(
-            action[0],
-            self.action_parameter_min_numpy[2 * hl_action],
-            self.action_parameter_max_numpy[2 * hl_action],
-        )
-        action[1] = np.clip(action[1], -1, 1)  # no limit
+        # action[0] = np.clip(
+        #     action[0],
+        #     self.action_parameter_min_numpy[2 * hl_action],
+        #     self.action_parameter_max_numpy[2 * hl_action],
+        # )
+        # action[1] = np.clip(action[1], -1, 1)  # no limit
 
         full_action = np.concatenate([probs, params])
         return action, full_action
@@ -399,7 +399,10 @@ class PADDPG:
                 actions, action_params = self.actor(states)
             actions = torch.cat((actions, action_params), dim=1)
         actions.requires_grad = True
-        Q_val = self.critic(states[:, -1, :], actions).mean()
+        if self.temporal_mech:
+            Q_val = self.critic(states[:, -1, :], actions).mean()
+        else:
+            Q_val = self.critic(states, actions).mean()
         self.critic.zero_grad()
         Q_val.backward()
         delta_a = deepcopy(actions.grad.data)

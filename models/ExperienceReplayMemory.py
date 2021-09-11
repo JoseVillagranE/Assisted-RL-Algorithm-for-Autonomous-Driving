@@ -284,7 +284,7 @@ class RandomDequeMemory(ExperienceReplayMemory):
 class PrioritizedDequeMemory(ExperienceReplayMemory):
     def __init__(
         self, queue_capacity=2000, alpha=0.7, beta=0.5, rw_weights=None, batch_size=64,
-        temporal=False
+        temporal=False, win=1
     ):
 
         self.queue_capacity = queue_capacity
@@ -295,6 +295,7 @@ class PrioritizedDequeMemory(ExperienceReplayMemory):
         self.rw_weights = rw_weights
         self.batch_size = batch_size
         self.temporal = temporal
+        self.win = win
 
     def add_to_memory(self, experience_tuple):
         self.memory.append(experience_tuple)

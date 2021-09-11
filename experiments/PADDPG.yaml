@@ -9,9 +9,9 @@ train:
   actor_lr: 0.0001
   critic_lr: 0.0001
   optimizer: "Adam"
-  type_RM: "prioritized"
+  type_RM: "random"
   batch_size: 128
-  temporal_mech: True
+  temporal_mech: False
   start_to_update: 5
   optimization_steps: 100
   ou_noise_mu: 0.0
@@ -19,21 +19,25 @@ train:
   ou_noise_max_sigma: 0.15
   ou_noise_min_sigma: 0.01
   ou_noise_decay_period: 100
-  tau: 0.05
+  tau: 0.0001
   gamma: 0.9
-  scheduler_step_size: 5000
+  scheduler_step_size: 3000
   scheduler_gamma: 0.1
   alpha: 0.5
   beta: 1
   actor_grad_clip: 0.005
   critic_grad_clip: 0.05
-  linear_layers: []
+  linear_layers: [128, 64]
   max_memory_size: 1000000
+  trauma_memory:
+      enable: False
+      prop: 0.1
   hrl:
       n_hl_actions: 3
       epsilon_initial: 1.0
       epsilon_final: 0.01
-      steps: 5000
+      steps: 10000
+
 
 agent:
   sensor:
@@ -46,13 +50,13 @@ exo_agents:
     spawn: False
 
   vehicle:
-    n: 1
+    n: 2
     spawn: False
     initial_position:
-      x: [149]
-      y: [63]
-      z: [1]
-      yaw: [180]
+      x: [149, 190]
+      y: [63, 63]
+      z: [1, 1]
+      yaw: [180, 180]
 
 model:
   type: "VAE"
@@ -65,8 +69,8 @@ reward_fn:
   weight_collision_other: 1000
   weight_final_goal: 500
   weight_speed_limit: 1
-  weight_route_al: 2
-  weight_centralization: 2
+  weight_route_al: 1
+  weight_centralization: 1
   weight_distance_to_goal: 5
 
 test:
