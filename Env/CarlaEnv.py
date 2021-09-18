@@ -29,6 +29,7 @@ from agents.navigation.controller import VehiclePIDController
 from utils.utils import (
     vector,
     distance_to_lane,
+    distance_bet_points,
     get_actor_display_name,
     get_actor_display_type,
     PID_assign,
@@ -91,16 +92,6 @@ class CarlaEnv(gym.Env):
         """
 
         self.carla_process = None
-        # #carla_path = os.path.join(config.carla_dir, "CarlaUE4.sh")
-        # #launch_command = [carla_path, "-opengl"]
-        # #launch_command += [config.simulation.map]
-        # if config.synchronous_mode: launch_command += ["-benchmark"]
-        # launch_command += ["-fps=%i" % config.simulation.fps]
-        # launch_command += ["-carla-world-port="+str(config.simulation.port)]
-        # self.carla_process = subprocess.Popen(launch_command, stdout=subprocess.DEVNULL)
-        # print("Waiting for CARLA to initialize..")
-        # time.sleep(config.simulation.sleep)
-
         pygame.init()
         pygame.font.init()
 
@@ -225,6 +216,7 @@ class CarlaEnv(gym.Env):
             self.agent.set_automatic_wp()  # I need for orientation reward
             self.exo_vehs_initial_transforms = []
             self.exo_vehs = []
+            self.distances_to_exo_vehs = [0]*len(self.exo_vehs)
             for exo_veh_ipos in exo_vehs_ipos:
                 #     # Create a exo-vehicle
                 exo_veh_initial_location = carla.Location(
@@ -385,14 +377,17 @@ class CarlaEnv(gym.Env):
             vector(next_wp.transform.location),
             vector(transform.location),
         )
+        
+        if len(self.exo_vehs) > 0 and config.reward_fn.enable_exo_veh_distance_reward:
+            for i, exo_veh in enumerate(self.exo_vehs):
+                d_bet_vehs = distance_bet_points(vector(transform.location), 
+                                                 vector(exo_veh.get_transform().location))
+                self.distances_to_exo_vehs[i] = d_bet_vehs
+            
 
         self.terminal_state = self.check_for_terminal_state()
         reward = self.reward_fn(self)
-
         # Terminal state for distance to exo-agents or objective
-
-        # if self.check_for_terminal_state():
-        #     self.terminal_state = True
 
         pygame.event.pump()
         if pygame.key.get_pressed()[K_ESCAPE]:
@@ -497,6 +492,7 @@ class CarlaEnv(gym.Env):
         self.collision_vehicle = False
         self.collision_other = False
         self.final_goal = False
+        self.distances_to_exo_vehs = [0]*len(self.exo_vehs)
 
         return self.step(None)[0]
 
@@ -626,7 +622,9 @@ class CarlaEnv(gym.Env):
             steer = exo_veh.control.steer
             throttle = exo_veh.control.throttle
             orientation = vector(exo_veh.get_forward_vector())
-            l.append(np.array([*orientation, speed, steer, throttle]))
+            pos = exo_veh.get_position()
+            volumen = exo_veh.get_volumen()
+            l.append(np.array([*pos, speed, steer, throttle, *orientation, *volumen]))
         return l
 
 

@@ -4,31 +4,32 @@ seed: 12345
 
 train:
   checkpoint_every: 100000
-  episodes: 100
+  episodes: 400
   device: "cuda:0"
-  actor_lr: 0.0001
-  critic_lr: 0.0001
-  optimizer: "Adam"
+  actor_lr: 0.001
+  critic_lr: 0.001
+  optimizer: "SGD"
   type_RM: "random"
-  batch_size: 128
+  batch_size: 10
   temporal_mech: False
   start_to_update: 5
-  optimization_steps: 100
+  optimization_steps: 50
   ou_noise_mu: 0.0
-  ou_noise_theta: 0.15
-  ou_noise_max_sigma: 0.15
+  ou_noise_theta: 0.2
+  ou_noise_max_sigma: 0.2
   ou_noise_min_sigma: 0.01
   ou_noise_decay_period: 100
   tau: 0.0001
-  gamma: 0.9
-  scheduler_step_size: 3000
-  scheduler_gamma: 0.1
+  gamma: 0.99
+  scheduler_step_size: 5000
+  scheduler_gamma: 0.5
   alpha: 0.5
   beta: 1
-  actor_grad_clip: 0.005
-  critic_grad_clip: 0.05
+  actor_grad_clip: 0.5
+  critic_grad_clip: 0.5
   linear_layers: [128, 64]
-  max_memory_size: 1000000
+  critic_linear_layers: []
+  max_memory_size: 50000
   trauma_memory:
       enable: False
       prop: 0.1
@@ -36,7 +37,7 @@ train:
       n_hl_actions: 3
       epsilon_initial: 1.0
       epsilon_final: 0.01
-      steps: 10000
+      steps: 40000
 
 
 agent:
@@ -72,6 +73,10 @@ reward_fn:
   weight_route_al: 1
   weight_centralization: 1
   weight_distance_to_goal: 5
+  enable_smooth: True
+  
+simulation:
+  action_smoothing: 0.2
 
 test:
   every: 5

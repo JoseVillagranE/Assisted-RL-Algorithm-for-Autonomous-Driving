@@ -48,6 +48,10 @@ def angle_diff(v0, v1):
     elif angle <= -np.pi: angle += 2*np.pi
     return angle
 
+def distance_bet_points(A, B):
+    distance = np.linalg.norm(B-A)
+    return distance
+    
 def distance_to_lane(A, B, p):
     num = np.linalg.norm(np.cross(B-A, A-p))
     den = np.linalg.norm(B-A)

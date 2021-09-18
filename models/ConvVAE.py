@@ -163,7 +163,7 @@ class VAE_Actor(nn.Module):
             x = torch.relu(layer(x))
         probs = self.action_outp_layer(x)
         p_actions = self.action_parameters_outp_layer(x)
-        p_actions += self.action_parameters_passthrough_layer(state)
+        # p_actions += self.action_parameters_passthrough_layer(state)
         return (probs, p_actions)
 
     def feat_ext(self, x):
@@ -185,13 +185,30 @@ class VAE_Actor(nn.Module):
 
 
 class VAE_Critic(nn.Module):  # No needed temporal mechanism
-    def __init__(self, state_dim, num_actions):
+    def __init__(self, state_dim, num_actions, hidden_layers=[]):
         super().__init__()
         self.num_actions = num_actions
-        self.linear = nn.Linear(state_dim + num_actions, 1)
+        
+        self.layers = nn.ModuleList()
+        
+        for i, outp_dim_layer in enumerate(hidden_layers):
+            if i == 0:
+                self.layers.append(nn.Linear(state_dim+num_actions, outp_dim_layer))
+            else:
+                self.layers.append(nn.Linear(hidden_layers[i-1], outp_dim_layer))
+        
+        if len(hidden_layers) > 0:
+            self.layers.append(nn.Linear(hidden_layers[-1], 1))
+        else:
+            self.layers.append(nn.Linear(state_dim + num_actions, 1))
 
     def forward(self, state, action):
-        return self.linear(torch.cat([state, action], 1))
+        x = torch.cat([state, action], 1)
+        for i, layer in enumerate(self.layers):
+            x = layer(x)
+            if i < len(self.layers) - 1:
+                x = torch.relu(x)
+        return x
 
 
 class ConvVAE(nn.Module):

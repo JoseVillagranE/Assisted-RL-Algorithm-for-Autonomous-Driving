@@ -23,6 +23,12 @@ from utils.Network_utils import OUNoise
 from ExperienceReplayMemory import SequentialDequeMemory
 
 
+def pad_action(act, act_param):
+    params = np.zeros(6)
+    params[act] = act_param
+    return (act, params)
+
+
 class PADDPG:
     """
     DDPG actor-critic agent for parameterised action spaces
@@ -259,18 +265,29 @@ class PADDPG:
             if self.q_of_tasks > 1:
                 self.B.append(deepcopy(self.replay_memory))
 
+        print("Actor parameters..")
+
         for name, param in self.actor.named_parameters():
             if param.requires_grad:
                 print(name)
+                
+        print("Critic parameters..")
+        
+        for name, param in self.critic.named_parameters():
+            if param.requires_grad:
+                print(name)
+        
 
         if self.optim == "SGD":
             self.actor_optimizer = torch.optim.SGD(
                 filter(lambda p: p.requires_grad, self.actor.parameters()),
                 lr=config.train.actor_lr,
+                momentum=0.99
             )
             self.critic_optimizer = torch.optim.SGD(
                 filter(lambda p: p.requires_grad, self.critic.parameters()),
                 lr=config.train.critic_lr,
+                momentum=0.99
             )
         elif self.optim == "Adam":
             self.actor_optimizer = torch.optim.Adam(
@@ -301,7 +318,7 @@ class PADDPG:
 
         # Noise
         self.ounoise = OUNoise(
-            self.num_actions,
+            self.action_parameter_size,
             mu=config.train.ou_noise_mu,
             theta=config.train.ou_noise_theta,
             max_sigma=config.train.ou_noise_max_sigma,
@@ -323,21 +340,24 @@ class PADDPG:
         offset = np.array(
             [self.action_parameter_sizes[i] for i in range(hl_action)], dtype=int
         ).sum()
-
+        if mode == "training":
+            params = self.ounoise.get_action(params, step)
+            
         action = params[
             offset : offset + self.action_parameter_sizes[hl_action]
         ]  # [steer, throttle]
-        if mode == "training":
-            action = self.ounoise.get_action(action, step)
-        # action[0] = np.clip(
-        #     action[0],
-        #     self.action_parameter_min_numpy[2 * hl_action],
-        #     self.action_parameter_max_numpy[2 * hl_action],
+        
+        action[0] = np.clip(
+            action[0], -1, 1)
+            # self.action_parameter_min_numpy[2 * hl_action],
+            # self.action_parameter_max_numpy[2 * hl_action],
         # )
-        # action[1] = np.clip(action[1], -1, 1)  # no limit
+        action[1] = np.clip(action[1], -1, 1)  # no limit
+        
+        params = np.clip(params, -1, 1)
 
-        full_action = np.concatenate([probs, params])
-        return action, full_action
+        full_actions = np.concatenate([probs, params])
+        return action, full_actions
 
     def _update(self):
 
@@ -352,9 +372,7 @@ class PADDPG:
         next_states = torch.FloatTensor(next_states).to(self.device)
         dones = torch.BoolTensor(dones).to(self.device)
 
-        self.actor = self.actor.to(
-            self.device
-        ).train()  # Because is used for predict actions
+        self.actor = self.actor.to(self.device).train()
         self.actor_target = self.actor_target.to(self.device).train()
         self.critic = self.critic.to(self.device).train()
         self.critic_target = self.critic_target.to(self.device).train()
@@ -415,16 +433,16 @@ class PADDPG:
             delta_a[:, : self.n_hl_actions].cpu(),
             actions.cpu(),
             grad_type="hl_actions",
-            inplace=False,
+            inplace=True,
         )
         delta_a[:, self.n_hl_actions :] = self._invert_gradients(
             delta_a[:, self.n_hl_actions :].cpu(),
             action_params.cpu(),
             grad_type="ll_actions",
-            inplace=False,
+            inplace=True,
         )
         actions = torch.cat((actions, action_params), dim=1)
-        out = -torch.mul(delta_a, actions)
+        out = -1*torch.mul(delta_a, actions)
         self.actor_optimizer.zero_grad()
         out.backward(torch.ones(out.shape).to(self.device))
         torch.nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_clip_grad)
@@ -529,13 +547,13 @@ class PADDPG:
             delta_a[:, : self.n_hl_actions].cpu(),
             actions.cpu(),
             grad_type="hl_actions",
-            inplace=False,
+            inplace=True,
         )
         delta_a[:, self.n_hl_actions :] = self._invert_gradients(
             delta_a[:, self.n_hl_actions :].cpu(),
             action_params.cpu(),
             grad_type="ll_actions",
-            inplace=False,
+            inplace=True,
         )
         actions = torch.cat((actions, action_params), dim=1)
         out = -torch.mul(delta_a, actions)

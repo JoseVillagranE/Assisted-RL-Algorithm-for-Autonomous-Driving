@@ -36,6 +36,13 @@ def parse_args():
     return args
 
 
+def cat_extra_exo_agents_info(old_info, new_info):
+    
+    info = []
+    for old_exo_info, new_exo_info in zip(old_info, new_info):
+        info.append(np.vstack((old_exo_info, new_exo_info)))
+    return info
+
 # TODO: With more than one steps you should manage next_latent state dimensions
 
 def train():
@@ -140,6 +147,8 @@ def train():
     test_info_finals_state = []
     agent_extra_info = []
     test_agent_extra_info = []
+    exo_agents_extra_info = []
+    test_exo_agents_extra_info = []
 
     # load checkpoint if is necessary
     model_dicts, optimizers_dicts, rewards, start_episode = load_checkpoint(
@@ -161,6 +170,7 @@ def train():
             states_deque = deque(maxlen=config.train.rnn_nsteps)
             next_states_deque = deque(maxlen=config.train.rnn_nsteps)
             agent_stats = env.get_agent_extra_info()
+            exo_agents_stats = env.get_exo_agent_extra_info()
             while not terminal_state:
                 for step in range(config.train.steps):
                     if env.controller.parse_events():
@@ -217,6 +227,9 @@ def train():
                     episode_reward.append(reward)
                     state = deepcopy(next_state)
                     agent_stats = np.vstack((agent_stats, env.get_agent_extra_info()))
+                    if n_vehs > 0:
+                        exo_agents_stats = cat_extra_exo_agents_info(exo_agents_stats,
+                                                                     env.get_exo_agent_extra_info())
 
                     if config.vis.render:
                         env.render()
@@ -245,6 +258,7 @@ def train():
             rewards.append(episode_reward)
             info_finals_state.append((episode, terminal_state_info))
             agent_extra_info.append(agent_stats)
+            exo_agents_extra_info.append(exo_agents_stats)
 
             if episode > config.train.start_to_update and config.run_type in [
                 "DDPG",
@@ -268,6 +282,7 @@ def train():
                 states_deque = deque(maxlen=config.train.rnn_nsteps)
                 terminal_state_info = ""
                 agent_stats = env.get_agent_extra_info()
+                exo_agents_stats = env.get_exo_agent_extra_info()
                 print("Running a test episode")
                 for step in range(config.test.steps):
                     if env.controller.parse_events():
@@ -292,6 +307,9 @@ def train():
                     episode_reward_test += weighted_rw
                     state = deepcopy(next_state)
                     agent_stats = np.vstack((agent_stats, env.get_agent_extra_info()))
+                    if n_vehs > 0:
+                        exo_agents_stats = cat_extra_exo_agents_info(exo_agents_stats,
+                                                                    env.get_exo_agent_extra_info())
 
                     if config.vis.render:
                         env.render()
@@ -319,6 +337,7 @@ def train():
                 test_rewards.append(episode_reward_test)
                 test_info_finals_state.append((episode, terminal_state_info))
                 test_agent_extra_info.append(agent_stats)
+                test_exo_agents_extra_info.append(exo_agents_stats)
 
             if (
                 config.train.checkpoint_every > 0
@@ -368,6 +387,16 @@ def train():
             os.path.join(particular_save_path, "test_agent_extra_info.npy"),
             test_agent_extra_info,
         )
+        
+        np.save(
+            os.path.join(particular_save_path, "train_exo_agents_extra_info.npy"),
+            exo_agents_extra_info,
+        )
+        np.save(
+            os.path.join(particular_save_path, "test_exo_agents_extra_info.npy"),
+            test_exo_agents_extra_info,
+        )
+        
 
         # Last checkpoint to save
         models_dicts = (

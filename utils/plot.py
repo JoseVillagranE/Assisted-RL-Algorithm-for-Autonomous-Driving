@@ -1,6 +1,7 @@
 import seaborn as sns
 import pandas as pd
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 import json
 import os
 import numpy as np
@@ -45,6 +46,18 @@ def plot_extra_info(data):
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
     axes = axes.flatten()
     idxs = [[0, 1], 3]
+
+    exo_veh_pos_x = 149
+    exo_veh_pos_y = 63
+
+    exo_veh_extent_x = 1.8527
+    exo_veh_extent_y = 0.8943
+
+    xy = (exo_veh_pos_x - exo_veh_extent_x, exo_veh_pos_y - exo_veh_extent_y)
+
+    rect = Rectangle(xy, exo_veh_extent_x*2, exo_veh_extent_y*2, linewidth=2, edgecolor="r", facecolor='blue')
+    axes[0].add_patch(rect)
+
     for episode, d in enumerate(data):
         color = (episode / len(data), 0, 0)
         axes[0].plot(d[:, 0], d[:, 1], color=color) # pos
@@ -64,9 +77,9 @@ if __name__ == "__main__":
     rewards_wout = np.load("rewards_wout.npy")
     test_rewards = np.load("test_rewards.npy")
     #plot_data(rewards, "Episodes", "Rewards", smooth=4, label="w/ mov_avg", markers=True, dashes=False)
-    plot_data(rewards, "Episodes", "Rewards", smooth=15, label="Train Reward",
+    plot_data(rewards, "Episodes", "Rewards", smooth=20, label="Train Reward",
               markers=True, dashes=False)
-    plot_data(test_rewards, "Episodes", "Rewards", smooth=15, label="Test Reward",
+    plot_data(test_rewards, "Episodes", "Rewards", smooth=20, label="Test Reward",
               is_test=True, markers=True, dashes=False)
     #plot_data(rewards_wout, "Episodes", "Rewards", smooth=5, label="Train Reward Wout",
     #          markers=True, dashes=False)

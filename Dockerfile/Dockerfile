@@ -43,5 +43,6 @@ RUN mkdir /home/Tesis
 COPY . /home/Tesis
 
 ENV PYTHONPATH "$PYTHONPATH:/home/Tesis/"
+ENV PYTHONPATH "$PYTHONPATH:/home/Tesis/models"
 
 ENTRYPOINT ["/opt/conda/bin/python"]

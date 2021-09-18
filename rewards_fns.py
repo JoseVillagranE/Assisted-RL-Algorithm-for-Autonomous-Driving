@@ -135,15 +135,6 @@ def reward_fn(env):
         final_goal = 1
     if env.collision_other:
         collision_other = -1
-        
-    # print(f"speed_reward: {speed_reward}")
-    # print(f"centering factor: {centering_factor}")
-    # print(f"angle factor: {angle_factor}")
-    # print(f"collision vehicle: {collision_vehicle}")
-    # print(f"collision pedestrian: {collision_pedestrian}")
-    # print(f"collision other: {collision_other}")
-    # print(f"final goal: {final_goal}")
-    # print(f"rdtg: {rdtg}")
 
     # Final reward
     return (speed_reward,
@@ -155,7 +146,92 @@ def reward_fn(env):
             final_goal,
             rdtg)
 
-reward_functions["reward_fn"] = create_reward_fn(reward_fn)
+def reward_fn_smooth(env):
+    """
+    reward =
+    """
+    smooth_factor = config.reward_fn.smooth_factor
+    
+    min_speed = config.reward_fn.smooth_min_speed
+    max_speed = config.reward_fn.smooth_max_speed
+    target_speed = config.reward_fn.smooth_target_speed
+    speed_kmh = 3.6*env.agent.get_speed()
+    
+    dfc = env.distance_from_center
+    min_distance = config.reward_fn.smooth_min_distace
+    max_distance = config.reward_fn.smooth_max_distance
+    
+    max_angle = config.reward_fn.smooth_max_angle
+    min_angle = config.reward_fn.smooth_min_angle
+    angle = vehicle_angle_calculation(vector(env.agent.get_velocity()),
+                                      env.agent.get_current_wp())
+    
+    dtg = env.distance_to_goal
+    max_dtg = env.max_distance_to_goal
+    
+    # R(v)
+    if speed_kmh < min_speed:
+        speed_reward = (speed_kmh/min_speed)**smooth_factor
+    elif speed_kmh < target_speed and speed_kmh > min_speed:
+        speed_reward = 1
+    elif speed_kmh > target_speed and speed_kmh < max_speed:
+        speed_reward = 1 - ((speed_kmh - target_speed)/(max_speed - target_speed))**smooth_factor
+    else:
+        speed_reward = -1
+    
+    # R(d)
+    if dfc <= min_distance:
+        centering_factor = 1 - (dfc / min_distance)**smooth_factor
+    elif min_distance < dfc <= max_distance:
+        centering_factor = -1 + ((max_distance - dfc)/(max_distance - min_distance))**smooth_factor
+    else:
+        centering_factor= -1
+        
+    # R(alpha)
+    if angle <= min_angle:
+        angle_factor = 1 - abs(angle / np.deg2rad(min_angle))**smooth_factor
+    elif min_angle < angle <= max_angle:
+        angle_factor = -1 + ((np.deg2rad(max_angle) - angle)/(np.deg2rad(max_angle) - np.deg2rad(min_angle)))**smooth_factor
+    else:
+        angle_factor = -1
+    
+    # R(d-to-goal)
+    if dtg <= max_dtg:
+        rdtg = 1 - (dtg/env.max_distance_to_goal)**smooth_factor
+    else:
+        rdtg = -1
+        
+    if config.reward_fn.enable_exo_veh_distance_reward:
+        danger_zone = config.reward_fn.smooth_danger_zone        
+        dt_exo_veh = [((dt_exo_veh / danger_zone)**smooth_factor) - 1 if dt_exo_veh < danger_zone else 0 for dt_exo_veh in env.distances_to_exo_vehs]
+        dt_exo_veh = sum(dt_exo_veh)
+
+    collision_pedestrian = 0
+    collision_vehicle = 0
+    collision_other = 0
+    final_goal = 0
+    if env.collision_pedestrian:
+        collision_pedestrian = -1
+    if env.collision_vehicle:
+        collision_vehicle = -1
+    if env.final_goal:
+        final_goal = 1
+    if env.collision_other:
+        collision_other = -1
+
+    # Final reward
+    return (speed_reward,
+            centering_factor,
+            angle_factor,
+            collision_vehicle,
+            collision_pedestrian,
+            collision_other,
+            final_goal,
+            rdtg)
+
+
+rfn = reward_fn_smooth if config.reward_fn.enable_smooth else reward_fn
+reward_functions["reward_fn"] = create_reward_fn(rfn)
 
 
 if __name__ == "__main__":

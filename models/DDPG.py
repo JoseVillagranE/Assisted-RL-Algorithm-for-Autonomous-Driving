@@ -99,11 +99,15 @@ class DDPG:
             ).float()
 
             self.critic = VAE_Critic(
-                config.train.state_dim, config.train.action_space
+                config.train.state_dim, 
+                config.train.action_space,
+                hidden_layers = config.train.critic_linear_layers
             ).float()
 
             self.critic_target = VAE_Critic(
-                config.train.state_dim, config.train.action_space
+                config.train.state_dim,
+                config.train.action_space,
+                hidden_layers = config.train.critic_linear_layers
             ).float()
 
         else:

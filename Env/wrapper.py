@@ -347,6 +347,14 @@ class Vehicle(CarlaActorBase):
     def get_position(self):
         loc = self.get_transform().location
         return loc.x, loc.y, loc.z
+    
+    def get_volumen(self):
+        extent = self.actor.bounding_box.extent
+        c_bb = self.actor.bounding_box.location
+        r_bb = self.actor.bounding_box.rotation.yaw
+        return (extent.x, extent.y, extent.z,
+                c_bb.x, c_bb.y, c_bb.z,
+                r_bb)
 
     def get_forward_vector(self):
         return self.get_transform().get_forward_vector()

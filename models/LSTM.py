@@ -45,13 +45,13 @@ class MDN_RNN(nn.Module):
         """
         # inp = torch.cat([latent_states, actions], axis=-1)
         inp = latent_states
-        outp = self.lstm(inp)[:, -1, :]  # (B, LSTM_hidden_size)
+        outp = self.lstm(inp)  # (B, S, LSTM_hidden_size)
         gmm_out = self.mdn(outp)
         stride = self.gaussians * latent_states.shape[2]
-        mus = gmm_out[:, :stride]
+        mus = gmm_out[:, :, :stride]
         mus = mus.view(
             latent_states.shape[0],
-            # latent_states.shape[1],
+            latent_states.shape[1],
             self.gaussians,
             latent_states.shape[-1],
         )
@@ -61,23 +61,23 @@ class MDN_RNN(nn.Module):
         sigmas = gmm_out[:, stride : 2 * stride]
         sigmas = sigmas.view(
             latent_states.shape[0],
-            # latent_states.shape[1],
+            latent_states.shape[1],
             self.gaussians,
             latent_states.shape[-1],
         )
         sigmas = torch.exp(sigmas)
 
-        pi = gmm_out[:, 2 * stride : 2 * stride + self.gaussians]
-        pi = pi.view(latent_states.shape[0], self.gaussians)
+        pi = gmm_out[:, :, 2 * stride : 2 * stride + self.gaussians]
+        pi = pi.view(latent_states.shape[0], latent_states.shape[1], self.gaussians)
         log_pi = f.log_softmax(pi, dim=-1)
 
         if self.mode == "training":
-            rs = gmm_out[:, -2]
-            ds = gmm_out[:, -1]
+            rs = gmm_out[:, :, -2]
+            ds = gmm_out[:, :, -1]
             return mus, sigmas, log_pi, rs, ds
         elif self.mode == "inference":
             w = Categorical(logits=log_pi).sample()  # (B, S) [1]
-            next_latent_pred = Normal(mus, sigmas).sample()[range(w.shape[0]), w, :]
+            next_latent_pred = Normal(mus, sigmas).sample()[range(w.shape[0]), -1, w[:, -1], :]
             # (B, Z_dim+Complt)
             return next_latent_pred
 

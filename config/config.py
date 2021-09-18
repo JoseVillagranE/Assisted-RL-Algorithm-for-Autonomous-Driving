@@ -117,6 +117,7 @@ config.train.RNN_weights_path = os.path.join(
 config.train.rnn_nsteps = 2
 
 config.train.linear_layers = []
+config.train.critic_linear_layers = []
 
 config.train.ou_noise_mu = 0.0
 config.train.ou_noise_theta = 0.6
@@ -140,7 +141,7 @@ config.train.load_rm_name_c = ["0", "g"]
 config.train.hrl = edict()
 config.train.hrl.n_hl_actions = 0
 config.train.hrl.high = [0, 1, 0, 1, 1, 1]  # steer, th, steer, th ..
-config.train.hrl.low = [-1, -1, 0, -1, 0, -1]
+config.train.hrl.low = [-1, -1, 0, 0, 0, -1]
 config.train.hrl.ig = True
 config.train.hrl.epsilon_initial = 1.0
 config.train.hrl.epsilon_final = 0.01
@@ -251,6 +252,22 @@ config.reward_fn.target_speed = 40.0
 config.reward_fn.max_speed = 60.0
 config.reward_fn.max_distance = 3.0
 config.reward_fn.max_angle = 30.0
+config.reward_fn.enable_exo_veh_distance_reward = False
+config.reward_fn.danger_zone = 2
+
+config.reward_fn.enable_smooth = False
+config.reward_fn.smooth_factor = 3
+config.reward_fn.smooth_min_speed = 10.0
+config.reward_fn.smooth_max_speed = 60.0
+config.reward_fn.smooth_target_speed = 40.0
+config.reward_fn.smooth_min_distace = 1.5
+config.reward_fn.smooth_max_distance = 3.0
+config.reward_fn.smooth_min_angle = 20.0
+config.reward_fn.smooth_max_angle = 30.0
+config.reward_fn.smooth_danger_zone = 2
+
+
+
 
 config.reward_fn.weight_collision_pedestrian = 15
 config.reward_fn.weight_collision_vehicle = 10
