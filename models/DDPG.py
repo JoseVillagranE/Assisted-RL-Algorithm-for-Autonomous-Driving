@@ -280,8 +280,8 @@ class DDPG:
         next_actions = self.actor_target(next_states)
 
         if self.temporal_mech:
-            Qvals = self.critic(states[:, -1, :], actions)
-            next_Q = self.critic_target(next_states[:, -1, :], next_actions)
+            Qvals = self.critic(states[:, -1, :], actions).squeeze()
+            next_Q = self.critic_target(next_states[:, -1, :], next_actions).squeeze()
         else:
             Qvals = self.critic(states, actions).squeeze()
             next_Q = self.critic_target(next_states, next_actions).squeeze()

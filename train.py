@@ -234,10 +234,10 @@ def train():
                     if config.vis.render:
                         env.render()
 
-                    if terminal_state or step == config.train.steps - 1:
+                    if terminal_state:
                         episode_reward = sum(episode_reward)
                         terminal_state = True
-                        if len(env.extra_info) > 0:
+                        if step < config.train.steps - 1:
                             terminal_state_info = env.extra_info[-1]
                             print(
                                 f"episode: {episode} || step: {step} || reward: {np.round(episode_reward, decimals=2)} || terminal reason: {env.extra_info[-1]}"
@@ -314,8 +314,8 @@ def train():
                     if config.vis.render:
                         env.render()
 
-                    if terminal_state or step == config.test.steps:
-                        if len(env.extra_info) > 0:
+                    if terminal_state:
+                        if len(env.extra_info) > 0 and step < config.test.steps - 1:
                             terminal_state_info = env.extra_info[-1]
                             print(
                                 f"episode_test: {episode_test}, step: {step}, reward: {np.round(episode_reward_test, decimals=2)}, terminal reason: {env.extra_info[-1]}"

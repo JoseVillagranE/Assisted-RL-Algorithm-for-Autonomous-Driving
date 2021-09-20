@@ -58,7 +58,7 @@ class MDN_RNN(nn.Module):
 
         # mus -> [B, n_gaussians, Z_dim+Compl]
 
-        sigmas = gmm_out[:, stride : 2 * stride]
+        sigmas = gmm_out[:, :, stride : 2 * stride]
         sigmas = sigmas.view(
             latent_states.shape[0],
             latent_states.shape[1],
