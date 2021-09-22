@@ -211,7 +211,7 @@ def train():
                     _action = action if config.run_type in ["DDPG", "CoL"] else full_actions
                     _next_state = next_state_ if config.train.temporal_mech else next_state
                     
-                    if config.train.trauma_memory.enable and env.extra_info[-1] in config.train.trauma_memory.situations:
+                    if config.train.trauma_memory.enable and terminal_state in config.train.trauma_memory.situations:
                         model.trauma_replay_memory.add_to_memory((state.copy(),
                                                        _action.copy(),
                                                        reward.copy(),

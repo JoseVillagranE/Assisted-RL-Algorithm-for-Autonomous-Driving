@@ -56,7 +56,7 @@ class PADDPG:
         )
         self.action_parameter_size = int(self.action_parameter_sizes.sum())
         self.action_max = torch.ones(self.n_hl_actions).float().to(self.device)
-        self.action_min = torch.zeros(self.n_hl_actions).float().to(self.device)
+        self.action_min = -self.action_max.detach()
         self.action_range = (self.action_max - self.action_min).detach()
         print(f"action_range: {self.action_range}")
 

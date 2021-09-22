@@ -164,6 +164,7 @@ class DDPG:
                     win=config.train.rnn_nsteps,
                 )
             rm_prop = 1 - config.train.trauma_memory.prop
+            self.trauma_memory_prop = config.train.trauma_memory.prop
             
         for i in range(self.q_of_tasks):
             if self.type_RM == "sequential":
@@ -433,7 +434,7 @@ class DDPG:
                 dones,
             ) = self.replay_memory.get_batch_for_replay()
             
-            if self.enable_trauma_memory:
+            if self.enable_trauma_memory and self.trauma_replay_memory.get_memory_size() >= self.batch_size*self.trauma_memory_prop:
                 (
                     t_states,
                     t_actions,
