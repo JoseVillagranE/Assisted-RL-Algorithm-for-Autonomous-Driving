@@ -87,6 +87,7 @@ config.train.measurements_to_include = set(
     # + ["speed"]
     # ["orientation"]
 )
+config.train.encoded_state_standardization = False
 config.train.wp_encode = False  # harcoded
 config.train.wp_encoder_size = 64 if config.train.wp_encode else 0
 config.train.z_dim = 128

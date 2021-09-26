@@ -105,6 +105,7 @@ def train():
         config.preprocess.std,
         config.train.measurements_to_include,
         vae_encode=model.feat_ext if config.model.type == "VAE" else None,
+        encoded_state_standardization=config.train.encoded_state_standardization,
         feat_wp_encode=model.wp_encode_fn if config.train.wp_encode else None,
     )
     print("Creating Environment..")

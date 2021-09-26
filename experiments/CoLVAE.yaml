@@ -8,47 +8,49 @@ simulation:
 
 train:
   checkpoint_every: 100000
-  episodes: 100
+  episodes: 150
   device: "cuda:0"
   actor_agent_lr: 0.00001
   critic_agent_lr: 0.00001
-  actor_expert_lr: 0.001
-  critic_expert_lr: 0.001
+  actor_expert_lr: 0.01
+  critic_expert_lr: 0.01
   optimizer: "SGD"
-  type_RM: "random"
-  batch_size: 128
+  type_RM: "prioritized"
+  batch_size: 16
   temporal_mech: False
   rnn_nsteps: 2
   start_to_update: 5
-  optimization_steps: 100
+  optimization_steps: 1000
   lambdas: [1, 1, 1]
   expert_prop: 0.25
   agent_prop: 0.75
   ou_noise_mu: 0.0
-  ou_noise_theta: 0.35
+  ou_noise_theta: 0.15
   ou_noise_max_sigma: 0.05
-  ou_noise_min_sigma: 0.001
+  ou_noise_min_sigma: 0.0001
   ou_noise_decay_period: 100 # episode
-  pretraining_steps: 10000
+  pretraining_steps: 50000
   tau: 0.0001
   gamma: 0.99
   wp_encode: False
   wp_encoder_size: 64
   rm_filename: "" # folder's name for load many experiences tuples
-  scheduler_step_size: 10000
-  scheduler_min_lr : 0.000001 # 10-6
-  scheduler_gamma: 0.5
-  load_rm_choice: "name"
+  scheduler_step_size: 300
+  scheduler_min_lr : 0.0000001 # 10-7
+  scheduler_gamma: 0.1
+  load_rm_choice: "random"
   load_rm_name_c: ["2", "g"]
-  load_rm_idxs: [] # compl states [steer, thr, speed, ..]
+  load_rm_num_rolls: 30
+  load_rm_idxs: [0, 1] # compl states [steer, thr, speed, ..]
   enable_scheduler_lr: True
-  alpha: 0.4
-  beta: 0
-  actor_grad_clip: 0.05
+  alpha: 0.3
+  beta: 1
+  actor_grad_clip: 0.005
   critic_grad_clip: 0.05
   linear_layers: [128, 64]
+  encoded_state_standardization: True
   trauma_memory:
-      enable: False
+      enable: True
       prop: 0.1
       
 
@@ -87,6 +89,8 @@ reward_fn:
   weight_route_al: 1
   weight_centralization: 1
   weight_distance_to_goal: 10
+  enable_smooth: True
+  enable_exo_veh_distance_reward: True
 
 test:
   every: 5

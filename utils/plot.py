@@ -20,7 +20,6 @@ def plot_data(data, x_axis, value, is_test=False, condition=None, smooth=1, **kw
         smoothed_x = np.convolve(data, y, 'same') / np.convolve(z, y, 'same')
         data = smoothed_x
 
-
     if isinstance(data, list):
         data = pd.concat(data, ignore_index=True)
     elif isinstance(data, np.ndarray):
@@ -39,7 +38,38 @@ def plot_data(data, x_axis, value, is_test=False, condition=None, smooth=1, **kw
     if xscale:
         plt.ticklabel_format(style='sci', axis='x', scilimits=(0,0))
 
+
+
     plt.tight_layout(pad=0.5)
+
+def plot_info_finals_state(data, x_axis, value, only_goal=True, is_test=False, condition=None, smooth=0, **kwargs):
+
+    if only_goal:
+        data = (data[:, 1] == "Goal").astype(int)
+    else:
+        data = np.isin(data[:, 1], ["Goal", "Cross Finish Line"]).astype(int)
+
+    if smooth == 0:
+        success_rate = np.array([data[:t].sum() / t for t in range(1, data.shape[0] + 1)])
+    else:
+
+        y = np.ones(smooth)
+        z = np.ones(data.shape[0])
+        success_rate = np.convolve(data, y, 'same') / np.convolve(z, y, 'same')
+        # success_rate = np.array([data[t-window:t].sum() / window for t in range(1, data.shape[0] + 1)])
+
+    episodes = range(success_rate.shape[0])
+    if is_test:
+        episodes = range(5, (success_rate.shape[0]+1)*5, 5)
+    data = pd.DataFrame({'Success Rate': success_rate, 'Episodes': episodes})
+
+    sns.set(style="darkgrid", font_scale=1.5)
+    sns.lineplot(data=data, x=x_axis, y=value, hue=condition, err_style="band", ci=95,**kwargs)
+    plt.legend(loc="best").set_draggable(True)
+
+    xscale = np.max(np.asarray(data[x_axis])) > 5e3
+    if xscale:
+        plt.ticklabel_format(style='sci', axis='x', scilimits=(0,0))
 
 def plot_extra_info(data):
 
@@ -47,16 +77,17 @@ def plot_extra_info(data):
     axes = axes.flatten()
     idxs = [[0, 1], 3]
 
-    exo_veh_pos_x = 149
-    exo_veh_pos_y = 63
+    exo_veh_pos_x = [149, 170, 190]
+    exo_veh_pos_y = [63, 58, 63]
 
     exo_veh_extent_x = 1.8527
     exo_veh_extent_y = 0.8943
 
-    xy = (exo_veh_pos_x - exo_veh_extent_x, exo_veh_pos_y - exo_veh_extent_y)
+    for x, y in zip(exo_veh_pos_x, exo_veh_pos_y):
+        xy = (x - exo_veh_extent_x, y - exo_veh_extent_y)
 
-    rect = Rectangle(xy, exo_veh_extent_x*2, exo_veh_extent_y*2, linewidth=2, edgecolor="r", facecolor='blue')
-    axes[0].add_patch(rect)
+        rect = Rectangle(xy, exo_veh_extent_x*2, exo_veh_extent_y*2, linewidth=2, edgecolor="r", facecolor='blue')
+        axes[0].add_patch(rect)
 
     for episode, d in enumerate(data):
         color = (episode / len(data), 0, 0)
@@ -67,15 +98,18 @@ def plot_extra_info(data):
 
 if __name__ == "__main__":
 
-    # data = sns.load_dataset("flights")
-    # print(data.head())
-    #
-    # may_fl = data.query("month == 'May'")
-    # sns.lineplot(data=data, x="year", y="passengers")
+    import pathlib
+    prefix_path  = os.path.join(pathlib.Path(__file__).parent.resolve().parent, "models_logs")
+    alg = "VAE/CoL"
+    date = "2021-09-26-12-32"
+    path = os.path.join(prefix_path, alg, date)
 
-    rewards = np.load("rewards.npy")
-    rewards_wout = np.load("rewards_wout.npy")
-    test_rewards = np.load("test_rewards.npy")
+    info_final_states = np.load(os.path.join(path, "info_finals_state.npy"))
+    test_info_final_states = np.load(os.path.join(path, "test_info_finals_state.npy"))
+
+    rewards = np.load(os.path.join(path, "rewards.npy"))
+    # rewards_wout = np.load(os.path.join(path, "rewards_wout.npy"))
+    test_rewards = np.load(os.path.join(path, "test_rewards.npy"))
     #plot_data(rewards, "Episodes", "Rewards", smooth=4, label="w/ mov_avg", markers=True, dashes=False)
     plot_data(rewards, "Episodes", "Rewards", smooth=20, label="Train Reward",
               markers=True, dashes=False)
@@ -85,5 +119,9 @@ if __name__ == "__main__":
     #          markers=True, dashes=False)
     plt.show()
 
-    data = np.load("train_agent_extra_info.npy", allow_pickle=True)
+    plot_info_finals_state(info_final_states, "Episodes", "Success Rate", label="Train Success Rate", smooth=20, only_goal=False)
+    plot_info_finals_state(test_info_final_states, "Episodes", "Success Rate", is_test=True, label="Test Success Rate", smooth=20, only_goal=False)
+    plt.show()
+
+    data = np.load(os.path.join(path, "train_agent_extra_info.npy"), allow_pickle=True)
     plot_extra_info(data)

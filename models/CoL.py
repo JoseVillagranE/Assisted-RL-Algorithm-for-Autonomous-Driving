@@ -632,7 +632,7 @@ class CoL:
     
                 isw = idxs_e = idxs_a = 0
                 
-                if self.enable_trauma_memory:
+                if self.enable_trauma_memory and self.trauma_replay_memory.get_memory_size() > 0:
                     (
                     t_states,
                     t_actions,
@@ -666,7 +666,7 @@ class CoL:
                 
                 isw = np.vstack((np.array(isw_a)[:, np.newaxis], np.array(isw_e)[:, np.newaxis]))
                 
-                if self.enable_trauma_memory:
+                if self.enable_trauma_memory and self.trauma_replay_memory.get_memory_size() > 0:
                     (
                     t_states,
                     t_actions,
@@ -694,7 +694,7 @@ class CoL:
             )
             
             
-            if self.enable_trauma_memory:
+            if self.enable_trauma_memory and self.trauma_replay_memory.get_memory_size() > 0:
                 
                 t_states = np.array(t_states)
                 t_actions = np.array(t_actions)

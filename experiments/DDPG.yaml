@@ -4,21 +4,21 @@ seed: 12
 
 train:
   checkpoint_every: 100000
-  episodes: 400
+  episodes: 100
   device: "cuda:0"
   actor_lr: 0.0001
   critic_lr: 0.0001
   optimizer: "SGD"
   type_RM: "random"
   batch_size: 128
-  temporal_mech: False
+  temporal_mech: True
   start_to_update: 10
   optimization_steps: 100
   ou_noise_mu: 0.0
   ou_noise_theta: 0.6
   ou_noise_max_sigma: 0.4
   ou_noise_min_sigma: 0.001
-  ou_noise_decay_period: 200
+  ou_noise_decay_period: 50
   tau: 0.0001
   gamma: 0.99
   scheduler_step_size: 100000
@@ -27,8 +27,11 @@ train:
   beta: 1
   actor_grad_clip: 0.005
   critic_grad_clip: 0.05
-  linear_layers: [32, 16]  
+  linear_layers: []  
   max_memory_size: 1000000
+  trauma_memory:
+    enable: True
+    prop: 0.1
 
 agent:
   sensor:
@@ -41,13 +44,13 @@ exo_agents:
     spawn: False
 
   vehicle:
-    n: 2
+    n: 3
     spawn: False
     initial_position:
-      x: [149, 190]
-      y: [63, 63]
-      z: [1, 1]
-      yaw: [180, 180]
+      x: [149, 170, 190]
+      y: [63, 58, 63]
+      z: [1, 1, 1]
+      yaw: [180, 180, 180]
 
 model:
   type: "VAE"
