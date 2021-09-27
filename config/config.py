@@ -82,8 +82,8 @@ config.train.start_to_update = 0
 config.train.optimization_steps = 1
 config.train.action_space = 2  # [steer, throttle]
 config.train.measurements_to_include = set(
-    ["steer"]
-    + ["throttle"]
+    # ["steer"]
+    # + ["throttle"]
     # + ["speed"]
     # ["orientation"]
 )
@@ -103,7 +103,7 @@ config.train.expert_prop = 0.25  # CoL
 config.train.agent_prop = 0.75
 config.train.rm_filename = "BC-1.npy"
 config.train.VAE_weights_path = os.path.join(
-    root_dir, "models/weights/segmodel_rollouts.pt"
+    root_dir, "models/weights/segmodel_rollouts_b05_b64_wd.pt"
 )
 # RNN
 config.train.temporal_mech = False
@@ -113,7 +113,7 @@ config.train.rnn_hidden_size = 512
 config.train.gaussians = 3
 config.train.rnn_num_layers = 1
 config.train.RNN_weights_path = os.path.join(
-    root_dir, "models/weights/lstm_512_st_3_wd.pt"
+    root_dir, "models/weights/lstm_512_3_wd_2.pt"
 )
 config.train.rnn_nsteps = 2
 

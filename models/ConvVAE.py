@@ -185,25 +185,78 @@ class VAE_Actor(nn.Module):
 
 
 class VAE_Critic(nn.Module):  # No needed temporal mechanism
-    def __init__(self, state_dim, num_actions, hidden_layers=[]):
+    def __init__(self, 
+                 state_dim,
+                 num_actions,
+                 hidden_layers=[],
+                 temporal_mech=False,
+                 rnn_config={},
+                 is_freeze_params=True
+                 ):
         super().__init__()
         self.num_actions = num_actions
-        
         self.layers = nn.ModuleList()
+        
+        self.lstm = None
+        if temporal_mech:
+            if rnn_config["rnn_type"] == "lstm":
+                self.lstm = LSTM(
+                    input_size=rnn_config["input_size"],
+                    hidden_size=rnn_config["hidden_size"],
+                    num_layers=rnn_config["num_layers"],
+                )
+            elif rnn_config["rnn_type"] == "mdn_rnn":
+                self.lstm = MDN_RNN(
+                    input_size=rnn_config["input_size"],
+                    hidden_size=rnn_config["hidden_size"],
+                    seq_len=rnn_config["n_steps"],
+                    batch_size=rnn_config["batch_size"],
+                    device=rnn_config["device"],
+                    action_size=num_actions,
+                    num_layers=rnn_config["num_layers"],
+                    gaussians=rnn_config["gaussians"],
+                    mode="inference",
+                )
+            else:
+                raise NotImplementedError(
+                    "Only lstm and mdn_rnn type of recurrent models at moment"
+                )
+                
+        if self.lstm is not None:
+            print("Loading RNN weights..")
+            self.lstm.load_state_dict(
+                torch.load(rnn_config["weights_path"]), strict=False
+            )
+            if is_freeze_params:
+                print("Freezing RNN")
+                freeze_params(self.lstm)
+        
+        if self.lstm:
+            input_dim = state_dim * rnn_config["n_steps"] + num_actions
+        else:
+            input_dim = state_dim + num_actions
+        
         
         for i, outp_dim_layer in enumerate(hidden_layers):
             if i == 0:
-                self.layers.append(nn.Linear(state_dim+num_actions, outp_dim_layer))
+                self.layers.append(nn.Linear(input_dim, outp_dim_layer))
             else:
                 self.layers.append(nn.Linear(hidden_layers[i-1], outp_dim_layer))
         
         if len(hidden_layers) > 0:
             self.layers.append(nn.Linear(hidden_layers[-1], 1))
         else:
-            self.layers.append(nn.Linear(state_dim + num_actions, 1))
+            self.layers.append(nn.Linear(input_dim, 1))
 
     def forward(self, state, action):
-        x = torch.cat([state, action], 1)
+        
+        _state = state
+        if self.lstm:
+            next_state = self.lstm(state)  # (B, Z_dim+Compl_State)
+            _state = torch.cat(
+                (state[:, -1, :].squeeze(1), next_state), dim=-1
+            ).squeeze(0)
+        x = torch.cat([_state, action], 1)
         for i, layer in enumerate(self.layers):
             x = layer(x)
             if i < len(self.layers) - 1:

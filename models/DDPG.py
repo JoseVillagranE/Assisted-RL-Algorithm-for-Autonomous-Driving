@@ -101,13 +101,17 @@ class DDPG:
             self.critic = VAE_Critic(
                 config.train.state_dim, 
                 config.train.action_space,
-                hidden_layers = config.train.critic_linear_layers
+                hidden_layers = config.train.critic_linear_layers,
+                temporal_mech=config.train.temporal_mech,
+                rnn_config=rnn_config,
             ).float()
 
             self.critic_target = VAE_Critic(
                 config.train.state_dim,
                 config.train.action_space,
-                hidden_layers = config.train.critic_linear_layers
+                hidden_layers = config.train.critic_linear_layers,
+                temporal_mech=config.train.temporal_mech,
+                rnn_config=rnn_config,
             ).float()
 
         else:
@@ -368,8 +372,8 @@ class DDPG:
         next_actions = self.actor_target(next_states)
 
         if self.temporal_mech:
-            Qvals = self.critic(states[:, -1, :], actions)
-            next_Q = self.critic_target(next_states[:, -1, :], next_actions)
+            Qvals = self.critic(states[:, :, :], actions)
+            next_Q = self.critic_target(next_states[:, :, :], next_actions)
         else:
             Qvals = self.critic(states, actions)
             next_Q = self.critic_target(next_states, next_actions)
@@ -387,7 +391,7 @@ class DDPG:
         self.critic_optimizer.step()
 
         if self.temporal_mech:
-            actor_loss = -1 * self.critic(states[:, -1, :], self.actor(states)).mean()
+            actor_loss = -1 * self.critic(states[:, :, :], self.actor(states)).mean()
         else:
             actor_loss = -1 * self.critic(states, self.actor(states)).mean()
         # update actor

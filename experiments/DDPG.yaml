@@ -12,7 +12,7 @@ train:
   type_RM: "random"
   batch_size: 128
   temporal_mech: True
-  start_to_update: 10
+  start_to_update: 5
   optimization_steps: 100
   ou_noise_mu: 0.0
   ou_noise_theta: 0.6
@@ -66,6 +66,9 @@ reward_fn:
   weight_route_al: 1
   weight_centralization: 1
   weight_distance_to_goal: 5
+  enable_smooth: True
+  enable_exo_veh_distance_reward: False
+  
 
 test:
   every: 5
