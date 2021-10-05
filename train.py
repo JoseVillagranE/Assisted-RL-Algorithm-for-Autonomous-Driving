@@ -106,6 +106,7 @@ def train():
         config.train.measurements_to_include,
         vae_encode=model.feat_ext if config.model.type == "VAE" else None,
         encoded_state_standardization=config.train.encoded_state_standardization,
+        extra_encode=model.extra_encode if config.train.extra_encoder else None,
         feat_wp_encode=model.wp_encode_fn if config.train.wp_encode else None,
     )
     print("Creating Environment..")
@@ -209,7 +210,7 @@ def train():
                     if not config.reward_fn.normalize:
                         reward = weighted_rw  # rw is only a scalar value
                         
-                    _action = action if config.run_type in ["DDPG", "CoL"] else full_actions
+                    _action = action if config.run_type in ["DDPG", "CoL", "TD3"] else full_actions
                     _next_state = next_state_ if config.train.temporal_mech else next_state
                     
                     if config.train.trauma_memory.enable and terminal_state in config.train.trauma_memory.situations:
@@ -265,6 +266,7 @@ def train():
                 "DDPG",
                 "PADDPG",
                 "CoL",
+                "TD3"
             ]:
                 for _ in range(config.train.optimization_steps):
                     model.update()
@@ -400,12 +402,23 @@ def train():
         
 
         # Last checkpoint to save
-        models_dicts = (
-            model.actor.state_dict(),
-            model.actor_target.state_dict(),
-            model.critic.state_dict(),
-            model.critic_target.state_dict(),
-        )
+        
+        if config.run_type == "TD3":
+            models_dicts = (
+                model.actor.state_dict(),
+                model.actor_target.state_dict(),
+                model.critic_1.state_dict(),
+                model.critic_target_1.state_dict(),
+                model.critic_2.state_dict(),
+                model.critic_target_2.state_dict(),
+            )
+        else:
+            models_dicts = (
+                model.actor.state_dict(),
+                model.actor_target.state_dict(),
+                model.critic.state_dict(),
+                model.critic_target.state_dict(),
+            )
         optimizers_dicts = (
             model.actor_optimizer.state_dict(),
             model.critic_optimizer.state_dict(),

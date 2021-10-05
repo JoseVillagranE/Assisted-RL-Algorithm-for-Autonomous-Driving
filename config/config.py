@@ -87,15 +87,22 @@ config.train.measurements_to_include = set(
     # + ["speed"]
     # ["orientation"]
 )
+config.train.policy_freq = 2 # td3
 config.train.encoded_state_standardization = False
+config.train.extra_encoder = False
+config.train.n_in_eencoder= len(config.train.measurements_to_include)
+config.train.n_out_eencoder=128
+config.train.hidden_layers_eencoder=[]
+
 config.train.wp_encode = False  # harcoded
 config.train.wp_encoder_size = 64 if config.train.wp_encode else 0
 config.train.z_dim = 128
-config.train.state_dim = (
+config.train.state_dim = ((config.train.z_dim + config.train.n_out_eencoder) if config.train.extra_encoder
+                          else (
     config.train.z_dim
     + len(config.train.measurements_to_include)
     + (2 if "orientation" in config.train.measurements_to_include else 0)
-)
+))
 # config.train.wp_encoder_size
 config.train.pretraining_steps = 10  # CoL
 config.train.lambdas = [1, 1, 1]
@@ -117,8 +124,10 @@ config.train.RNN_weights_path = os.path.join(
 )
 config.train.rnn_nsteps = 2
 
+
 config.train.linear_layers = []
 config.train.critic_linear_layers = []
+config.train.is_freeze_params = True
 
 config.train.ou_noise_mu = 0.0
 config.train.ou_noise_theta = 0.6
@@ -166,6 +175,8 @@ config.cl_train.general_tr_episodes = 200
 config.cl_train.exo_vehs_x = []
 config.cl_train.exo_vehs_y = []
 config.cl_train.exo_vehs_yaw = []
+
+
 
 # Agent Defaults (Single agent)
 config.agent = edict()

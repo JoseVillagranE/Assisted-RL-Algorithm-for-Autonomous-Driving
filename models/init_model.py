@@ -1,6 +1,7 @@
 from .DummyModel import DummyModel
 from .manual_model import Manual_Model
 from .DDPG import DDPG
+from .TD3 import TD3
 from .PADDPG import PADDPG
 from .BC import BC
 from .CoL import CoL
@@ -25,6 +26,9 @@ def init_model(config):
 
     elif config.run_type == "PADDPG":
         model = PADDPG(config)
+        
+    elif config.run_type == "TD3":
+        model = TD3(config)
 
     elif config.run_type == "BC":  # for the moment is just for evaluation
         model = BC(

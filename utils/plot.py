@@ -101,7 +101,7 @@ if __name__ == "__main__":
     import pathlib
     prefix_path  = os.path.join(pathlib.Path(__file__).parent.resolve().parent, "models_logs")
     alg = "VAE/CoL"
-    date = "2021-09-26-12-32"
+    date = "2021-10-04-21-55"
     path = os.path.join(prefix_path, alg, date)
 
     info_final_states = np.load(os.path.join(path, "info_finals_state.npy"))

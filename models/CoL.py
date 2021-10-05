@@ -91,6 +91,11 @@ class CoL:
                 temporal_mech=config.train.temporal_mech,
                 rnn_config=rnn_config,
                 linear_layers=config.train.linear_layers,
+                stats_encoder=config.train.extra_encoder,
+                n_in_eencoder=config.train.n_in_eencoder,
+                n_out_eencoder=config.train.n_out_eencoder,
+                hidden_layers_eencoder=config.train.hidden_layers_eencoder,
+                is_freeze_params=config.train.is_freeze_params,
                 beta=config.train.beta,
                 wp_encode=config.train.wp_encode,
                 wp_encoder_size=config.train.wp_encoder_size,
@@ -105,13 +110,32 @@ class CoL:
                 temporal_mech=config.train.temporal_mech,
                 rnn_config=rnn_config,
                 linear_layers=config.train.linear_layers,
+                stats_encoder=config.train.extra_encoder,
+                n_in_eencoder=config.train.n_in_eencoder,
+                n_out_eencoder=config.train.n_out_eencoder,
+                hidden_layers_eencoder=config.train.hidden_layers_eencoder,
+                is_freeze_params=config.train.is_freeze_params,
                 beta=config.train.beta,
                 wp_encode=config.train.wp_encode,
                 wp_encoder_size=config.train.wp_encoder_size,
             ).float()
 
-            self.critic = VAE_Critic(self.state_dim, self.action_space).float()
-            self.critic_target = VAE_Critic(self.state_dim, self.action_space).float()
+            self.critic = VAE_Critic(
+                self.state_dim, 
+                self.action_space,
+                hidden_layers=config.train.critic_linear_layers,
+                temporal_mech=config.train.temporal_mech,
+                rnn_config=rnn_config,
+                is_freeze_params=config.train.is_freeze_params
+                ).float()
+            self.critic_target = VAE_Critic(
+                self.state_dim,
+                self.action_space,
+                hidden_layers=config.train.critic_linear_layers,
+                temporal_mech=config.train.temporal_mech,
+                rnn_config=rnn_config,
+                is_freeze_params=config.train.is_freeze_params
+                ).float()
 
         else:
             self.actor = Conv_Actor(
@@ -236,15 +260,15 @@ class CoL:
                 weight_decay=1e-5,
             )
         elif self.optim == "Adam":
-            self.actor_optimizer = torch.optim.Adam(
+            self.actor_optimizer = torch.optim.AdamW(
                 filter(lambda p: p.requires_grad, self.actor.parameters()),
                 lr=config.train.actor_expert_lr,
-                weight_decay=1e-5,
+                weight_decay=1e-2,
             )
-            self.critic_optimizer = torch.optim.Adam(
+            self.critic_optimizer = torch.optim.AdamW(
                 filter(lambda p: p.requires_grad, self.critic.parameters()),
                 lr=config.train.critic_expert_lr,
-                weight_decay=1e-5,
+                weight_decay=1e-2,
             )
         else:
             raise NotImplementedError("Optimizer should be Adam or SGD")
@@ -338,8 +362,8 @@ class CoL:
         action = action.detach().numpy()  # [steer, throttle]
         if mode == "training":
             action = self.ounoise.get_action(action, step)
-            action[0] = np.clip(action[0], -1, 1)
-            action[1] = np.clip(action[1], -1, 1)
+        action[0] = np.clip(action[0], -1, 1)
+        action[1] = np.clip(action[1], -1, 1)
         return action
 
     def p_update(self, is_pretraining=False):
@@ -374,15 +398,15 @@ class CoL:
                 rewards.squeeze()
                 + self.gamma
                 * self.critic_target(
-                    next_states[:, -1, :], self.actor_target(next_states).detach()
+                    next_states[:, :, :], self.actor_target(next_states).detach()
                 ).squeeze()
             )
             TD = self.mse_wout_reduction(
                 R_1,
-                self.critic(states[:, -1, :], self.actor(states).detach()).squeeze(),
+                self.critic(states[:, :, :], self.actor(states).detach()).squeeze(),
             )  # reduction -> none
             L_Q1 = (isw * TD).mean()
-            L_A = -1 * self.critic(states[:, -1, :], self.actor(states)).detach().mean()
+            L_A = -1 * self.critic(states[:, :, :], self.actor(states)).detach().mean()
         else:
             R_1 = (
                 rewards.squeeze()
@@ -502,14 +526,14 @@ class CoL:
                 rewards.squeeze()
                 + self.gamma
                 * self.critic_target(
-                    next_states[:, -1, :], self.actor_target(next_states).detach()
+                    next_states[:, :, :], self.actor_target(next_states).detach()
                 ).squeeze()
             )
             L_Q1 = self.mse(
                 R_1,
-                self.critic(states[:, -1, :], self.actor(states).detach()).squeeze(),
+                self.critic(states[:, :, :], self.actor(states).detach()).squeeze(),
             )  # reduction -> mean
-            L_A = -1 * self.critic(states[:, -1, :], self.actor(states)).detach().mean()
+            L_A = -1 * self.critic(states[:, :, :], self.actor(states)).detach().mean()
         else:
             R_1 = (
                 rewards.squeeze()

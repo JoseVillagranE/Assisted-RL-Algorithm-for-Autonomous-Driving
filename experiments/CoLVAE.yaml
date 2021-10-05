@@ -1,6 +1,6 @@
 run_type: 'CoL'
 run_id: '1'
-seed: 1
+seed: 123
 
 
 simulation:
@@ -8,50 +8,53 @@ simulation:
 
 train:
   checkpoint_every: 100000
-  episodes: 150
+  episodes: 700
   device: "cuda:0"
-  actor_agent_lr: 0.00001
-  critic_agent_lr: 0.00001
-  actor_expert_lr: 0.01
-  critic_expert_lr: 0.01
-  optimizer: "SGD"
+  actor_agent_lr: 0.0001
+  critic_agent_lr: 0.0001
+  actor_expert_lr: 0.001
+  critic_expert_lr: 0.001
+  optimizer: "Adam"
   type_RM: "prioritized"
-  batch_size: 16
+  batch_size: 64
   temporal_mech: False
   rnn_nsteps: 2
   start_to_update: 5
-  optimization_steps: 1000
-  lambdas: [1, 1, 1]
+  optimization_steps: 1
+  lambdas: [0.1, 0.9, 1]
   expert_prop: 0.25
   agent_prop: 0.75
   ou_noise_mu: 0.0
-  ou_noise_theta: 0.15
-  ou_noise_max_sigma: 0.05
-  ou_noise_min_sigma: 0.0001
-  ou_noise_decay_period: 100 # episode
-  pretraining_steps: 50000
+  ou_noise_theta: 0.6
+  ou_noise_max_sigma: 0.4
+  ou_noise_min_sigma: 0.005
+  ou_noise_decay_period: 250 # episode
+  pretraining_steps: 300
   tau: 0.0001
   gamma: 0.99
   wp_encode: False
   wp_encoder_size: 64
   rm_filename: "" # folder's name for load many experiences tuples
-  scheduler_step_size: 300
+  scheduler_step_size: 250
+  max_memory_size: 20000
   scheduler_min_lr : 0.0000001 # 10-7
-  scheduler_gamma: 0.1
+  scheduler_gamma: 0.01
   load_rm_choice: "random"
   load_rm_name_c: ["2", "g"]
-  load_rm_num_rolls: 30
-  load_rm_idxs: [0, 1] # compl states [steer, thr, speed, ..]
+  load_rm_num_rolls: 80
+  load_rm_idxs: [] # compl states [steer, thr, speed, ..]
   enable_scheduler_lr: True
   alpha: 0.3
   beta: 1
-  actor_grad_clip: 0.005
-  critic_grad_clip: 0.05
+  actor_grad_clip: 1
+  critic_grad_clip: 5
   linear_layers: [128, 64]
-  encoded_state_standardization: True
+  critic_linear_layers: []
+  encoded_state_standardization: False
+  is_freeze_params: True
   trauma_memory:
       enable: True
-      prop: 0.1
+      prop: 0.35
       
 
 agent:
@@ -67,13 +70,13 @@ exo_agents:
     spawn: False
 
   vehicle:
-    n: 2
+    n: 4
     spawn: True
     initial_position:
-      x: [149, 190]
-      y: [63, 63]
-      z: [1, 1]
-      yaw: [180, 180]
+      x: [149, 149, 170, 190]
+      y: [63, 58, 58, 63]
+      z: [1, 1, 1, 1]
+      yaw: [180, 180, 180, 180]
 
 model:
   type: "VAE"
@@ -91,11 +94,13 @@ reward_fn:
   weight_distance_to_goal: 10
   enable_smooth: True
   enable_exo_veh_distance_reward: True
-
+  
 test:
   every: 5
   steps: 300
 
+simulation:
+  action_smoothing: 0
 
 vis:
   render: False

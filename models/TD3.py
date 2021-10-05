@@ -16,7 +16,7 @@ from copy import deepcopy
 import random
 
 
-class DDPG:
+class TD3:
     def __init__(self, config):
 
         self.action_space = config.train.action_space
@@ -34,6 +34,9 @@ class DDPG:
         self.critic_grad_clip = config.train.critic_grad_clip
         self.enable_trauma_memory = config.train.trauma_memory.enable
         self.z_dim = config.train.z_dim
+        self.total_it = 0
+        self.policy_freq = config.train.policy_freq
+        
         n_channel = 3
 
         input_size = (
@@ -86,22 +89,9 @@ class DDPG:
                 wp_encoder_size=config.train.wp_encoder_size,
             ).float()
 
-            self.actor_target = VAE_Actor(
-                self.state_dim,
-                self.action_space,
-                n_channel,
-                config.train.z_dim,
-                VAE_weights_path=config.train.VAE_weights_path,
-                temporal_mech=config.train.temporal_mech,
-                rnn_config=rnn_config,
-                linear_layers=config.train.linear_layers,
-                is_freeze_params=config.train.is_freeze_params,
-                beta=config.train.beta,
-                wp_encode=config.train.wp_encode,
-                wp_encoder_size=config.train.wp_encoder_size,
-            ).float()
+            self.actor_target = deepcopy(self.actor)
 
-            self.critic = VAE_Critic(
+            self.critic_1 = VAE_Critic(
                 config.train.state_dim, 
                 config.train.action_space,
                 hidden_layers = config.train.critic_linear_layers,
@@ -110,15 +100,19 @@ class DDPG:
                 is_freeze_params=config.train.is_freeze_params
             ).float()
 
-            self.critic_target = VAE_Critic(
-                config.train.state_dim,
+            self.critic_target_1 = deepcopy(self.critic_1)
+            
+            self.critic_2 = VAE_Critic(
+                config.train.state_dim, 
                 config.train.action_space,
                 hidden_layers = config.train.critic_linear_layers,
                 temporal_mech=config.train.temporal_mech,
                 rnn_config=rnn_config,
-                is_freeze_params=config.train.is_freeze_params,
+                is_freeze_params=config.train.is_freeze_params
             ).float()
 
+            self.critic_target_2 = deepcopy(self.critic_2)
+            
         else:
             self.actor = Conv_Actor(
                 self.num_actions,
@@ -141,17 +135,6 @@ class DDPG:
             self.critic_target = Conv_Critic(
                 self.num_actions, config.preprocess.Resize_h, config.preprocess.Resize_w
             )
-
-        # Copy weights
-        for target_param, param in zip(
-            self.actor_target.parameters(), self.actor.parameters()
-        ):
-            target_param.data.copy_(param)
-
-        for target_param, param in zip(
-            self.critic_target.parameters(), self.critic.parameters()
-        ):
-            target_param.data.copy_(param)
 
         # Training
         self.type_RM = config.train.type_RM
@@ -210,7 +193,8 @@ class DDPG:
                 lr=config.train.actor_lr,
             )
             self.critic_optimizer = torch.optim.SGD(
-                filter(lambda p: p.requires_grad, self.critic.parameters()),
+                filter(lambda p: p.requires_grad, list(self.critic_1.parameters()) + 
+                                                   list(self.critic_2.parameters())),
                 lr=config.train.critic_lr,
             )
         elif self.optim == "Adam":
@@ -219,7 +203,8 @@ class DDPG:
                 lr=config.train.actor_lr,
             )
             self.critic_optimizer = torch.optim.Adam(
-                filter(lambda p: p.requires_grad, self.critic.parameters()),
+                filter(lambda p: p.requires_grad, list(self.critic_1.parameters()) + 
+                                                  list(self.critic_2.parameters())),
                 lr=config.train.critic_lr,
             )
         else:
@@ -274,6 +259,8 @@ class DDPG:
 
     def p_update(self):
         
+        self.total_it += 1
+        
         if self.replay_memory.get_memory_size() < self.batch_size:
             return
 
@@ -288,75 +275,65 @@ class DDPG:
         dones = torch.BoolTensor(dones).to(self.device)
         self.actor = self.actor.to(self.device).train()
         self.actor_target = self.actor_target.to(self.device).eval()
-        self.critic = self.critic.to(self.device).train()
-        self.critic_target = self.critic_target.to(self.device).eval()
+        self.critic_1 = self.critic_1.to(self.device).train()
+        self.critic_target_1 = self.critic_target_1.to(self.device).eval()
+        self.critic_2 = self.critic_2.to(self.device).train()
+        self.critic_target_2 = self.critic_target_2.to(self.device).eval()
 
         next_actions = self.actor_target(next_states)
 
-        if self.temporal_mech:
-            Qvals = self.critic(states[:, :, :], actions)#.squeeze()
-            next_Q = self.critic_target(next_states[:, :, :], next_actions)#.squeeze()
-        else:
-            Qvals = self.critic(states, actions).squeeze()
-            next_Q = self.critic_target(next_states, next_actions).squeeze()
-
+        Qvals_1 = self.critic_1(states, actions).squeeze()
+        Qvals_2 = self.critic_2(states, actions).squeeze()
+        next_Q_1 = self.critic_target_1(next_states, next_actions).squeeze()
+        next_Q_2 = self.critic_target_2(next_states, next_actions).squeeze()
+        next_Q = torch.min(next_Q_1, next_Q_2)
         Q_prime = rewards + (self.gamma * next_Q.squeeze() * (~dones))
-
-        TD = Q_prime - Qvals
-        critic_loss = (isw * TD ** 2).mean()
+        critic_loss = (self.critic_criterion(Qvals_1, Q_prime) +
+                        self.critic_criterion(Qvals_2, Q_prime))
+        
         # update critic
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
-        nn.utils.clip_grad_norm_(self.critic.parameters(), self.critic_grad_clip)
+        nn.utils.clip_grad_norm_(list(self.critic_1.parameters()) + list(self.critic_2.parameters()),
+                                 self.critic_grad_clip)
         self.critic_optimizer.step()
 
-        if self.temporal_mech:
-            actor_loss = -1 * self.critic(states[:, :, :], self.actor(states)).mean()
-        else:
-            actor_loss = -1 * self.critic(states, self.actor(states)).mean()
-        # update actor
-        self.actor_optimizer.zero_grad()
-        actor_loss.backward()
-        nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_grad_clip)
-        self.actor_optimizer.step()
+        if self.total_it % self.policy_freq == 0:
+            actor_loss = -1 * self.critic_1(states, self.actor(states)).mean()
+            # update actor
+            self.actor_optimizer.zero_grad()
+            actor_loss.backward()
+            nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_grad_clip)
+            self.actor_optimizer.step()
 
-        if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
-            self.actor_scheduler.step()
-            self.critic_scheduler.step()
+            if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
+                self.actor_scheduler.step()
+                self.critic_scheduler.step()
 
-        # print(f"Actor_loss: {actor_loss.item()}")
-        # print(f"Critic_loss: {critic_loss.item()}")
+        self.soft_update(self.actor, self.actor_target)
+        self.soft_update(self.critic_1, self.critic_target_1)
+        self.soft_update(self.critic_2, self.critic_target_2)
 
-        for target_param, param in zip(
-            self.actor_target.parameters(), self.actor.parameters()
-        ):
-            target_param.data.copy_(
-                param.data * self.tau + target_param.data * (1.0 - self.tau)
-            )
-
-        for target_param, param in zip(
-            self.critic_target.parameters(), self.critic.parameters()
-        ):
-            target_param.data.copy_(
-                param.data * self.tau + target_param.data * (1.0 - self.tau)
-            )
-
-        if self.q_of_tasks == 1:
-            self.replay_memory.update_priorities(idxs, TD.abs().detach().cpu().numpy())
-        else:
-            for i in set(idxs[0]):
-                ith_idx = np.where(np.array(idxs[0]) == i)[0]
-                js = np.array(idxs[1])[ith_idx]
-                self.B[i].update_priorities(js, TD[js].abs().detach().cpu().numpy())
+        # if self.q_of_tasks == 1:
+        #     self.replay_memory.update_priorities(idxs, TD.abs().detach().cpu().numpy())
+        # else:
+        #     for i in set(idxs[0]):
+        #         ith_idx = np.where(np.array(idxs[0]) == i)[0]
+        #         js = np.array(idxs[1])[ith_idx]
+        #         self.B[i].update_priorities(js, TD[js].abs().detach().cpu().numpy())
 
         # Back to cpu
         self.actor = self.actor.cpu().eval()
         self.actor_target = self.actor_target.cpu().eval()
-        self.critic = self.critic.cpu().eval()
-        self.critic_target = self.critic_target.cpu().eval()
+        self.critic_1 = self.critic_1.cpu().eval()
+        self.critic_2 = self.critic_2.cpu().eval()
+        self.critic_1_target = self.critic_1_target.cpu().eval()
+        self.critic_2_target = self.critic_2_target.cpu().eval()
 
     def _update(self):
-
+        
+        self.total_it += 1
+        
         if self.replay_memory.get_memory_size() < self.batch_size:
             return        
 
@@ -372,63 +349,47 @@ class DDPG:
             self.device
         ).train()  # Because is used for predict actions
         self.actor_target = self.actor_target.to(self.device).train()
-        self.critic = self.critic.to(self.device).train()
-        self.critic_target = self.critic_target.to(self.device).train()
-
-        # if actions.dim() < 2:
-        #     actions = actions.unsqueeze(1)
+        self.critic_1 = self.critic_1.to(self.device).train()
+        self.critic_2 = self.critic_2.to(self.device).train()
+        self.critic_1_target = self.critic_target_1.to(self.device).train()
+        self.critic_2_target = self.critic_target_2.to(self.device).train()
 
         next_actions = self.actor_target(next_states)
 
-        if self.temporal_mech:
-            Qvals = self.critic(states[:, :, :], actions)
-            next_Q = self.critic_target(next_states[:, :, :], next_actions)
-        else:
-            Qvals = self.critic(states, actions)
-            next_Q = self.critic_target(next_states, next_actions)
-
+        Qvals_1 = self.critic_1(states, actions)
+        Qvals_2 = self.critic_2(states, actions)
+        next_Q_1 = self.critic_target_1(next_states, next_actions)
+        next_Q_2 = self.critic_target_2(next_states, next_actions)
+        next_Q = torch.min(next_Q_1, next_Q_2)
         Q_prime = rewards.unsqueeze(1) + (
             self.gamma * next_Q.squeeze() * (~dones)
         ).unsqueeze(1)
 
-        critic_loss = self.critic_criterion(Q_prime, Qvals)  # default mean reduction
+        critic_loss = (self.critic_criterion(Qvals_1, Q_prime) + 
+                        self.critic_criterion(Qvals_2, Q_prime))
 
         # update critic
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
-        nn.utils.clip_grad_norm_(self.critic.parameters(), self.critic_grad_clip)
+        nn.utils.clip_grad_norm_(list(self.critic_1.parameters()) + list(self.critic_1.parameters()),
+                                 self.critic_grad_clip)
         self.critic_optimizer.step()
 
-        if self.temporal_mech:
-            actor_loss = -1 * self.critic(states[:, :, :], self.actor(states)).mean()
-        else:
-            actor_loss = -1 * self.critic(states, self.actor(states)).mean()
-        # update actor
-        self.actor_optimizer.zero_grad()
-        actor_loss.backward()
-        nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_grad_clip)
-        self.actor_optimizer.step()
+        
+        if self.total_it % self.policy_freq == 0:
+            actor_loss = -1 * self.critic_1(states, self.actor(states)).mean()
+            self.actor_optimizer.zero_grad()
+            actor_loss.backward()
+            nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_grad_clip)
+            self.actor_optimizer.step()
 
-        if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
-            self.actor_scheduler.step()
-            self.critic_scheduler.step()
+            if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
+                self.actor_scheduler.step()
+                self.critic_scheduler.step()
 
-        # print(f"Actor_loss: {actor_loss.item()}")
-        # print(f"Critic_loss: {critic_loss.item()}")
-
-        for target_param, param in zip(
-            self.actor_target.parameters(), self.actor.parameters()
-        ):
-            target_param.data.copy_(
-                param.data * self.tau + target_param.data * (1.0 - self.tau)
-            )
-
-        for target_param, param in zip(
-            self.critic_target.parameters(), self.critic.parameters()
-        ):
-            target_param.data.copy_(
-                param.data * self.tau + target_param.data * (1.0 - self.tau)
-            )
+        self.soft_update(self.actor, self.actor_target)
+        self.soft_update(self.critic_1, self.critic_target_1)
+        self.soft_update(self.critic_2, self.critic_target_2)
 
         # Back to cpu
         self.actor = self.actor.cpu().eval()
@@ -538,3 +499,11 @@ class DDPG:
         self.critic_target.load_state_dict(models_state_dict[3])
         self.actor_optimizer.load_state_dict(optimizer_state_dict[0])
         self.critic_optimizer.load_state_dict(optimizer_state_dict[1])
+        
+    def soft_update(self, local_model, target_model):
+        for target_param, param in zip(
+            target_model.parameters(), local_model.parameters()
+        ):
+            target_param.data.copy_(
+                param.data * self.tau + target_param.data * (1.0 - self.tau)
+            )

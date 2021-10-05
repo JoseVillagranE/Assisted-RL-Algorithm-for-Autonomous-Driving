@@ -21,6 +21,7 @@ import torchvision.datasets as datasets
 from utils.Network_utils import freeze_params
 
 from LSTM import LSTM, MDN_RNN
+from extra_info_encoder import ExtraInfoEncoder
 
 
 class VAE_Actor(nn.Module):
@@ -35,6 +36,10 @@ class VAE_Actor(nn.Module):
         temporal_mech=False,
         rnn_config=None,
         linear_layers=None,
+        stats_encoder=None,
+        n_in_eencoder=1,
+        n_out_eencoder=128,
+        hidden_layers_eencoder=[],
         is_freeze_params=True,
         wp_encode=False,
         wp_encoder_size=64,
@@ -46,6 +51,8 @@ class VAE_Actor(nn.Module):
         self.vae = ConvVAE(n_channel, z_dim, beta=beta)
         self.n_hl_actions = n_hl_actions
         self.softmax = nn.Softmax()
+        self.z_dim = z_dim
+        self.stats_encoder = stats_encoder
 
         self.lstm = None
         if temporal_mech:
@@ -71,9 +78,15 @@ class VAE_Actor(nn.Module):
                 raise NotImplementedError(
                     "Only lstm and mdn_rnn type of recurrent models at moment"
                 )
+                
+        if stats_encoder:
+            self.extra_encoder = ExtraInfoEncoder(n_in_eencoder,
+                                                  n_out_eencoder,
+                                                  hidden_layers_eencoder)
+        
 
         if self.lstm:
-            input_linear_layer_dim = state_dim * rnn_config["n_steps"]
+            input_linear_layer_dim = state_dim +  z_dim*(rnn_config["n_steps"]-1)
         else:
             input_linear_layer_dim = state_dim
 
@@ -142,10 +155,18 @@ class VAE_Actor(nn.Module):
         """
         input_linear = state
         if self.lstm:
-            next_state = self.lstm(state)  # (B, Z_dim+Compl_State)
+            _state = state
+            if self.z_dim < state.shape[-1]:
+                _state = state[:, :, :self.z_dim]
+            next_state = self.lstm(_state)  # (B, Z_dim+Compl_State)
             input_linear = torch.cat(
-                (state[:, -1, :].squeeze(1), next_state), dim=-1
+                (_state[:, -1, :].squeeze(1), next_state), dim=-1
             ).squeeze(0)
+        
+        if self.stats_encoder and self.z_dim < state.shape[-1]:
+            extra_info = self.extra_encoder(state[self.z_dim:])
+            input_linear = torch.cat((input_linear, extra_info))
+            
         action = self.linear_forward(input_linear)
         return action
 
@@ -178,6 +199,9 @@ class VAE_Actor(nn.Module):
         """
         mu, logvar = self.vae.encode(x)
         return self.vae.reparametrize(mu, logvar)
+    
+    def info_encode(self, x):
+        return self.extra_encoder(x)
 
     def wp_encode_fn(self, wp):
         wp = torch.tensor(wp).unsqueeze(0).float()

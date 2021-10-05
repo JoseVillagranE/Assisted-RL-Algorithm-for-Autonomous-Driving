@@ -1,0 +1,79 @@
+run_type: 'TD3'
+run_id: '1'
+seed: 12
+
+train:
+  policy_freq: 2
+  checkpoint_every: 100000
+  episodes: 100
+  device: "cuda:0"
+  actor_lr: 0.0001
+  critic_lr: 0.0001
+  optimizer: "SGD"
+  type_RM: "random"
+  batch_size: 128
+  temporal_mech: True
+  start_to_update: 5
+  optimization_steps: 100
+  ou_noise_mu: 0.0
+  ou_noise_theta: 0.6
+  ou_noise_max_sigma: 0.4
+  ou_noise_min_sigma: 0.001
+  ou_noise_decay_period: 50
+  tau: 0.0001
+  gamma: 0.99
+  scheduler_step_size: 100000
+  scheduler_gamma: 0.1
+  alpha: 0.3
+  beta: 1
+  actor_grad_clip: 0.005
+  critic_grad_clip: 0.05
+  linear_layers: []  
+  max_memory_size: 1000000
+  trauma_memory:
+    enable: True
+    prop: 0.1
+
+agent:
+  sensor:
+    dashboard_camera: True
+    spectator_camera: False
+
+
+exo_agents:
+  pedestrian:
+    spawn: False
+
+  vehicle:
+    n: 3
+    spawn: False
+    initial_position:
+      x: [149, 170, 190]
+      y: [63, 58, 63]
+      z: [1, 1, 1]
+      yaw: [180, 180, 180]
+
+model:
+  type: "VAE"
+  id: '0'
+
+reward_fn:
+  normalize: False
+  weight_collision_pedestrian: 1000
+  weight_collision_vehicle: 1000
+  weight_collision_other: 1000
+  weight_final_goal: 500
+  weight_speed_limit: 1
+  weight_route_al: 1
+  weight_centralization: 1
+  weight_distance_to_goal: 5
+  enable_smooth: True
+  enable_exo_veh_distance_reward: False
+  
+
+test:
+  every: 5
+
+
+vis:
+  render: False

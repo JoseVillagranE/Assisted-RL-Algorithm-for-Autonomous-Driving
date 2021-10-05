@@ -635,7 +635,6 @@ def game_loop():
         while True:
             env.reset()
             while True:
-
                 if env.controller.parse_events():
                     return
                 # Process key inputs

@@ -14,6 +14,7 @@ def create_encode_state_fn(Resize_h, Resize_w, CenterCrop, mean, std,
                            measurement_to_include,
                            vae_encode=None,
                            encoded_state_standardization=False,
+                           extra_encode=None,
                            feat_wp_encode=None):
     
     measure_flags = ["steer" in measurement_to_include,
@@ -41,6 +42,7 @@ def create_encode_state_fn(Resize_h, Resize_w, CenterCrop, mean, std,
             if measure_flags[1]: measurements.append(env.agent.control.throttle)
             if measure_flags[2]: measurements.append(env.agent.get_speed()*3.6) # km/h
             if measure_flags[3]: measurements.extend(vector(env.agent.get_forward_vector()))
+            
             encoded_state = np.append(encoded_state, measurements).astype(float)
             
             if encoded_state_standardization:
