@@ -119,7 +119,14 @@ def train():
             config.exo_agents.vehicle.initial_position.yaw,
         )
     )  # [[x, y, yaw], ..]
-    exo_driving = False
+    exo_veh_epos = list(
+        zip(
+            config.exo_agents.vehicle.end_position.x,
+            config.exo_agents.vehicle.end_position.y,
+            config.exo_agents.vehicle.end_position.yaw,
+        )
+    )
+    exo_driving = config.exo_agents.vehicle.exo_driving
     n_peds = 0
     peds_ipos = []
 
@@ -131,9 +138,10 @@ def train():
             encode_state_fn=encode_state_fn,
             n_vehs=n_vehs,
             exo_vehs_ipos=exo_veh_ipos,
+            exo_vehs_epos=exo_veh_epos,
+            exo_driving=exo_driving,
             n_peds=n_peds,
             peds_ipos=peds_ipos,
-            exo_driving=exo_driving,
         )
     )
 
@@ -210,7 +218,7 @@ def train():
                     if not config.reward_fn.normalize:
                         reward = weighted_rw  # rw is only a scalar value
                         
-                    _action = action if config.run_type in ["DDPG", "CoL", "TD3"] else full_actions
+                    _action = action if config.run_type in ["DDPG", "CoL", "TD3", "TD3CoL"] else full_actions
                     _next_state = next_state_ if config.train.temporal_mech else next_state
                     
                     if config.train.trauma_memory.enable and terminal_state in config.train.trauma_memory.situations:
@@ -266,7 +274,8 @@ def train():
                 "DDPG",
                 "PADDPG",
                 "CoL",
-                "TD3"
+                "TD3",
+                "TD3CoL"
             ]:
                 for _ in range(config.train.optimization_steps):
                     model.update()
@@ -403,7 +412,7 @@ def train():
 
         # Last checkpoint to save
         
-        if config.run_type == "TD3":
+        if config.run_type in ["TD3", "TD3CoL"]:
             models_dicts = (
                 model.actor.state_dict(),
                 model.actor_target.state_dict(),

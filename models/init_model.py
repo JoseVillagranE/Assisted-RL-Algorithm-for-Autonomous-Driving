@@ -5,6 +5,7 @@ from .TD3 import TD3
 from .PADDPG import PADDPG
 from .BC import BC
 from .CoL import CoL
+from .TD3CoL import TD3CoL
 
 
 def init_model(config):
@@ -42,6 +43,10 @@ def init_model(config):
 
     elif config.run_type == "CoL":
         model = CoL(config)
+    
+    elif config.run_type == "TD3CoL":
+        model = TD3CoL(config)
+    
     else:
         raise NotImplementedError("Dont exist that model that you required")
     return model

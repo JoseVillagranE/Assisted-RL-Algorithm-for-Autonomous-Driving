@@ -83,9 +83,10 @@ class CarlaEnv(gym.Env):
         encode_state_fn=None,
         n_vehs=0,
         exo_vehs_ipos=[],
+        exo_vehs_epos=[],
+        exo_driving=[],
         n_peds=0,
-        peds_ipos=[],
-        exo_driving=False,
+        peds_ipos=[]
     ):
         """
         reward_fn (function): Custom reward function is called every step. If none, no reward function is used
@@ -216,20 +217,16 @@ class CarlaEnv(gym.Env):
             self.agent.set_automatic_wp()  # I need for orientation reward
             self.exo_vehs_initial_transforms = []
             self.exo_vehs = []
+            self.exo_vehs_controller = []
             self.distances_to_exo_vehs = [0]*len(self.exo_vehs)
-            for exo_veh_ipos in exo_vehs_ipos:
-                #     # Create a exo-vehicle
+            for exo_veh_ipos, exo_veh_epos, ed in zip(exo_vehs_ipos, exo_vehs_epos, exo_driving):
+                # Create a exo-vehicle
                 exo_veh_initial_location = carla.Location(
                     x=exo_veh_ipos[0], y=exo_veh_ipos[1], z=1
                 )
-                if config.exo_agents.vehicle.end_position.x:
-                    exo_veh_end_location = carla.Location(
-                        x=config.exo_agents.vehicle.end_position.x,
-                        y=config.exo_agents.vehicle.end_position.y,
-                        z=config.exo_agents.vehicle.end_position.z,
-                    )
-                else:
-                    exo_veh_end_location = None
+                exo_veh_end_location = carla.Location(
+                    x=exo_veh_epos[0], y=exo_veh_epos[1], z=1
+                )
 
                 exo_veh_initial_transform = carla.Transform(
                     exo_veh_initial_location, carla.Rotation(yaw=exo_veh_ipos[2])
@@ -238,25 +235,25 @@ class CarlaEnv(gym.Env):
                 self.exo_vehicle = Vehicle(
                     self.world,
                     transform=exo_veh_initial_transform,
-                    end_location=None,
+                    end_location=exo_veh_end_location,
                     target_speed=config.exo_agents.vehicle.target_speed,
                     vehicle_type=config.exo_agents.vehicle.vehicle_type,
                 )
 
                 self.exo_vehs_initial_transforms.append(exo_veh_initial_transform)
                 self.exo_vehs.append(self.exo_vehicle)
-
-                # self.exo_vehicle.set_automatic_wp()
-                if exo_driving:
-                    PID_assign(
+                self.exo_vehs_controller.append(PID_assign(
                         self.exo_vehicle,
                         config.exo_agents.vehicle.PID.lateral_Kp,
                         config.exo_agents.vehicle.PID.lateral_Kd,
                         config.exo_agents.vehicle.PID.lateral_Ki,
                         self._dt,
-                    )
+                    ))
 
-                self.exo_vehicle.is_static = True
+                if ed:
+                    self.exo_vehicle.set_automatic_wp()
+                else:
+                    self.exo_vehicle.is_static = True
 
             self.initial_transform_ped = None
             self.peds_initial_transforms = []
@@ -342,14 +339,15 @@ class CarlaEnv(gym.Env):
                 + throttle * (1.0 - self.action_smoothing)
             )
             self.agent.control.brake = 0.0
-        if self.exo_driving:
-            # Always exo agent have action
-            next_wp = self.exo_vehs[0].get_next_wp()  # np.array -> coor
-            if not self.exo_vehs[0].autopilot_mode:
-                exo_control = self.exo_veh_controller.run_step(self.speed, next_wp)
-                self.exo_vehs[0].control.steer = exo_control.steer
-                self.exo_vehs[0].control.throttle = exo_control.throttle
-                self.exo_vehs[0].control.brake = 0.0
+        for i, (exo_veh, ed) in enumerate(zip(self.exo_vehs, self.exo_driving)):     
+            if ed:
+                # Always exo agent have action
+                next_wp = exo_veh.get_next_wp()  # np.array -> coor
+                if not exo_veh.autopilot_mode:
+                    exo_control = self.exo_vehs_controller[i].run_step(self.speed, next_wp)
+                    self.exo_vehs[0].control.steer = exo_control.steer
+                    self.exo_vehs[0].control.throttle = exo_control.throttle
+                    self.exo_vehs[0].control.brake = 0.0
         self.world.tick()
 
         # Get most recent observation and viewer image
@@ -396,7 +394,13 @@ class CarlaEnv(gym.Env):
 
         return encode_state, reward, self.terminal_state, {"closed": self.closed}
 
-    def reset(self, is_training=False, exo_vehs_ipos=[], peds_ipos=[], exo_wps=None):
+    def reset(self,
+              is_training=False,
+              exo_vehs_ipos=[],
+              exo_vehs_epos=[],
+              exo_driving=[],
+              peds_ipos=[],
+              exo_wps=None):
 
         self.agent.control.steer = float(0.0)
         self.agent.control.throttle = float(0.0)
@@ -415,6 +419,7 @@ class CarlaEnv(gym.Env):
                 self.exo_vehs[i].destroy()
             del self.exo_vehs[:diff]
             del self.exo_vehs_initial_transforms[:diff]
+            del self.exo_vehs_controller[:diff]
 
         elif diff < 0:
             # add exo_veh
@@ -425,23 +430,30 @@ class CarlaEnv(gym.Env):
                 rotation = carla.Rotation(yaw=exo_vehs_ipos[i][2])
 
                 transform = carla.Transform(location, rotation)
+                
+                end_location = carla.Location(
+                    x=exo_vehs_epos[i][0], y=exo_vehs_epos[i][1], z=1
+                )
+                
                 exo_veh = Vehicle(
                     self.world,
                     transform=transform,
-                    end_location=None,
+                    end_location=end_location,
                     target_speed=config.exo_agents.vehicle.target_speed,
                     vehicle_type=config.exo_agents.vehicle.vehicle_type,
                 )
-                self.exo_vehs.append(exo_veh)
-                self.exo_vehs_initial_transforms.append(transform)
-                if self.exo_driving:
-                    self.exo_veh_controller = PID_assign(
+                if exo_driving[i]:
+                    self.exo_vehs_controller.append(PID_assign(
                         exo_veh,
                         config.exo_agents.vehicle.PID.lateral_Kp,
                         config.exo_agents.vehicle.PID.lateral_Kd,
                         config.exo_agents.vehicle.PID.lateral_Ki,
                         self._dt,
-                    )
+                    ))
+                    exo_veh.set_automatic_wp()
+
+                self.exo_vehs.append(exo_veh)
+                self.exo_vehs_initial_transforms.append(transform)
 
         for exo_veh, exo_veh_ipos in zip(self.exo_vehs, exo_vehs_ipos):
             exo_veh_location = carla.Location(x=exo_veh_ipos[0], y=exo_veh_ipos[1], z=1)

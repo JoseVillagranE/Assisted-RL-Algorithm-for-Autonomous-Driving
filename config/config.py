@@ -218,6 +218,7 @@ config.exo_agents.vehicle.n = 0
 config.exo_agents.vehicle.vehicle_type = "vehicle.audi.a2"
 config.exo_agents.vehicle.target_speed = 20.0  # Km/h
 config.exo_agents.vehicle.controller = "None"  # How control the exo vehicle ?
+config.exo_agents.vehicle.exo_driving = []
 
 config.exo_agents.vehicle.PID = edict()
 config.exo_agents.vehicle.PID.lateral_Kp = 1.95
@@ -239,6 +240,7 @@ config.exo_agents.vehicle.end_position = edict()
 config.exo_agents.vehicle.end_position.x = 64
 config.exo_agents.vehicle.end_position.y = 54
 config.exo_agents.vehicle.end_position.z = 1.0
+config.exo_agents.vehicle.end_position.yaw = 180
 
 # Models Defaults
 config.model = edict()

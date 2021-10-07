@@ -51,6 +51,12 @@ exo_agents:
       y: [63, 58, 63]
       z: [1, 1, 1]
       yaw: [180, 180, 180]
+    end_position:
+      x: [100, 0, 0]
+      y: [58, 0, 0]
+      z: [1, 1, 1]
+      yaw: [180, 180, 180]
+    exo_driving: [True, False, False]
 
 model:
   type: "VAE"
@@ -65,7 +71,7 @@ reward_fn:
   weight_speed_limit: 1
   weight_route_al: 1
   weight_centralization: 1
-  weight_distance_to_goal: 5
+  weight_distance_to_goal: 10
   enable_smooth: True
   enable_exo_veh_distance_reward: False
   
