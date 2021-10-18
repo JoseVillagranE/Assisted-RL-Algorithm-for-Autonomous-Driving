@@ -45,7 +45,7 @@ class MDN_RNN(nn.Module):
         """
         # inp = torch.cat([latent_states, actions], axis=-1)
         inp = latent_states
-        outp = self.lstm(inp)  # (B, S, LSTM_hidden_size)
+        outp, h_n = self.lstm(inp)  # (B, S, LSTM_hidden_size)
         gmm_out = self.mdn(outp)
         stride = self.gaussians * latent_states.shape[2]
         mus = gmm_out[:, :, :stride]
@@ -79,7 +79,7 @@ class MDN_RNN(nn.Module):
             w = Categorical(logits=log_pi).sample()  # (B, S) [1]
             next_latent_pred = Normal(mus, sigmas).sample()[range(w.shape[0]), -1, w[:, -1], :]
             # (B, Z_dim+Complt)
-            return next_latent_pred
+            return next_latent_pred, h_n.squeeze(0)
 
     def gmm_loss(self, next_latent, mus, sigmas, log_pi, a="no_max"):
 
@@ -172,10 +172,10 @@ class LSTM(nn.Module):
         :return h_n: (Tensor: [B, Bidirectional*Num_layers, Hidden_size])
         """
         if self.training_initial_hidden_states:
-            outp, (_, _) = self.lstm(input, (self.h_0, self.c_0))
+            outp, (h_n, c_n) = self.lstm(input, (self.h_0, self.c_0))
         else:
-            outp, (_, _) = self.lstm(input)  # initialize to zeros
-        return outp
+            outp, (h_n, c_n) = self.lstm(input)  # initialize to zeros
+        return outp, h_n
 
     def reset_lstm(self):
         self.h_n, self.c_n = None, None

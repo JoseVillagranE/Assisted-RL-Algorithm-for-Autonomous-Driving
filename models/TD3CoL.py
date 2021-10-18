@@ -93,7 +93,7 @@ class TD3CoL:
                 temporal_mech=config.train.temporal_mech,
                 rnn_config=rnn_config,
                 linear_layers=config.train.linear_layers,
-                stats_encoder=config.train.extra_encoder,
+                stats_encoder=config.train.stats_encoder,
                 n_in_eencoder=config.train.n_in_eencoder,
                 n_out_eencoder=config.train.n_out_eencoder,
                 hidden_layers_eencoder=config.train.hidden_layers_eencoder,
@@ -101,6 +101,7 @@ class TD3CoL:
                 beta=config.train.beta,
                 wp_encode=config.train.wp_encode,
                 wp_encoder_size=config.train.wp_encoder_size,
+                hidden_cat=config.train.hidden_cat
             ).float()
 
             self.actor_target = deepcopy(self.actor)
@@ -111,7 +112,8 @@ class TD3CoL:
                 hidden_layers=config.train.critic_linear_layers,
                 temporal_mech=config.train.temporal_mech,
                 rnn_config=rnn_config,
-                is_freeze_params=config.train.is_freeze_params
+                is_freeze_params=config.train.is_freeze_params,
+                hidden_cat=config.train.hidden_cat
                 ).float()
             self.critic_target_1 = deepcopy(self.critic_1)
             self.critic_2 = VAE_Critic(
@@ -120,7 +122,8 @@ class TD3CoL:
                 hidden_layers=config.train.critic_linear_layers,
                 temporal_mech=config.train.temporal_mech,
                 rnn_config=rnn_config,
-                is_freeze_params=config.train.is_freeze_params
+                is_freeze_params=config.train.is_freeze_params,
+                hidden_cat=config.train.hidden_cat
                 ).float()
             self.critic_target_2 = deepcopy(self.critic_2)
 
@@ -314,9 +317,11 @@ class TD3CoL:
         )
 
         # pretraining steps
+        self.pretraining_losses = []
         for l in range(config.train.pretraining_steps):
-            self.update(is_pretraining=True)
-
+            losses = self.update(is_pretraining=True)
+            self.pretraining_losses.append(losses)
+            
         self.replay_memory_e.set_batch_size(round(self.batch_size * self.expert_prop*rm_prop))
         
         for g in self.actor_optimizer.param_groups:
@@ -346,6 +351,8 @@ class TD3CoL:
 
     def p_update(self, is_pretraining=False):
 
+        self.it_update += 1        
+
         (
             states,
             actions,
@@ -365,77 +372,52 @@ class TD3CoL:
         actions = Variable(torch.from_numpy(actions).float())
         rewards = Variable(torch.from_numpy(rewards).float())
         next_states = Variable(torch.from_numpy(next_states).float())
+        dones = Variable(torch.from_numpy(dones))
 
         states_e = Variable(torch.from_numpy(np.array(states_e)).float())
         actions_e = Variable(torch.from_numpy(np.array(actions_e)).float())
         isw = Variable(torch.from_numpy(np.array(isw)).float())
         
-
-        if self.temporal_mech:
-            R_1 = (
-                rewards.squeeze()
-                + self.gamma
-                * self.critic_target(
-                    next_states[:, :, :], self.actor_target(next_states).detach()
-                ).squeeze()
-            )
-            TD = self.mse_wout_reduction(
-                R_1,
-                self.critic(states[:, :, :], self.actor(states).detach()).squeeze(),
-            )  # reduction -> none
-            L_Q1 = (isw * TD).mean()
-            L_A = -1 * self.critic(states[:, :, :], self.actor(states)).detach().mean()
-        else:
-            R_1 = (
-                rewards.squeeze()
-                + self.gamma
-                * self.critic_target(
-                    next_states, self.actor_target(next_states).detach()
-                ).squeeze()
-            )
-            TD = self.mse_wout_reduction(
-                R_1, self.critic(states, self.actor(states).detach()).squeeze()
-            )
-                
-            L_Q1 = (isw * TD).mean()
-            L_A = -1 * self.critic(states, self.actor(states)).detach().mean()
-
+        next_Q_1 = self.critic_target_1(next_states, self.actor_target(next_states).detach())
+        next_Q_2 = self.critic_target_2(next_states, self.actor_target(next_states).detach())
+        next_Q = torch.min(next_Q_1, next_Q_2)
+        
+        R_1 = rewards.squeeze() + self.gamma*next_Q.squeeze()*(~dones.squeeze())
+        Q_1 = self.critic_1(states, self.actor(states).detach()).squeeze()
+        Q_2 = self.critic_2(states, self.actor(states).detach()).squeeze()
+        
+        TD = self.mse_wout_reduction(R_1, Q_1) + self.mse_wout_reduction(R_1, Q_2)
+        L_Q1 = (isw * TD).mean()
         L_col_critic = self.lambdas[2] * L_Q1
-
-        # BC loss
-        pred_actions = self.actor(states_e)
-        L_BC = self.mse(pred_actions.squeeze(), actions_e)
-
-        # Actor Q_loss
-        L_col_actor = 1 * (self.lambdas[0] * L_BC + self.lambdas[1] * L_A)
-        self.actor_optimizer.zero_grad()
-        L_col_actor.backward()
-        nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_grad_clip)
-        self.actor_optimizer.step()
-
         self.critic_optimizer.zero_grad()
         L_col_critic.backward()
-        nn.utils.clip_grad_norm_(self.critic.parameters(), self.critic_grad_clip)
+        nn.utils.clip_grad_norm_(list(self.critic_1.parameters()) + 
+                                 list(self.critic_2.parameters()), self.critic_grad_clip)
         self.critic_optimizer.step()
+        
+        if self.it_update % self.policy_freq == 0:
+            # BC loss
+            pred_actions = self.actor(states_e)
+            L_BC = self.mse(pred_actions.squeeze(), actions_e)
+
+            L_A = -1 * self.critic_1(states, self.actor(states)).detach().mean()
+    
+            # Actor Q_loss
+            L_col_actor = 1 * (self.lambdas[0] * L_BC + self.lambdas[1] * L_A)
+            self.actor_optimizer.zero_grad()
+            L_col_actor.backward()
+            nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_grad_clip)
+            self.actor_optimizer.step()
+            self.soft_update(self.actor, self.actor_target)
+        
 
         if not is_pretraining and self.enable_scheduler_lr:
             if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
                 self.actor_scheduler.step()
                 self.critic_scheduler.step()
 
-        for target_param, param in zip(
-            self.actor_target.parameters(), self.actor.parameters()
-        ):
-            target_param.data.copy_(
-                param.data * self.tau + target_param.data * (1.0 - self.tau)
-            )
-
-        for target_param, param in zip(
-            self.critic_target.parameters(), self.critic.parameters()
-        ):
-            target_param.data.copy_(
-                param.data * self.tau + target_param.data * (1.0 - self.tau)
-            )
+        self.soft_update(self.critic_1, self.critic_target_1)
+        self.soft_update(self.critic_2, self.critic_target_2)
 
         if self.q_of_tasks == 1:
             self.replay_memory_e.update_priorities(
@@ -459,10 +441,10 @@ class TD3CoL:
 
         # Back to cpu
         self.actor = self.actor.cpu().eval()
-        self.actor_target = self.actor_target.cpu().eval()
-        self.critic = self.critic.cpu().eval()
-        self.critic_target = self.critic_target.cpu().eval()
-
+        try:
+            return [L_BC.item(), L_A.item(), L_Q1.item()]
+        except UnboundLocalError:
+            return [0, 0, L_Q1.item()]
     def _update(self, is_pretraining=False):
         
         self.it_update += 1
@@ -498,7 +480,7 @@ class TD3CoL:
                     next_states, self.actor_target(next_states).detach()
                 ).squeeze()
         next_Q = torch.min(next_Q_1, next_Q_2)
-        R_1 = rewards.squeeze() + self.gamma*next_Q
+        R_1 = rewards.squeeze() + self.gamma*next_Q*(~dones)
         
         Qvals_1 = self.critic_1(states, self.actor(states)).squeeze()
         Qvals_2 = self.critic_2(states, self.actor(states)).squeeze()
@@ -537,6 +519,10 @@ class TD3CoL:
 
         self.soft_update(self.critic_1, self.critic_target_1)
         self.soft_update(self.critic_2, self.critic_target_2)
+        try:
+            return [L_BC.item(), L_A.item(), L_Q1.item()]
+        except UnboundLocalError:
+            return [0, 0, L_Q1.item()]
 
     def set_lambdas(self, lambdas):
         self.lambdas = lambdas

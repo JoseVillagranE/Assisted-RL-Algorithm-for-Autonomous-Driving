@@ -32,10 +32,10 @@ if __name__ == "__main__":
     
     start = [0, 0]
     goal = [20, 20]
-    x_limits = [-5, 8]
-    y_limits = [-5, 15]
+    x_limits = [-40, 40]
+    y_limits = [-5, 30]
     direction = 1
-    n = 20 
+    n = 10
     waypoints = sample_points(start,
                               goal,
                               x_limits,

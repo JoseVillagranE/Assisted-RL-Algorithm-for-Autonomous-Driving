@@ -51,6 +51,9 @@ config.simulation.obs_res = (640, 480)
 config.simulation.fps = 10
 config.simulation.host = "localhost"
 config.simulation.port = 2000  # Default of world-port CARLA
+config.simulation.x_limits = [98, 219]
+config.simulation.y_limits = [53, 65]
+config.simulation.yaw_limits = [0, 359]
 
 
 # Train Defaults
@@ -87,9 +90,13 @@ config.train.measurements_to_include = set(
     # + ["speed"]
     # ["orientation"]
 )
+config.train.stats_encoder = False
+config.train.stats_encoder_n_in = (len(config.train.measurements_to_include)
+        + (2 if "orientation" in config.train.measurements_to_include else 0)
+        )
+config.train.stats_encoder_n_out = 128
 config.train.policy_freq = 2 # td3
 config.train.encoded_state_standardization = False
-config.train.extra_encoder = False
 config.train.n_in_eencoder= len(config.train.measurements_to_include)
 config.train.n_out_eencoder=128
 config.train.hidden_layers_eencoder=[]
@@ -97,7 +104,7 @@ config.train.hidden_layers_eencoder=[]
 config.train.wp_encode = False  # harcoded
 config.train.wp_encoder_size = 64 if config.train.wp_encode else 0
 config.train.z_dim = 128
-config.train.state_dim = ((config.train.z_dim + config.train.n_out_eencoder) if config.train.extra_encoder
+config.train.state_dim = ((config.train.z_dim + config.train.n_out_eencoder) if config.train.stats_encoder
                           else (
     config.train.z_dim
     + len(config.train.measurements_to_include)
@@ -120,10 +127,10 @@ config.train.rnn_hidden_size = 512
 config.train.gaussians = 3
 config.train.rnn_num_layers = 1
 config.train.RNN_weights_path = os.path.join(
-    root_dir, "models/weights/lstm_512_3_wd_2.pt"
+    root_dir, "models/weights/lstm_512_3_wd.pt"
 )
 config.train.rnn_nsteps = 2
-
+config.train.hidden_cat = False
 
 config.train.linear_layers = []
 config.train.critic_linear_layers = []
@@ -219,6 +226,8 @@ config.exo_agents.vehicle.vehicle_type = "vehicle.audi.a2"
 config.exo_agents.vehicle.target_speed = 20.0  # Km/h
 config.exo_agents.vehicle.controller = "None"  # How control the exo vehicle ?
 config.exo_agents.vehicle.exo_driving = []
+config.exo_agents.vehicle.exo_driving_n = 15
+config.exo_agents.vehicle.exo_driving_direction = 0
 
 config.exo_agents.vehicle.PID = edict()
 config.exo_agents.vehicle.PID.lateral_Kp = 1.95

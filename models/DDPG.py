@@ -34,6 +34,9 @@ class DDPG:
         self.critic_grad_clip = config.train.critic_grad_clip
         self.enable_trauma_memory = config.train.trauma_memory.enable
         self.z_dim = config.train.z_dim
+        self.stats_encoder = config.train.stats_encoder
+        self.stats_encoder_n_in = config.train.stats_encoder_n_in
+        self.stats_encoder_n_out = config.train.stats_encoder_n_out
         n_channel = 3
 
         input_size = (
@@ -80,26 +83,16 @@ class DDPG:
                 temporal_mech=config.train.temporal_mech,
                 rnn_config=rnn_config,
                 linear_layers=config.train.linear_layers,
+                stats_encoder=self.stats_encoder,
+                n_in_eencoder=self.stats_encoder_n_in,
+                n_out_eencoder=self.stats_encoder_n_out,
                 is_freeze_params=config.train.is_freeze_params,
                 beta=config.train.beta,
                 wp_encode=config.train.wp_encode,
                 wp_encoder_size=config.train.wp_encoder_size,
             ).float()
 
-            self.actor_target = VAE_Actor(
-                self.state_dim,
-                self.action_space,
-                n_channel,
-                config.train.z_dim,
-                VAE_weights_path=config.train.VAE_weights_path,
-                temporal_mech=config.train.temporal_mech,
-                rnn_config=rnn_config,
-                linear_layers=config.train.linear_layers,
-                is_freeze_params=config.train.is_freeze_params,
-                beta=config.train.beta,
-                wp_encode=config.train.wp_encode,
-                wp_encoder_size=config.train.wp_encoder_size,
-            ).float()
+            self.actor_target = deepcopy(self.actor)
 
             self.critic = VAE_Critic(
                 config.train.state_dim, 
@@ -110,48 +103,7 @@ class DDPG:
                 is_freeze_params=config.train.is_freeze_params
             ).float()
 
-            self.critic_target = VAE_Critic(
-                config.train.state_dim,
-                config.train.action_space,
-                hidden_layers = config.train.critic_linear_layers,
-                temporal_mech=config.train.temporal_mech,
-                rnn_config=rnn_config,
-                is_freeze_params=config.train.is_freeze_params,
-            ).float()
-
-        else:
-            self.actor = Conv_Actor(
-                self.num_actions,
-                config.preprocess.Resize_h,
-                config.preprocess.Resize_w,
-                linear_layers=config.train.linear_layers,
-            )
-
-            self.actor_target = Conv_Actor(
-                self.num_actions,
-                config.preprocess.Resize_h,
-                config.preprocess.Resize_w,
-                linear_layers=config.train.linear_layers,
-            )
-
-            self.critic = Conv_Critic(
-                self.num_actions, config.preprocess.Resize_h, config.preprocess.Resize_w
-            )
-
-            self.critic_target = Conv_Critic(
-                self.num_actions, config.preprocess.Resize_h, config.preprocess.Resize_w
-            )
-
-        # Copy weights
-        for target_param, param in zip(
-            self.actor_target.parameters(), self.actor.parameters()
-        ):
-            target_param.data.copy_(param)
-
-        for target_param, param in zip(
-            self.critic_target.parameters(), self.critic.parameters()
-        ):
-            target_param.data.copy_(param)
+            self.critic_target = deepcopy(self.critic)
 
         # Training
         self.type_RM = config.train.type_RM
@@ -258,9 +210,13 @@ class DDPG:
     def predict(self, state, step, mode="training"):
         # if self.model_type != "VAE": state = Variable(state.unsqueeze(0)) # [1, C, H, W]
         state = torch.from_numpy(state).float()
-        if self.temporal_mech:
-            state = state.unsqueeze(0)
-        action = self.actor(state)
+        # if self.temporal_mech:
+        state = state.unsqueeze(0)
+        if self.stats_encoder: 
+            enc_inp = state[:, :, self.z_dim:] if self.temporal_mech else state[:, self.z_dim:]
+            encoded_stats = self.actor.encode_stats(enc_inp).detach()
+            state = torch.cat((state[:, :self.z_dim], encoded_stats), dim=-1)
+        action = self.actor(state).squeeze()
         action = action.detach().numpy()  # [steer, throttle]
         if mode == "training":
             action = self.ounoise.get_action(action, step)
@@ -327,19 +283,8 @@ class DDPG:
         # print(f"Actor_loss: {actor_loss.item()}")
         # print(f"Critic_loss: {critic_loss.item()}")
 
-        for target_param, param in zip(
-            self.actor_target.parameters(), self.actor.parameters()
-        ):
-            target_param.data.copy_(
-                param.data * self.tau + target_param.data * (1.0 - self.tau)
-            )
-
-        for target_param, param in zip(
-            self.critic_target.parameters(), self.critic.parameters()
-        ):
-            target_param.data.copy_(
-                param.data * self.tau + target_param.data * (1.0 - self.tau)
-            )
+        self.soft_update(self.actor, self.actor_target)
+        self.soft_update(self.critic, self.critic_target)
 
         if self.q_of_tasks == 1:
             self.replay_memory.update_priorities(idxs, TD.abs().detach().cpu().numpy())
@@ -351,9 +296,7 @@ class DDPG:
 
         # Back to cpu
         self.actor = self.actor.cpu().eval()
-        self.actor_target = self.actor_target.cpu().eval()
-        self.critic = self.critic.cpu().eval()
-        self.critic_target = self.critic_target.cpu().eval()
+        return [actor_loss.item(), critic_loss.item()]
 
     def _update(self):
 
@@ -374,9 +317,12 @@ class DDPG:
         self.actor_target = self.actor_target.to(self.device).train()
         self.critic = self.critic.to(self.device).train()
         self.critic_target = self.critic_target.to(self.device).train()
-
-        # if actions.dim() < 2:
-        #     actions = actions.unsqueeze(1)
+        
+        if self.stats_encoder:
+            stats_encoded = self.actor.encode_stats(states[:, self.z_dim:])
+            n_stats_encoded = self.actor.encode_stats(next_states[:, self.z_dim:])
+            states = torch.cat((states[:, :self.z_dim], stats_encoded), dim=-1)
+            next_states = torch.cat((next_states[:, :self.z_dim], n_stats_encoded), dim=-1)
 
         next_actions = self.actor_target(next_states)
 
@@ -395,7 +341,10 @@ class DDPG:
 
         # update critic
         self.critic_optimizer.zero_grad()
-        critic_loss.backward()
+        if self.stats_encoder: 
+            critic_loss.backward(retain_graph=True)
+        else:
+            critic_loss.backward()
         nn.utils.clip_grad_norm_(self.critic.parameters(), self.critic_grad_clip)
         self.critic_optimizer.step()
 
@@ -415,23 +364,13 @@ class DDPG:
 
         # print(f"Actor_loss: {actor_loss.item()}")
         # print(f"Critic_loss: {critic_loss.item()}")
-
-        for target_param, param in zip(
-            self.actor_target.parameters(), self.actor.parameters()
-        ):
-            target_param.data.copy_(
-                param.data * self.tau + target_param.data * (1.0 - self.tau)
-            )
-
-        for target_param, param in zip(
-            self.critic_target.parameters(), self.critic.parameters()
-        ):
-            target_param.data.copy_(
-                param.data * self.tau + target_param.data * (1.0 - self.tau)
-            )
-
+        
+        self.soft_update(self.actor, self.actor_target)
+        self.soft_update(self.critic, self.critic_target)
         # Back to cpu
         self.actor = self.actor.cpu().eval()
+        return [actor_loss.item(), critic_loss.item()]
+
 
     def feat_ext(self, state):
         return self.actor.feat_ext(state)
@@ -538,3 +477,12 @@ class DDPG:
         self.critic_target.load_state_dict(models_state_dict[3])
         self.actor_optimizer.load_state_dict(optimizer_state_dict[0])
         self.critic_optimizer.load_state_dict(optimizer_state_dict[1])
+        
+    def soft_update(self, local_model, target_model):
+        for target_param, param in zip(
+            target_model.parameters(), local_model.parameters()
+        ):
+            target_param.data.copy_(
+                param.data * self.tau + target_param.data * (1.0 - self.tau)
+            )
+        

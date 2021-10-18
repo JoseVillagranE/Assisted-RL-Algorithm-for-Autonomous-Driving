@@ -44,6 +44,7 @@ class VAE_Actor(nn.Module):
         wp_encode=False,
         wp_encoder_size=64,
         n_hl_actions=0,
+        hidden_cat=True
     ):
 
         super().__init__()
@@ -53,6 +54,7 @@ class VAE_Actor(nn.Module):
         self.softmax = nn.Softmax()
         self.z_dim = z_dim
         self.stats_encoder = stats_encoder
+        self.hidden_cat = hidden_cat
 
         self.lstm = None
         if temporal_mech:
@@ -80,16 +82,16 @@ class VAE_Actor(nn.Module):
                 )
                 
         if stats_encoder:
-            self.extra_encoder = ExtraInfoEncoder(n_in_eencoder,
+            self.stats_encoder = ExtraInfoEncoder(n_in_eencoder,
                                                   n_out_eencoder,
                                                   hidden_layers_eencoder)
-        
 
+        input_linear_layer_dim = state_dim
         if self.lstm:
-            input_linear_layer_dim = state_dim +  z_dim*(rnn_config["n_steps"]-1)
-        else:
-            input_linear_layer_dim = state_dim
-
+            if hidden_cat:
+                input_linear_layer_dim = state_dim + rnn_config["hidden_size"]
+            else:
+                input_linear_layer_dim = state_dim +  z_dim*(rnn_config["n_steps"]-1)
         self.mlp = nn.ModuleList()
 
         if len(linear_layers) > 0:
@@ -155,18 +157,14 @@ class VAE_Actor(nn.Module):
         """
         input_linear = state
         if self.lstm:
-            _state = state
-            if self.z_dim < state.shape[-1]:
-                _state = state[:, :, :self.z_dim]
-            next_state = self.lstm(_state)  # (B, Z_dim+Compl_State)
-            input_linear = torch.cat(
-                (_state[:, -1, :].squeeze(1), next_state), dim=-1
-            ).squeeze(0)
-        
-        if self.stats_encoder and self.z_dim < state.shape[-1]:
-            extra_info = self.extra_encoder(state[self.z_dim:])
-            input_linear = torch.cat((input_linear, extra_info))
-            
+            _state = state #state[:, :, :self.z_dim]
+            next_state, h_n = self.lstm(_state)  # (B, Z_dim+Compl_State)
+            if self.hidden_cat:
+                input_linear = torch.cat((_state[:, -1, :].squeeze(1), h_n), dim=-1).squeeze(0)
+            else:
+                input_linear = torch.cat((_state[:, -1, :].squeeze(1), next_state), dim=-1).squeeze(0)
+            # if state.shape[-1] > self.z_dim:
+                # input_linear = torch.cat((input_linear, state[:, -1, self.z_dim:]), dim=-1)
         action = self.linear_forward(input_linear)
         return action
 
@@ -200,8 +198,8 @@ class VAE_Actor(nn.Module):
         mu, logvar = self.vae.encode(x)
         return self.vae.reparametrize(mu, logvar)
     
-    def info_encode(self, x):
-        return self.extra_encoder(x)
+    def encode_stats(self, x):
+        return self.stats_encoder(x)
 
     def wp_encode_fn(self, wp):
         wp = torch.tensor(wp).unsqueeze(0).float()
@@ -215,13 +213,15 @@ class VAE_Critic(nn.Module):  # No needed temporal mechanism
                  hidden_layers=[],
                  temporal_mech=False,
                  rnn_config={},
-                 is_freeze_params=True
+                 is_freeze_params=True,
+                 hidden_cat=True
                  ):
         super().__init__()
         self.num_actions = num_actions
         self.layers = nn.ModuleList()
-        
         self.lstm = None
+        self.hidden_cat = hidden_cat
+        
         if temporal_mech:
             if rnn_config["rnn_type"] == "lstm":
                 self.lstm = LSTM(
@@ -256,7 +256,10 @@ class VAE_Critic(nn.Module):  # No needed temporal mechanism
                 freeze_params(self.lstm)
         
         if self.lstm:
-            input_dim = state_dim * rnn_config["n_steps"] + num_actions
+            if hidden_cat:
+                input_dim = state_dim + rnn_config["hidden_size"] + num_actions
+            else:
+                input_dim = state_dim * rnn_config["n_steps"] + num_actions
         else:
             input_dim = state_dim + num_actions
         
@@ -276,10 +279,11 @@ class VAE_Critic(nn.Module):  # No needed temporal mechanism
         
         _state = state
         if self.lstm:
-            next_state = self.lstm(state)  # (B, Z_dim+Compl_State)
-            _state = torch.cat(
-                (state[:, -1, :].squeeze(1), next_state), dim=-1
-            ).squeeze(0)
+            next_state, h_n = self.lstm(state)  # (B, Z_dim+Compl_State)
+            if self.hidden_cat:
+                _state = torch.cat((state[:, -1, :].squeeze(1), h_n), dim=-1).squeeze(0)
+            else:
+                _state = torch.cat((state[:, -1, :].squeeze(1), next_state), dim=-1).squeeze(0)
         x = torch.cat([_state, action], 1)
         for i, layer in enumerate(self.layers):
             x = layer(x)

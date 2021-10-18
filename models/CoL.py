@@ -91,7 +91,7 @@ class CoL:
                 temporal_mech=config.train.temporal_mech,
                 rnn_config=rnn_config,
                 linear_layers=config.train.linear_layers,
-                stats_encoder=config.train.extra_encoder,
+                stats_encoder=config.train.stats_encoder,
                 n_in_eencoder=config.train.n_in_eencoder,
                 n_out_eencoder=config.train.n_out_eencoder,
                 hidden_layers_eencoder=config.train.hidden_layers_eencoder,
@@ -99,26 +99,10 @@ class CoL:
                 beta=config.train.beta,
                 wp_encode=config.train.wp_encode,
                 wp_encoder_size=config.train.wp_encoder_size,
+                hidden_cat=config.train.hidden_cat
             ).float()
 
-            self.actor_target = VAE_Actor(
-                self.state_dim,
-                self.action_space,
-                n_channel,
-                config.train.z_dim,
-                VAE_weights_path=config.train.VAE_weights_path,
-                temporal_mech=config.train.temporal_mech,
-                rnn_config=rnn_config,
-                linear_layers=config.train.linear_layers,
-                stats_encoder=config.train.extra_encoder,
-                n_in_eencoder=config.train.n_in_eencoder,
-                n_out_eencoder=config.train.n_out_eencoder,
-                hidden_layers_eencoder=config.train.hidden_layers_eencoder,
-                is_freeze_params=config.train.is_freeze_params,
-                beta=config.train.beta,
-                wp_encode=config.train.wp_encode,
-                wp_encoder_size=config.train.wp_encoder_size,
-            ).float()
+            self.actor_target = deepcopy(self.actor)
 
             self.critic = VAE_Critic(
                 self.state_dim, 
@@ -126,16 +110,10 @@ class CoL:
                 hidden_layers=config.train.critic_linear_layers,
                 temporal_mech=config.train.temporal_mech,
                 rnn_config=rnn_config,
-                is_freeze_params=config.train.is_freeze_params
+                is_freeze_params=config.train.is_freeze_params,
+                hidden_cat=config.train.hidden_cat
                 ).float()
-            self.critic_target = VAE_Critic(
-                self.state_dim,
-                self.action_space,
-                hidden_layers=config.train.critic_linear_layers,
-                temporal_mech=config.train.temporal_mech,
-                rnn_config=rnn_config,
-                is_freeze_params=config.train.is_freeze_params
-                ).float()
+            self.critic_target = deepcopy(self.critic)
 
         else:
             self.actor = Conv_Actor(
@@ -451,19 +429,8 @@ class CoL:
                 self.actor_scheduler.step()
                 self.critic_scheduler.step()
 
-        for target_param, param in zip(
-            self.actor_target.parameters(), self.actor.parameters()
-        ):
-            target_param.data.copy_(
-                param.data * self.tau + target_param.data * (1.0 - self.tau)
-            )
-
-        for target_param, param in zip(
-            self.critic_target.parameters(), self.critic.parameters()
-        ):
-            target_param.data.copy_(
-                param.data * self.tau + target_param.data * (1.0 - self.tau)
-            )
+        self.soft_update(self.actor, self.actor_target)
+        self.soft_update(self.critic, self.critic_target)
 
         if self.q_of_tasks == 1:
             self.replay_memory_e.update_priorities(
@@ -490,6 +457,8 @@ class CoL:
         self.actor_target = self.actor_target.cpu().eval()
         self.critic = self.critic.cpu().eval()
         self.critic_target = self.critic_target.cpu().eval()
+        
+        return [L_BC.item(), L_A.item(), L_Q1.item()]
 
     def _update(self, is_pretraining=False):
         
@@ -571,19 +540,10 @@ class CoL:
                 self.actor_scheduler.step()
                 self.critic_scheduler.step()
 
-        for target_param, param in zip(
-            self.actor_target.parameters(), self.actor.parameters()
-        ):
-            target_param.data.copy_(
-                param.data * self.tau + target_param.data * (1.0 - self.tau)
-            )
-
-        for target_param, param in zip(
-            self.critic_target.parameters(), self.critic.parameters()
-        ):
-            target_param.data.copy_(
-                param.data * self.tau + target_param.data * (1.0 - self.tau)
-            )
+        self.soft_update(self.actor, self.actor_target)
+        self.soft_update(self.critic, self.critic_target)
+        
+        return [L_BC.item(), L_A.item(), L_Q1.item()]
 
     def set_lambdas(self, lambdas):
         self.lambdas = lambdas
@@ -859,6 +819,13 @@ class CoL:
             indexs_a,
             indexs_e,
         )
+    def soft_update(self, local_model, target_model):
+        for target_param, param in zip(
+            target_model.parameters(), local_model.parameters()
+        ):
+            target_param.data.copy_(
+                param.data * self.tau + target_param.data * (1.0 - self.tau)
+            )
 
 
 if __name__ == "__main__":

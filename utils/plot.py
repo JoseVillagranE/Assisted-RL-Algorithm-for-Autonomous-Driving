@@ -71,37 +71,60 @@ def plot_info_finals_state(data, x_axis, value, only_goal=True, is_test=False, c
     if xscale:
         plt.ticklabel_format(style='sci', axis='x', scilimits=(0,0))
 
-def plot_extra_info(data):
+def plot_extra_info(data, exo_data, finals_states=None):
 
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
     axes = axes.flatten()
     idxs = [[0, 1], 3]
+    for episode, ed in enumerate(exo_data):
+        exo_veh_pos = [exo_veh[:, :2] for exo_veh in ed] # = len(exo_veh)
+        exo_veh_extent = [exo_veh[0, -7:-5] for exo_veh in ed] # is not change
+        for exo_pos, exo_vol in zip(exo_veh_pos, exo_veh_extent):
+            x = exo_pos[0, 0] - exo_vol[0]
+            y = exo_pos[0, 1] - exo_vol[1]
+            rect = Rectangle((x, y), exo_vol[0]*2, exo_vol[1]*2, linewidth=2, edgecolor="r", facecolor='blue')
+            axes[0].add_patch(rect)
+        break
 
-    exo_veh_pos_x = [149, 170, 190]
-    exo_veh_pos_y = [63, 58, 63]
-
-    exo_veh_extent_x = 1.8527
-    exo_veh_extent_y = 0.8943
-
-    for x, y in zip(exo_veh_pos_x, exo_veh_pos_y):
-        xy = (x - exo_veh_extent_x, y - exo_veh_extent_y)
-
-        rect = Rectangle(xy, exo_veh_extent_x*2, exo_veh_extent_y*2, linewidth=2, edgecolor="r", facecolor='blue')
-        axes[0].add_patch(rect)
+    if finals_states is not None:
+        assert finals_states.shape[0] == data.shape[0]
 
     for episode, d in enumerate(data):
         color = (episode / len(data), 0, 0)
+        if finals_states is not None:
+            if finals_states[episode, 1] in ["Goal", "Cross Finish Line"]:
+                color = (0, 0, episode / len(data))
+            elif  finals_states[episode, 1] == "Collision Other":
+                color = (0, episode / len(data), 0)
         axes[0].plot(d[:, 0], d[:, 1], color=color) # pos
         axes[1].plot(d[:, 3], color=color)
 
+    axes[0].set_xlim([100, 220])
+    axes[0].set_ylim([40, 80])
     plt.show()
+
+def plot_losses(data, method):
+
+    fig, axes = plt.subplots(1, 3, figsize=(16, 6))
+    axes = axes.flatten()
+    data = np.array(data)
+    if method in ["CoL", "TD3CoL"]:
+        axes[0].plot(data[:, 0], label="BC Loss")
+        axes[1].plot(data[:, 1], label="Actor Q Loss")
+        axes[2].plot(data[:, 2], label="1-step Q learning Loss")
+
+    plt.legend(loc="best").set_draggable(True)
+    plt.show()
+
 
 if __name__ == "__main__":
 
     import pathlib
     prefix_path  = os.path.join(pathlib.Path(__file__).parent.resolve().parent, "models_logs")
-    alg = "VAE/CoL"
-    date = "2021-10-04-21-55"
+    vision = "VAE"
+    learn_alg = "DDPG"
+    alg = os.path.join(vision, learn_alg)
+    date = "2021-09-22-05-18"
     path = os.path.join(prefix_path, alg, date)
 
     info_final_states = np.load(os.path.join(path, "info_finals_state.npy"))
@@ -124,4 +147,12 @@ if __name__ == "__main__":
     plt.show()
 
     data = np.load(os.path.join(path, "train_agent_extra_info.npy"), allow_pickle=True)
-    plot_extra_info(data)
+    exo_data = np.load(os.path.join(path, "train_exo_agents_extra_info.npy"), allow_pickle=True)
+    plot_extra_info(data, exo_data, info_final_states)
+
+    data = np.load(os.path.join(path, "test_agent_extra_info.npy"), allow_pickle=True)
+    exo_data = np.load(os.path.join(path, "test_exo_agents_extra_info.npy"), allow_pickle=True)
+    plot_extra_info(data, exo_data, test_info_final_states)
+
+    losses = np.load(os.path.join(path, "train_historical_losses.npy"), allow_pickle=True)
+    plot_losses(losses, learn_alg)

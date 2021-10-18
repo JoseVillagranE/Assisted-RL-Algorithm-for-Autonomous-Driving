@@ -1,43 +1,63 @@
 run_type: 'TD3'
 run_id: '1'
-seed: 12
+seed: 1
+
+simulation:
+    fps: 10
 
 train:
   policy_freq: 2
   checkpoint_every: 100000
-  episodes: 100
+  episodes: 300
   device: "cuda:0"
-  actor_lr: 0.0001
-  critic_lr: 0.0001
-  optimizer: "SGD"
-  type_RM: "random"
-  batch_size: 128
-  temporal_mech: True
+  actor_agent_lr: 0.00001
+  critic_agent_lr: 0.0001
+  actor_expert_lr: 0.001
+  critic_expert_lr: 0.001
+  optimizer: "Adam"
+  type_RM: "prioritized"
+  batch_size: 64
+  temporal_mech: False
+  rnn_nsteps: 2
+  hidden_cat: False
   start_to_update: 5
-  optimization_steps: 100
+  optimization_steps: 1
+  expert_prop: 0.25
+  agent_prop: 0.75
   ou_noise_mu: 0.0
   ou_noise_theta: 0.6
   ou_noise_max_sigma: 0.4
-  ou_noise_min_sigma: 0.001
-  ou_noise_decay_period: 50
+  ou_noise_min_sigma: 0.005
+  ou_noise_decay_period: 250 # episode
   tau: 0.0001
   gamma: 0.99
-  scheduler_step_size: 100000
+  wp_encode: False
+  wp_encoder_size: 64
+  rm_filename: "" # folder's name for load many experiences tuples
+  scheduler_step_size: 300
+  max_memory_size: 200000
+  scheduler_min_lr : 0.0000001 # 10-7
   scheduler_gamma: 0.1
-  alpha: 0.3
+  enable_scheduler_lr: True
+  alpha: 1
   beta: 1
-  actor_grad_clip: 0.005
-  critic_grad_clip: 0.05
-  linear_layers: []  
-  max_memory_size: 1000000
+  actor_grad_clip: 0.05
+  critic_grad_clip: 0.5
+  linear_layers: [512, 128, 32]
+  critic_linear_layers: [512, 128, 32]
+  encoded_state_standardization: False
+  is_freeze_params: True
   trauma_memory:
-    enable: True
-    prop: 0.1
+      enable: True
+      prop: 0.2
+      
 
 agent:
   sensor:
     dashboard_camera: True
     spectator_camera: False
+    camera_type: "sensor.camera.semantic_segmentation"
+    color_converter: "CityScapesPallete"
 
 
 exo_agents:
@@ -46,12 +66,18 @@ exo_agents:
 
   vehicle:
     n: 3
-    spawn: False
+    spawn: True
     initial_position:
       x: [149, 170, 190]
       y: [63, 58, 63]
+      z: [1, 1, 1, 1]
+      yaw: [180, 180, 90]
+    end_position:
+      x: [100, 100, 0]
+      y: [58, 58, 0]
       z: [1, 1, 1]
       yaw: [180, 180, 180]
+    exo_driving: [True, True, False]
 
 model:
   type: "VAE"
@@ -66,14 +92,16 @@ reward_fn:
   weight_speed_limit: 1
   weight_route_al: 1
   weight_centralization: 1
-  weight_distance_to_goal: 5
+  weight_distance_to_goal: 10
   enable_smooth: True
   enable_exo_veh_distance_reward: False
   
-
 test:
   every: 5
+  steps: 300
 
+simulation:
+  action_smoothing: 0
 
 vis:
   render: False

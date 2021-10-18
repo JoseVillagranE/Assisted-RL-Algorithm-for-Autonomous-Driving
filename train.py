@@ -18,6 +18,7 @@ from models.init_model import init_model
 from rewards_fns import reward_functions, weighted_rw_fn
 from utils.preprocess import create_encode_state_fn
 from utils.checkpointing import save_checkpoint, load_checkpoint
+from utils.SamplePoints import sample_points
 
 
 def signal_handler(sig, frame):
@@ -50,8 +51,8 @@ def train():
     if isinstance(config.seed, int):
         np.random.seed(config.seed)
         random.seed(config.seed)
-        torch.manual_seed(config.pytorch_seed)
-        torch.cuda.manual_seed(config.pytorch_seed)
+        torch.manual_seed(config.seed)
+        torch.cuda.manual_seed(config.seed)
 
     # Setup the paths and dirs
     save_path = os.path.join(
@@ -106,7 +107,6 @@ def train():
         config.train.measurements_to_include,
         vae_encode=model.feat_ext if config.model.type == "VAE" else None,
         encoded_state_standardization=config.train.encoded_state_standardization,
-        extra_encode=model.extra_encode if config.train.extra_encoder else None,
         feat_wp_encode=model.wp_encode_fn if config.train.wp_encode else None,
     )
     print("Creating Environment..")
@@ -144,6 +144,18 @@ def train():
             peds_ipos=peds_ipos,
         )
     )
+    exo_wps = []
+    for i, ed in enumerate(exo_driving):
+        ewp = []
+        if ed:
+            n = config.exo_agents.vehicle.exo_driving_n
+            direction = config.exo_agents.vehicle.exo_driving_direction
+            start = exo_veh_ipos[i][:2]
+            goal = exo_veh_epos[i][:2]
+            x_limits = config.simulation.x_limits
+            y_limits = config.simulation.y_limits
+            ewp=sample_points(start, goal, x_limits, y_limits, direction, n)
+        exo_wps.append(ewp)
 
     # normalize actions
 
@@ -159,6 +171,8 @@ def train():
     test_agent_extra_info = []
     exo_agents_extra_info = []
     test_exo_agents_extra_info = []
+    
+    train_historical_losses = []
 
     # load checkpoint if is necessary
     model_dicts, optimizers_dicts, rewards, start_episode = load_checkpoint(
@@ -171,8 +185,11 @@ def train():
     episode_test = 0
     try:
         for episode in range(start_episode, config.train.episodes):
-            state, terminal_state, episode_reward = (
-                env.reset(exo_vehs_ipos=exo_veh_ipos),
+            state, terminal_state, episode_reward = (   
+                env.reset(exo_vehs_ipos=exo_veh_ipos,
+                          exo_vehs_epos=exo_veh_epos,
+                          exo_driving=exo_driving,
+                          exo_wps=exo_wps),
                 False,
                 [],
             )
@@ -278,7 +295,11 @@ def train():
                 "TD3CoL"
             ]:
                 for _ in range(config.train.optimization_steps):
-                    model.update()
+                    losses = model.update()
+                    if config.run_type == "TD3CoL":
+                        train_historical_losses.append(losses)
+                    
+                    
             if config.train.type_RM == "sequential" and config.run.type in [
                 "DDPG",
                 "CoL",
@@ -287,7 +308,10 @@ def train():
 
             if episode % config.test.every == 0 and episode > 0:
                 state, terminal_state, episode_reward_test = (
-                    env.reset(exo_vehs_ipos=exo_veh_ipos),
+                    env.reset(exo_vehs_ipos=exo_veh_ipos,
+                              exo_vehs_epos=exo_veh_epos,
+                              exo_driving=exo_driving,
+                              exo_wps=exo_wps),
                     False,
                     0,
                 )
@@ -409,6 +433,16 @@ def train():
             test_exo_agents_extra_info,
         )
         
+        np.save(
+            os.path.join(particular_save_path, "train_historical_losses.npy"),
+            train_historical_losses,
+        )
+        
+        if config.run_type in ["CoL", "TD3CoL"]:
+            np.save(
+                os.path.join(particular_save_path, "pre_train_historical_losses.npy"),
+                model.pretraining_losses,
+            )
 
         # Last checkpoint to save
         

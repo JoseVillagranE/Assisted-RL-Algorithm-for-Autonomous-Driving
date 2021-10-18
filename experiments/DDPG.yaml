@@ -5,15 +5,16 @@ seed: 12
 train:
   checkpoint_every: 100000
   episodes: 100
-  device: "cuda:0"
+  device: "cpu"
   actor_lr: 0.0001
   critic_lr: 0.0001
   optimizer: "SGD"
   type_RM: "random"
   batch_size: 128
-  temporal_mech: True
+  temporal_mech: False
   start_to_update: 5
   optimization_steps: 100
+  stats_encoder: True
   ou_noise_mu: 0.0
   ou_noise_theta: 0.6
   ou_noise_max_sigma: 0.4
@@ -27,11 +28,13 @@ train:
   beta: 1
   actor_grad_clip: 0.005
   critic_grad_clip: 0.05
-  linear_layers: []  
+  linear_layers: []
   max_memory_size: 1000000
   trauma_memory:
     enable: True
     prop: 0.1
+    
+
 
 agent:
   sensor:
@@ -52,11 +55,11 @@ exo_agents:
       z: [1, 1, 1]
       yaw: [180, 180, 180]
     end_position:
-      x: [100, 0, 0]
-      y: [58, 0, 0]
+      x: [100, 100, 0]
+      y: [58, 63, 0]
       z: [1, 1, 1]
       yaw: [180, 180, 180]
-    exo_driving: [True, False, False]
+    exo_driving: [True, True, False]
 
 model:
   type: "VAE"

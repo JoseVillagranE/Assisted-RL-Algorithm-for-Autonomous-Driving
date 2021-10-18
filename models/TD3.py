@@ -237,6 +237,11 @@ class TD3:
 
         # Device
         self.device = torch.device(config.train.device)
+        self.actor_target = self.actor_target.to(self.device).eval()
+        self.critic_1 = self.critic_1.to(self.device).train()
+        self.critic_target_1 = self.critic_target_1.to(self.device).eval()
+        self.critic_2 = self.critic_2.to(self.device).train()
+        self.critic_target_2 = self.critic_target_2.to(self.device).eval()
 
         self.update = self._update if self.type_RM == "random" else self.p_update
 
@@ -273,12 +278,8 @@ class TD3:
         rewards = torch.FloatTensor(rewards).to(self.device)
         next_states = torch.FloatTensor(next_states).to(self.device)
         dones = torch.BoolTensor(dones).to(self.device)
+        
         self.actor = self.actor.to(self.device).train()
-        self.actor_target = self.actor_target.to(self.device).eval()
-        self.critic_1 = self.critic_1.to(self.device).train()
-        self.critic_target_1 = self.critic_target_1.to(self.device).eval()
-        self.critic_2 = self.critic_2.to(self.device).train()
-        self.critic_target_2 = self.critic_target_2.to(self.device).eval()
 
         next_actions = self.actor_target(next_states)
 
@@ -290,6 +291,8 @@ class TD3:
         Q_prime = rewards + (self.gamma * next_Q.squeeze() * (~dones))
         critic_loss = (self.critic_criterion(Qvals_1, Q_prime) +
                         self.critic_criterion(Qvals_2, Q_prime))
+        
+        TD = Q_prime - Qvals_1
         
         # update critic
         self.critic_optimizer.zero_grad()
@@ -305,30 +308,29 @@ class TD3:
             actor_loss.backward()
             nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_grad_clip)
             self.actor_optimizer.step()
+            self.soft_update(self.actor, self.actor_target)
 
-            if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
-                self.actor_scheduler.step()
-                self.critic_scheduler.step()
-
-        self.soft_update(self.actor, self.actor_target)
+        if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
+            self.actor_scheduler.step()
+            self.critic_scheduler.step()
+                
         self.soft_update(self.critic_1, self.critic_target_1)
         self.soft_update(self.critic_2, self.critic_target_2)
 
-        # if self.q_of_tasks == 1:
-        #     self.replay_memory.update_priorities(idxs, TD.abs().detach().cpu().numpy())
-        # else:
-        #     for i in set(idxs[0]):
-        #         ith_idx = np.where(np.array(idxs[0]) == i)[0]
-        #         js = np.array(idxs[1])[ith_idx]
-        #         self.B[i].update_priorities(js, TD[js].abs().detach().cpu().numpy())
+        if self.q_of_tasks == 1:
+            self.replay_memory.update_priorities(idxs, TD.abs().detach().cpu().numpy())
+        else:
+            for i in set(idxs[0]):
+                ith_idx = np.where(np.array(idxs[0]) == i)[0]
+                js = np.array(idxs[1])[ith_idx]
+                self.B[i].update_priorities(js, TD[js].abs().detach().cpu().numpy())
 
         # Back to cpu
         self.actor = self.actor.cpu().eval()
-        self.actor_target = self.actor_target.cpu().eval()
-        self.critic_1 = self.critic_1.cpu().eval()
-        self.critic_2 = self.critic_2.cpu().eval()
-        self.critic_1_target = self.critic_1_target.cpu().eval()
-        self.critic_2_target = self.critic_2_target.cpu().eval()
+        try:
+            return [actor_loss.item(), critic_loss.item()]
+        except UnboundLocalError:
+            return [0, critic_loss.item()]
 
     def _update(self):
         
@@ -382,17 +384,21 @@ class TD3:
             actor_loss.backward()
             nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_grad_clip)
             self.actor_optimizer.step()
+            self.soft_update(self.actor, self.actor_target)
+            
+        if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
+            self.actor_scheduler.step()
+            self.critic_scheduler.step()
 
-            if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
-                self.actor_scheduler.step()
-                self.critic_scheduler.step()
-
-        self.soft_update(self.actor, self.actor_target)
         self.soft_update(self.critic_1, self.critic_target_1)
         self.soft_update(self.critic_2, self.critic_target_2)
 
         # Back to cpu
         self.actor = self.actor.cpu().eval()
+        try:
+            return [actor_loss.item(), critic_loss.item()]
+        except UnboundLocalError:
+            return [0, critic_loss.item()]
 
     def feat_ext(self, state):
         return self.actor.feat_ext(state)
