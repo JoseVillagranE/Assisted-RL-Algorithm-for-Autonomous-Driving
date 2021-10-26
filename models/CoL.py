@@ -314,8 +314,9 @@ class CoL:
         )
 
         # pretraining steps
+        self.pretraining_losses = []
         for l in range(config.train.pretraining_steps):
-            self.update(is_pretraining=True)
+            self.pretraining_losses.append(self.update(is_pretraining=True))
 
         self.replay_memory_e.set_batch_size(round(self.batch_size * self.expert_prop*rm_prop))
         

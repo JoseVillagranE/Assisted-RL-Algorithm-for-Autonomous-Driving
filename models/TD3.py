@@ -310,9 +310,9 @@ class TD3:
             self.actor_optimizer.step()
             self.soft_update(self.actor, self.actor_target)
 
-        if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
-            self.actor_scheduler.step()
-            self.critic_scheduler.step()
+            if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
+                self.actor_scheduler.step()
+                self.critic_scheduler.step()
                 
         self.soft_update(self.critic_1, self.critic_target_1)
         self.soft_update(self.critic_2, self.critic_target_2)
@@ -358,14 +358,14 @@ class TD3:
 
         next_actions = self.actor_target(next_states)
 
-        Qvals_1 = self.critic_1(states, actions)
-        Qvals_2 = self.critic_2(states, actions)
-        next_Q_1 = self.critic_target_1(next_states, next_actions)
-        next_Q_2 = self.critic_target_2(next_states, next_actions)
+        Qvals_1 = self.critic_1(states, actions).squeeze()
+        Qvals_2 = self.critic_2(states, actions).squeeze()
+        next_Q_1 = self.critic_target_1(next_states, next_actions).squeeze()
+        next_Q_2 = self.critic_target_2(next_states, next_actions).squeeze()
         next_Q = torch.min(next_Q_1, next_Q_2)
-        Q_prime = rewards.unsqueeze(1) + (
-            self.gamma * next_Q.squeeze() * (~dones)
-        ).unsqueeze(1)
+        Q_prime = rewards + (
+            self.gamma * next_Q * (~dones)
+        )
 
         critic_loss = (self.critic_criterion(Qvals_1, Q_prime) + 
                         self.critic_criterion(Qvals_2, Q_prime))
@@ -373,7 +373,7 @@ class TD3:
         # update critic
         self.critic_optimizer.zero_grad()
         critic_loss.backward()
-        nn.utils.clip_grad_norm_(list(self.critic_1.parameters()) + list(self.critic_1.parameters()),
+        nn.utils.clip_grad_norm_(list(self.critic_1.parameters()) + list(self.critic_2.parameters()),
                                  self.critic_grad_clip)
         self.critic_optimizer.step()
 
@@ -386,9 +386,9 @@ class TD3:
             self.actor_optimizer.step()
             self.soft_update(self.actor, self.actor_target)
             
-        if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
-            self.actor_scheduler.step()
-            self.critic_scheduler.step()
+            if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
+                self.actor_scheduler.step()
+                self.critic_scheduler.step()
 
         self.soft_update(self.critic_1, self.critic_target_1)
         self.soft_update(self.critic_2, self.critic_target_2)

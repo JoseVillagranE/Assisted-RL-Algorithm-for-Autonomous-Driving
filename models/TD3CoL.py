@@ -807,4 +807,13 @@ class TD3CoL:
             target_param.data.copy_(
                 param.data * self.tau + target_param.data * (1.0 - self.tau)
             )
+    def load_state_dict(self, models_state_dict, optimizer_state_dict):
+        self.actor.load_state_dict(models_state_dict[0])
+        self.actor_target.load_state_dict(models_state_dict[1])
+        self.critic_1.load_state_dict(models_state_dict[2])
+        self.critic_target_1.load_state_dict(models_state_dict[3])
+        self.critic_2.load_state_dict(models_state_dict[4])
+        self.critic_target_2.load_state_dict(models_state_dict[5])
+        self.actor_optimizer.load_state_dict(optimizer_state_dict[0])
+        self.critic_optimizer.load_state_dict(optimizer_state_dict[1])
         

@@ -105,17 +105,21 @@ def plot_extra_info(data, exo_data, finals_states=None):
 
 def plot_losses(data, method):
 
-    fig, axes = plt.subplots(1, 3, figsize=(16, 6))
+    have_IL = method in ["CoL", "TD3CoL"]
+    n_losses = 3 if have_IL else 2
+    fig, axes = plt.subplots(1, n_losses, figsize=(16, 6))
     axes = axes.flatten()
     data = np.array(data)
-    if method in ["CoL", "TD3CoL"]:
+    if have_IL:
         axes[0].plot(data[:, 0], label="BC Loss")
         axes[1].plot(data[:, 1], label="Actor Q Loss")
         axes[2].plot(data[:, 2], label="1-step Q learning Loss")
+    else:
+        axes[0].plot(data[:, 0], label="Actor Loss")
+        axes[1].plot(data[:, 1], label="Critic Loss")
 
     plt.legend(loc="best").set_draggable(True)
     plt.show()
-
 
 if __name__ == "__main__":
 
@@ -124,7 +128,7 @@ if __name__ == "__main__":
     vision = "VAE"
     learn_alg = "DDPG"
     alg = os.path.join(vision, learn_alg)
-    date = "2021-09-22-05-18"
+    date = "2021-10-25-14-52"
     path = os.path.join(prefix_path, alg, date)
 
     info_final_states = np.load(os.path.join(path, "info_finals_state.npy"))

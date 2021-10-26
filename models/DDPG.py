@@ -210,8 +210,8 @@ class DDPG:
     def predict(self, state, step, mode="training"):
         # if self.model_type != "VAE": state = Variable(state.unsqueeze(0)) # [1, C, H, W]
         state = torch.from_numpy(state).float()
-        # if self.temporal_mech:
-        state = state.unsqueeze(0)
+        if self.temporal_mech:
+            state = state.unsqueeze(0)
         if self.stats_encoder: 
             enc_inp = state[:, :, self.z_dim:] if self.temporal_mech else state[:, self.z_dim:]
             encoded_stats = self.actor.encode_stats(enc_inp).detach()
@@ -323,7 +323,7 @@ class DDPG:
             n_stats_encoded = self.actor.encode_stats(next_states[:, self.z_dim:])
             states = torch.cat((states[:, :self.z_dim], stats_encoded), dim=-1)
             next_states = torch.cat((next_states[:, :self.z_dim], n_stats_encoded), dim=-1)
-
+            
         next_actions = self.actor_target(next_states)
 
         if self.temporal_mech:
@@ -333,9 +333,9 @@ class DDPG:
             Qvals = self.critic(states, actions)
             next_Q = self.critic_target(next_states, next_actions)
 
-        Q_prime = rewards.unsqueeze(1) + (
+        Q_prime = rewards + (
             self.gamma * next_Q.squeeze() * (~dones)
-        ).unsqueeze(1)
+        )
 
         critic_loss = self.critic_criterion(Q_prime, Qvals)  # default mean reduction
 

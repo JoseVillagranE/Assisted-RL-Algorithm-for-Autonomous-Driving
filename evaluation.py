@@ -63,7 +63,7 @@ def multi_evaluation():
 
     # Setup the logger
     logger = init_logger(particular_save_path, exp_name)
-    logger.info(f"training config: {pprint.pformat(config)}")
+    logger.info(f"Eval config: {pprint.pformat(config)}")
 
     # Set which reward function you will use
     reward_fn = "reward_fn"
@@ -98,14 +98,6 @@ def multi_evaluation():
                                                 if config.train.wp_encode else None)
 
     print("Creating Environment..")
-    # n_vehs = config.eval.n_exo_vehs
-    # exo_veh_ipos = list(
-    #     zip(
-    #         config.exo_agents.vehicle.initial_position.x,
-    #         config.exo_agents.vehicle.initial_position.y,
-    #         config.exo_agents.vehicle.initial_position.yaw,
-    #     )
-    # )  # [[x, y, yaw], ..]
     n_vehs = 0
     exo_veh_ipos = []
     n_peds = 0
@@ -129,46 +121,63 @@ def multi_evaluation():
     if isinstance(config.seed, int):
         env.seed(config.seed)
         
-    episode_step = 0
     episode_rewards = []
     finish_reasons = []
     rollouts_agent_stats = []
     rollouts_exo_agents_stats = []
     
     try:
-        x_limits = [98, 219]
+        x_limits = [98 + 4 + config.eval.ego_x_prep_area, 219]
         y_limits = [53, 65]
         yaw_limits = [0, 359]
         exo_goal = [config.exo_agents.vehicle.end_position.x,
                     config.exo_agents.vehicle.end_position.y]
         
         for roll in range(config.eval.rollouts):
+            
+            # Sample Positions
             n = config.eval.n_exo_vehs if config.eval.multi_eval_type=="fix" else random.randint(0, 5)
             exo_vehs_ipos = []
+            exo_vehs_epos = []
             peds_ipos = []
+            exo_wps = []
             for i in range(n):
                 exo_veh_x = random.randint(*x_limits)
                 exo_veh_y = random.randint(*y_limits)
                 exo_veh_yaw = random.randint(*yaw_limits)
-                pos = [exo_veh_x, exo_veh_y, exo_veh_yaw]
-                exo_vehs_ipos.append(pos)
-                
-            if config.eval.exo_driving: wps = sample_points(pos[:2], 
-                                                exo_goal,
-                                                x_limits,
-                                                y_limits,
-                                                direction=0,
-                                                n=20)
-            print(exo_vehs_ipos)
+                ipos = [exo_veh_x, exo_veh_y, exo_veh_yaw]
+                exo_vehs_ipos.append(ipos)
+                exo_veh_y = random.randint(*y_limits)
+                exo_veh_x = random.randint(*x_limits)
+                exo_veh_yaw = random.randint(*yaw_limits)
+                epos = [exo_veh_x, exo_veh_y, exo_veh_yaw]
+                exo_vehs_epos.append(epos)
+                wps = []
+                if config.eval.exo_driving[i]:
+                    if config.eval.beh == "normal":          
+                        exo_veh_x = 110 # verificar
+                        exo_veh_yaw = 0
+                    wps = sample_points(ipos[:2],
+                                        epos[:2],
+                                        x_limits,
+                                        y_limits,
+                                        direction=0,
+                                        n=config.eval.multi_eval_n)
+                exo_wps.append(wps)
+            
             state = env.reset(exo_vehs_ipos=exo_vehs_ipos,
+                              exo_vehs_epos=exo_vehs_epos,
                               peds_ipos=peds_ipos,
-                              exo_wps=wps if config.eval.exo_driving else None)
+                              exo_driving=config.eval.exo_driving,
+                              exo_wps=exo_wps)
             
             terminal_state = False
             episode_reward = 0
+            episode_step = 0
             agent_stats = env.get_agent_extra_info()
             exo_agents_stats = env.get_exo_agent_extra_info()
             
+            # Rollout
             while not terminal_state:
                 if env.controller.parse_events():
                         return
@@ -195,7 +204,7 @@ def multi_evaluation():
                         terminal_state_info = env.extra_info[-1]
                     else:
                         terminal_state_info = "Time Out"                    
-                    print(f"reward: {np.round(episode_reward, decimals=2)}",
+                    print(f"roll: {roll} || reward: {np.round(episode_reward, decimals=2)} || ",
                           f"terminal reason: {terminal_state_info}")
                     break       
                 episode_step += 1

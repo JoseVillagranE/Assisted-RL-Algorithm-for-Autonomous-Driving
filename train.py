@@ -51,8 +51,8 @@ def train():
     if isinstance(config.seed, int):
         np.random.seed(config.seed)
         random.seed(config.seed)
-        torch.manual_seed(config.seed)
-        torch.cuda.manual_seed(config.seed)
+        torch.manual_seed(config.pytorch_seed)
+        torch.cuda.manual_seed(config.pytorch_seed)
 
     # Setup the paths and dirs
     save_path = os.path.join(
@@ -296,7 +296,7 @@ def train():
             ]:
                 for _ in range(config.train.optimization_steps):
                     losses = model.update()
-                    if config.run_type == "TD3CoL":
+                    if config.run_type in ["DDPG", "CoL", "TD3", "TD3CoL"]:
                         train_historical_losses.append(losses)
                     
                     
