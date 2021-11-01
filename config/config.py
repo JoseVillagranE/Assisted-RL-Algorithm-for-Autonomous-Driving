@@ -85,8 +85,8 @@ config.train.start_to_update = 0
 config.train.optimization_steps = 1
 config.train.action_space = 2  # [steer, throttle]
 config.train.measurements_to_include = set(
-    # ["steer"]
-    # + ["throttle"]
+    ["steer"]
+    + ["throttle"]
     # + ["speed"]
     # ["orientation"]
 )
@@ -226,7 +226,7 @@ config.exo_agents.vehicle.vehicle_type = "vehicle.audi.a2"
 config.exo_agents.vehicle.target_speed = 20.0  # Km/h
 config.exo_agents.vehicle.controller = "None"  # How control the exo vehicle ?
 config.exo_agents.vehicle.exo_driving = []
-config.exo_agents.vehicle.exo_driving_n = 15
+config.exo_agents.vehicle.exo_driving_n = 5
 config.exo_agents.vehicle.exo_driving_direction = 0
 
 config.exo_agents.vehicle.PID = edict()
@@ -311,11 +311,14 @@ config.eval = edict()
 config.eval.weights_path = "./models_logs/VAE/DDPG/2021-09-19-23-47"
 config.eval.save_replay_buffer = False
 config.eval.filename_rb = "MC-1.npy"  # "BC-1.npy" # 1rst cinematic
-config.eval.exo_driving = False
+config.eval.exo_driving = []
 config.eval.rollouts = 100
 config.eval.multi_eval_type = "fix"
 config.eval.n_exo_vehs = 2
+config.eval.multi_eval_n = 5 # sample point in exo_driving
+config.eval.ego_x_prep_area = 4
 config.eval.time_out_steps = 1000
+
 
 # Visualisation Defaults
 config.vis = edict()

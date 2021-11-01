@@ -45,7 +45,7 @@ def multi_evaluation():
         torch.cuda.manual_seed(config.seed)
 
     # Setup the paths and dirs
-    save_path = os.path.join("Eval", config.model_logs.root_dir, config.model.type) # model_logs/model_type
+    save_path = os.path.join(config.model_logs.root_dir, config.model.type, "Eval", config.run_type) # model_logs/model_type
 
     if not os.path.exists(save_path):
         os.makedirs(save_path)

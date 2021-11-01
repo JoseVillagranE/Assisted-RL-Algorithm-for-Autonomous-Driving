@@ -339,15 +339,15 @@ class CarlaEnv(gym.Env):
                 + throttle * (1.0 - self.action_smoothing)
             )
             self.agent.control.brake = 0.0
-        for i, (exo_veh, ed) in enumerate(zip(self.exo_vehs, self.exo_driving)):     
+        for i, (exo_veh, ed) in enumerate(zip(self.exo_vehs, self.exo_driving)):
             if ed:
                 # Always exo agent have action
                 next_wp = exo_veh.get_next_wp()  # np.array -> coor
                 if not exo_veh.autopilot_mode:
                     exo_control = self.exo_vehs_controller[i].run_step(self.speed, next_wp)
-                    self.exo_vehs[0].control.steer = exo_control.steer
-                    self.exo_vehs[0].control.throttle = exo_control.throttle
-                    self.exo_vehs[0].control.brake = 0.0
+                    self.exo_vehs[i].control.steer = exo_control.steer
+                    self.exo_vehs[i].control.throttle = exo_control.throttle
+                    self.exo_vehs[i].control.brake = 0.0
         self.world.tick()
 
         # Get most recent observation and viewer image
@@ -450,12 +450,12 @@ class CarlaEnv(gym.Env):
                         config.exo_agents.vehicle.PID.lateral_Ki,
                         self._dt,
                     ))
-                    exo_veh.set_automatic_wp()
 
                 self.exo_vehs.append(exo_veh)
                 self.exo_vehs_initial_transforms.append(transform)
+                self.exo_driving.append(exo_driving[i])
 
-        for exo_veh, exo_veh_ipos in zip(self.exo_vehs, exo_vehs_ipos):
+        for i, (exo_veh, exo_veh_ipos) in enumerate(zip(self.exo_vehs, exo_vehs_ipos)):
             exo_veh_location = carla.Location(x=exo_veh_ipos[0], y=exo_veh_ipos[1], z=1)
 
             exo_veh_rotation = carla.Rotation(yaw=exo_veh_ipos[2])
@@ -465,9 +465,10 @@ class CarlaEnv(gym.Env):
             exo_veh.control.throttle = 0.0
 
             # set wps if it's neccesary
-            if exo_wps is not None:
-                exo_veh.set_wps(exo_wps)
-
+            if len(exo_wps[i]) > 0:
+                exo_veh.set_wps(exo_wps[i])
+            else:
+                exo_veh.set_automatic_wp()
         diff = len(self.peds_initial_transforms) - len(peds_ipos)
 
         if diff > 0:
