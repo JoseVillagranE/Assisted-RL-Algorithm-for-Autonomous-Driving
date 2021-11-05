@@ -1,6 +1,6 @@
 run_type: 'CoL'
 run_id: '1'
-seed: 1
+seed: 123
 
 
 simulation:
@@ -8,7 +8,7 @@ simulation:
 
 train:
   checkpoint_every: 100000
-  episodes: 500
+  episodes: 1000
   device: "cuda:0"
   actor_agent_lr: 0.0001
   critic_agent_lr: 0.0001
@@ -17,7 +17,7 @@ train:
   optimizer: "Adam"
   type_RM: "prioritized"
   batch_size: 64
-  temporal_mech: True
+  temporal_mech: False
   rnn_nsteps: 2
   hidden_cat: True
   start_to_update: 5
@@ -30,25 +30,25 @@ train:
   ou_noise_max_sigma: 0.4
   ou_noise_min_sigma: 0.005
   ou_noise_decay_period: 350 # episode
-  pretraining_steps: 300
+  pretraining_steps: 1000
   tau: 0.0001
   gamma: 0.99
   wp_encode: False
   wp_encoder_size: 64
   rm_filename: "" # folder's name for load many experiences tuples
-  scheduler_step_size: 150
+  scheduler_step_size: 350
   max_memory_size: 20000
   scheduler_min_lr : 0.0000001 # 10-7
   scheduler_gamma: 0.01
   load_rm_choice: "random"
   load_rm_name_c: ["2", "g"]
   load_rm_num_rolls: 80
-  load_rm_idxs: [] # compl states [steer, thr, speed, ..]
+  load_rm_idxs: [0, 1] # compl states [steer, thr, speed, ..]
   enable_scheduler_lr: True
   alpha: 1
   beta: 1
-  actor_grad_clip: 0.05
-  critic_grad_clip: 0.5
+  actor_grad_clip: 1
+  critic_grad_clip: 1
   linear_layers: [512, 128]
   critic_linear_layers: [512, 128]
   encoded_state_standardization: False
@@ -72,15 +72,15 @@ exo_agents:
 
   vehicle:
     n: 3
-    spawn: True
+    spawn: False
     initial_position:
       x: [149, 170, 190]
       y: [63, 58, 63]
-      z: [1, 1, 1, 1]
-      yaw: [180, 180, 90]
+      z: [1, 1, 1]
+      yaw: [180, 180, 180]
     end_position:
-      x: [100, 100, 0]
-      y: [58, 58, 0]
+      x: [100, 100, 100]
+      y: [58, 58, 58]
       z: [1, 1, 1]
       yaw: [180, 180, 180]
     exo_driving: [True, False, False]
@@ -98,9 +98,9 @@ reward_fn:
   weight_speed_limit: 1
   weight_route_al: 1
   weight_centralization: 1
-  weight_distance_to_goal: 10
-  enable_smooth: True
-  enable_exo_veh_distance_reward: True
+  weight_distance_to_goal: 5
+  enable_smooth: False
+  enable_exo_veh_distance_reward: False
   
 test:
   every: 5

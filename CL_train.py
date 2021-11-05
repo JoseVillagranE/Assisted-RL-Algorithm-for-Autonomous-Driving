@@ -37,7 +37,7 @@ def parse_args():
 
 
 # TODO: With more than one steps you should manage next_latent state dimensions
-
+    
 
 def get_tasks():
 

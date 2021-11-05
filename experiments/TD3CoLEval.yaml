@@ -1,18 +1,18 @@
 run_type: 'TD3CoL'
 run_id: '1'
-seed: 123
+seed: 1
 
 simulation:
     fps: 10
 
 eval:
-  weights_path: "./models_logs/VAE/TD3CoL/2021-10-23-22-16"
+  weights_path: ""
   exo_driving: [False, False]
-  rollouts: 100
-  multi_eval_type: "fix"
-  n_exo_vehs: 2
+  rollouts: 300
+  multi_eval_type: "variable"
+  n_exo_vehs: 7
   multi_eval_n: 5 # sample point in exo_driving
-  ego_x_prep_area: 2 # area to dont put a exo-agent
+  ego_x_prep_area: 5 # area to dont put a exo-agent
 
 train:
   policy_freq: 2

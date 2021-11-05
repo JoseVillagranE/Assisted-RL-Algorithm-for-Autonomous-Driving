@@ -124,6 +124,7 @@ def train():
             config.exo_agents.vehicle.end_position.x,
             config.exo_agents.vehicle.end_position.y,
             config.exo_agents.vehicle.end_position.yaw,
+
         )
     )
     exo_driving = config.exo_agents.vehicle.exo_driving
@@ -144,18 +145,6 @@ def train():
             peds_ipos=peds_ipos,
         )
     )
-    exo_wps = []
-    for i, ed in enumerate(exo_driving):
-        ewp = []
-        if ed:
-            n = config.exo_agents.vehicle.exo_driving_n
-            direction = config.exo_agents.vehicle.exo_driving_direction
-            start = exo_veh_ipos[i][:2]
-            goal = exo_veh_epos[i][:2]
-            x_limits = config.simulation.x_limits
-            y_limits = config.simulation.y_limits
-            ewp=sample_points(start, goal, x_limits, y_limits, direction, n)
-        exo_wps.append(ewp)
 
     # normalize actions
 
@@ -185,6 +174,20 @@ def train():
     episode_test = 0
     try:
         for episode in range(start_episode, config.train.episodes):
+            
+            exo_wps = []
+            for i, ed in enumerate(exo_driving):
+                ewp = []
+                if ed:
+                    n = config.exo_agents.vehicle.exo_driving_n
+                    direction = config.exo_agents.vehicle.exo_driving_direction
+                    start = exo_veh_ipos[i][:2]
+                    goal = exo_veh_epos[i][:2]
+                    x_limits = config.simulation.x_limits
+                    y_limits = config.simulation.y_limits
+                    ewp=sample_points(start, goal, x_limits, y_limits, direction, n)
+                exo_wps.append(ewp)
+            
             state, terminal_state, episode_reward = (   
                 env.reset(exo_vehs_ipos=exo_veh_ipos,
                           exo_vehs_epos=exo_veh_epos,

@@ -820,6 +820,16 @@ class CoL:
             indexs_a,
             indexs_e,
         )
+    
+    def load_state_dict(self, models_state_dict, optimizer_state_dict):
+        self.actor.load_state_dict(models_state_dict[0])
+        self.actor_target.load_state_dict(models_state_dict[1])
+        self.critic.load_state_dict(models_state_dict[2])
+        self.critic_target.load_state_dict(models_state_dict[3])
+        self.actor_optimizer.load_state_dict(optimizer_state_dict[0])
+        self.critic_optimizer.load_state_dict(optimizer_state_dict[1])
+    
+    
     def soft_update(self, local_model, target_model):
         for target_param, param in zip(
             target_model.parameters(), local_model.parameters()

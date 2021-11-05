@@ -81,9 +81,9 @@ def generate_samples(global_sample=75,
     
     try:
         
-        x_limits = [98, 219]
-        y_limits = [53, 65]
-        yaw_limits = [0, 359]
+        x_limits = config.simulation.x_limits
+        y_limits = config.simulation.y_limits
+        yaw_limits = config.simulation.yaw_limits
         exo_goal = [config.exo_agents.vehicle.end_position.x,
                     config.exo_agents.vehicle.end_position.y]
         

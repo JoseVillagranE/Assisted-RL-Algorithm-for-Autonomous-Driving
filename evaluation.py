@@ -12,10 +12,12 @@ from config.config import config, update_config, check_config
 from utils.logger import init_logger
 from Env.CarlaEnv import CarlaEnv, NormalizedEnv
 from models.init_model import init_model
+from models.best_weights import weights
 from rewards_fns import reward_functions, weighted_rw_fn
 from utils.preprocess import create_encode_state_fn
 from utils.checkpointing import save_checkpoint, load_checkpoint
 from utils.SamplePoints import sample_points
+from utils.utils import distance_bet_points
 
 def signal_handler(sig, frame):
     print('You pressed Ctrl+C!')
@@ -35,6 +37,30 @@ def cat_extra_exo_agents_info(old_info, new_info):
     for old_exo_info, new_exo_info in zip(old_info, new_info):
         info.append(np.vstack((old_exo_info, new_exo_info)))
     return info
+
+
+def get_weight_path(model, eval_type, n_exo_vehs, exo_driving):
+    
+    prefix = os.path.join("models_logs", "VAE", model)
+    if eval_type == "fix" and n_exo_vehs < 5:
+        n_exo_vehs = str(n_exo_vehs)
+        if sum(exo_driving) > 0:
+            n_exo_vehs += "-" + str(sum(exo_driving))
+        idx = weights[model][n_exo_vehs][0]
+        postfix = weights[model][n_exo_vehs][idx+1]
+    else:
+        postfix = weights[model]["best"][0]
+    weights_path = os.path.join(prefix, postfix)
+    return weights_path
+    
+def check_collision(exo_veh_x, exo_veh_y, exo_vehs_ipos, tol=10):
+    A = np.array([exo_veh_x, exo_veh_y])
+    for exo_pos in exo_vehs_ipos:
+        if distance_bet_points(A, np.array(exo_pos[:2])) < tol:
+            return True
+    return False
+    
+
 
 def multi_evaluation():
     
@@ -82,7 +108,11 @@ def multi_evaluation():
     print("Creating model..")
     model = init_model(config)
     print("Loading weights..")
-    model_dict, opt_dict, _, _ = load_checkpoint(logger, config.eval.weights_path)
+    weights_path = get_weight_path(config.run_type,
+                                   config.eval.multi_eval_type,
+                                   config.eval.n_exo_vehs,
+                                   config.eval.exo_driving)
+    model_dict, opt_dict, _, _ = load_checkpoint(logger, weights_path)
     model.load_state_dict(model_dict, opt_dict)
     
     # Create state encoding fn
@@ -102,6 +132,7 @@ def multi_evaluation():
     exo_veh_ipos = []
     n_peds = 0
     peds_ipos = []
+    exo_driving = []
 
     assert len(exo_veh_ipos) == n_vehs
 
@@ -126,24 +157,30 @@ def multi_evaluation():
     rollouts_agent_stats = []
     rollouts_exo_agents_stats = []
     
+    
     try:
         x_limits = [98 + 4 + config.eval.ego_x_prep_area, 219]
-        y_limits = [53, 65]
-        yaw_limits = [0, 359]
+        y_limits = [58, 63]
+        yaw_limits = [180, 185]
         exo_goal = [config.exo_agents.vehicle.end_position.x,
                     config.exo_agents.vehicle.end_position.y]
         
         for roll in range(config.eval.rollouts):
             
             # Sample Positions
-            n = config.eval.n_exo_vehs if config.eval.multi_eval_type=="fix" else random.randint(0, 5)
+            n = config.eval.n_exo_vehs if config.eval.multi_eval_type=="fix" else random.randint(0, config.eval.n_exo_vehs)
             exo_vehs_ipos = []
             exo_vehs_epos = []
             peds_ipos = []
             exo_wps = []
+            exo_driving = config.eval.exo_driving if config.eval.multi_eval_type == "fix" else random.choices([True, False], k=config.eval.n_exo_vehs)
             for i in range(n):
                 exo_veh_x = random.randint(*x_limits)
                 exo_veh_y = random.randint(*y_limits)
+                if i > 0:
+                    while check_collision(exo_veh_x, exo_veh_y, exo_vehs_ipos):
+                        exo_veh_x = random.randint(*x_limits)
+                        exo_veh_y = random.randint(*y_limits)
                 exo_veh_yaw = random.randint(*yaw_limits)
                 ipos = [exo_veh_x, exo_veh_y, exo_veh_yaw]
                 exo_vehs_ipos.append(ipos)
@@ -153,7 +190,7 @@ def multi_evaluation():
                 epos = [exo_veh_x, exo_veh_y, exo_veh_yaw]
                 exo_vehs_epos.append(epos)
                 wps = []
-                if config.eval.exo_driving[i]:
+                if exo_driving[i]:
                     if config.eval.beh == "normal":          
                         exo_veh_x = 110 # verificar
                         exo_veh_yaw = 0
@@ -165,6 +202,7 @@ def multi_evaluation():
                                         n=config.eval.multi_eval_n)
                 exo_wps.append(wps)
             
+            print(exo_vehs_ipos)
             state = env.reset(exo_vehs_ipos=exo_vehs_ipos,
                               exo_vehs_epos=exo_vehs_epos,
                               peds_ipos=peds_ipos,
@@ -213,7 +251,9 @@ def multi_evaluation():
             rollouts_agent_stats.append(agent_stats)
             rollouts_exo_agents_stats.append(exo_agents_stats)
             
-            
+    except RuntimeError as error:
+        print(error)
+        print(f"exo_vehs_ipos: {exo_vehs_ipos}")
     except KeyboardInterrupt:
         pass
     finally:

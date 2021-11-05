@@ -91,7 +91,7 @@ class VAE_Actor(nn.Module):
             if hidden_cat:
                 input_linear_layer_dim = state_dim + rnn_config["hidden_size"]
             else:
-                input_linear_layer_dim = state_dim +  z_dim*(rnn_config["n_steps"]-1)
+                input_linear_layer_dim = state_dim +  z_dim#*(rnn_config["n_steps"]-1)
         self.mlp = nn.ModuleList()
 
         if len(linear_layers) > 0:
@@ -259,7 +259,7 @@ class VAE_Critic(nn.Module):  # No needed temporal mechanism
             if hidden_cat:
                 input_dim = state_dim + rnn_config["hidden_size"] + num_actions
             else:
-                input_dim = state_dim * rnn_config["n_steps"] + num_actions
+                input_dim = state_dim * (rnn_config["n_steps"]+1) + num_actions
         else:
             input_dim = state_dim + num_actions
         

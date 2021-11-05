@@ -68,10 +68,42 @@ def compound_agg(data):
 
     return mean, std
 
+def test_collision_plots(list_of_data, labels):
+
+    prefix_path  = os.path.join(pathlib.Path(__file__).parent.resolve().parent, "models_logs", "VAE", "Eval")
+    bar_width = 0.1
+    delta = {"DDPG": -bar_width, "CoL": 0, "TD3CoL": bar_width}
+    colors = {"DDPG": ("red", "pink"),
+                "CoL": ("green", "lightgreen"),
+                "TD3CoL": ("blue", "paleturquoise", "aqua")}
+
+    for i, data in enumerate(list_of_data):
+        for alg, _data in data.items():
+            for j, d in enumerate(_data):
+                d = np.load(os.path.join(prefix_path, alg, d, "finish_reasons.npy"), allow_pickle=True)
+                print(d)
+                if j == 0:
+                    full_data = d
+                else:
+                    np.append(full_data, d)
+            full_data_length = full_data.shape[0]
+            print(f"n_situation: {i} || alg: {alg} || full length data: {full_data_length}")
+            collision_veh_ratio = full_data[full_data == "Collision Veh"].shape[0] /  full_data_length
+            collision_other_ratio = full_data[full_data == "Collision Other"].shape[0] /  full_data_length
+            goal_ratio = full_data[full_data == "Goal"].shape[0] /  full_data_length
+            plt.bar(i+delta[alg], goal_ratio, width=bar_width, color=colors[alg][0], bottom=0)
+            plt.bar(i+delta[alg], collision_veh_ratio, width=bar_width, color=colors[alg][1], bottom=goal_ratio)
+            plt.bar(i+delta[alg], collision_other_ratio, width=bar_width, color=colors[alg][2], bottom=collision_veh_ratio)
+
+    plt.xticks(list(range(len(labels))), labels)
+    plt.show()
+
+
 def success_plots(list_of_data, n_situations, n_exo_agents, title, only_goal=False, smooth=20, add_compound_agg=False):
 
     fig, axes = plt.subplots(1 + ((n_situations-1) // 3), 3, figsize=(20, 8))
     axes = axes.flatten()
+    xlims = [100, 400, 500, 1000, 1000, 1000]
     for i, (data, ax) in enumerate(zip(list_of_data, axes)):
         for alg, _data in data.items():
             for j, d in enumerate(_data):
@@ -96,10 +128,12 @@ def success_plots(list_of_data, n_situations, n_exo_agents, title, only_goal=Fal
             episodes = range(5, (mean.shape[0]+1)*5, 5)
             ax.plot(episodes, mean, "-", color=COLOR[alg], label=alg)
             ax.fill_between(episodes, mean + std, mean - std, alpha=0.1, color=COLOR[alg])
+
+        ax.set_xlim((0, xlims[i]))
         ax.set_xlabel("Episodios", fontsize=12, fontweight="bold")
         ax.set_ylabel(title, fontsize=12, fontweight="bold")
         ax.set_title(f"N: {n_exo_agents[i]}", fontsize=16, fontweight="bold")
-        ax.set_ylim((0, 1))
+        ax.set_ylim((-0.05, 1.05))
     axes[0].legend(loc="lower left")
     plt.show()
 
@@ -108,6 +142,7 @@ def reward_plots(list_of_data, n_situations, n_exo_agents, title, smooth=20, add
     try:
         fig, axes = plt.subplots(1 + ((n_situations-1) // 3), 3, figsize=(20, 8))
         axes = axes.flatten()
+        xlims = [100, 400, 500, 1000, 1000, 1000]
         for i, (data, ax) in enumerate(zip(list_of_data, axes)):
             for alg, _data in data.items():
                 for j, d in enumerate(_data):
@@ -125,7 +160,7 @@ def reward_plots(list_of_data, n_situations, n_exo_agents, title, smooth=20, add
                 episodes = range(5, (mean.shape[0]+1)*5, 5)
                 ax.plot(episodes, mean, "-", color=COLOR[alg], label=alg)
                 ax.fill_between(episodes, mean + std, mean - std, alpha=0.1, color=COLOR[alg])
-
+            ax.set_xlim((0, xlims[i]))
             ax.set_xlabel("Episodios", fontsize=12, fontweight="bold")
             ax.set_ylabel(title, fontsize=12, fontweight="bold")
             ax.set_title(f"N: {n_exo_agents[i]}", fontsize=16, fontweight="bold")
@@ -206,8 +241,8 @@ if __name__ == "__main__":
             get_data("2021-10-25-09-48", "DDPG", "reward", "test"),
             get_data("2021-10-25-14-52", "DDPG", "reward", "test")
             ],
-            "CoL": [get_data("2021-10-03-15-30", "CoL", "reward", "test"),
-            get_data("2021-10-03-17-06", "CoL", "reward", "test"),
+            "CoL": [get_data("2021-11-02-15-03", "CoL", "reward", "test"),
+            get_data("2021-11-04-10-22", "CoL", "reward", "test"),
             get_data("2021-10-03-19-27", "CoL", "reward", "test")
             ],
             "TD3CoL": [get_data("2021-10-31-16-07", "TD3CoL", "reward", "test"),
@@ -222,17 +257,19 @@ if __name__ == "__main__":
             ],
             "CoL": [get_data("2021-10-20-10-29", "CoL", "reward", "test"),
             get_data("2021-10-20-12-43", "CoL", "reward", "test"),
-            get_data("2021-10-20-15-41", "CoL", "reward", "test")
+            get_data("2021-11-04-14-55", "CoL", "reward", "test")
             ],
             "TD3CoL": [get_data("2021-10-13-12-30", "TD3CoL", "reward", "test"),
-            get_data("2021-10-13-17-00", "TD3CoL", "reward", "test")
+            get_data("2021-11-01-15-30", "TD3CoL", "reward", "test"),
+            get_data("2021-11-01-10-15", "TD3CoL", "reward", "test")
             ]
+
         }, # 3 con 1 en mov
         {
             "DDPG": [get_data("2021-10-30-10-11", "DDPG", "reward", "test")
             ],
-            "CoL": [get_data("2021-10-20-08-50", "CoL", "reward", "test"),
-            get_data("2021-10-19-22-08", "CoL", "reward", "test"),
+            "CoL": [get_data("2021-11-01-19-55", "CoL", "reward", "test"),
+            get_data("2021-11-02-10-15", "CoL", "reward", "test"),
             get_data("2021-10-19-20-20", "CoL", "reward", "test")
             ],
             "TD3CoL": [get_data("2021-10-21-09-33", "TD3CoL", "reward", "test"),
@@ -290,8 +327,8 @@ if __name__ == "__main__":
             get_data("2021-10-25-09-48", "DDPG", "success", "test"),
             get_data("2021-10-25-14-52", "DDPG", "success", "test")
             ],
-            "CoL": [get_data("2021-10-03-15-30", "CoL", "success", "test"),
-            get_data("2021-10-03-17-06", "CoL", "success", "test"),
+            "CoL": [get_data("2021-11-02-15-03", "CoL", "success", "test"),
+            get_data("2021-11-04-10-22", "CoL", "success", "test"),
             get_data("2021-10-03-19-27", "CoL", "success", "test")
             ],
             "TD3CoL": [get_data("2021-10-31-16-07", "TD3CoL", "success", "test"),
@@ -306,17 +343,18 @@ if __name__ == "__main__":
             ],
             "CoL": [get_data("2021-10-20-10-29", "CoL", "success", "test"),
             get_data("2021-10-20-12-43", "CoL", "success", "test"),
-            get_data("2021-10-20-15-41", "CoL", "success", "test")
+            get_data("2021-11-04-14-55", "CoL", "success", "test")
             ],
             "TD3CoL": [get_data("2021-10-13-12-30", "TD3CoL", "success", "test"),
-            get_data("2021-10-13-17-00", "TD3CoL", "success", "test")
+            get_data("2021-11-01-15-30", "TD3CoL", "success", "test"),
+            get_data("2021-11-01-10-15", "TD3CoL", "success", "test")
             ]
         }, # 3 con 1 en mov
         {
             "DDPG": [get_data("2021-10-30-10-11", "DDPG", "success", "test")
             ],
-            "CoL": [get_data("2021-10-20-08-50", "CoL", "success", "test"),
-            get_data("2021-10-19-22-08", "CoL", "success", "test"),
+            "CoL": [get_data("2021-11-01-19-55", "CoL", "success", "test"),
+            get_data("2021-11-02-10-15", "CoL", "success", "test"),
             get_data("2021-10-19-20-20", "CoL", "success", "test")
             ],
             "TD3CoL": [get_data("2021-10-21-09-33", "TD3CoL", "success", "test"),
@@ -326,8 +364,17 @@ if __name__ == "__main__":
         }, # 3 con 2 en mov
     ]
 
-    n_exo_agents = [0, 1, 2, 3, 31, 32]
+    eval_data = [
 
+        {
+            "TD3CoL": ["2021-11-04-08-46", "2021-11-04-08-58"]
+        }
+
+    ]
+
+
+    # n_exo_agents = [0, 1, 2, 3, 31, 32]
+    #
     # reward_plots(test_reward_data,
     #             n_exo_agents = n_exo_agents,
     #             n_situations=len(n_exo_agents),
@@ -338,4 +385,8 @@ if __name__ == "__main__":
     #                 n_situations=len(n_exo_agents),
     #                 title="Radio de exito",
     #                 add_compound_agg=True)
-    best_choosing(test_success_data, only_goal=False)
+    # best_choosing(test_success_data, only_goal=False)
+
+
+
+    test_collision_plots(eval_data, ["test"])
