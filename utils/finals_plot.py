@@ -273,7 +273,7 @@ if __name__ == "__main__":
             get_data("2021-10-19-20-20", "CoL", "reward", "test")
             ],
             "TD3CoL": [get_data("2021-10-21-09-33", "TD3CoL", "reward", "test"),
-            get_data("2021-10-21-11-13", "TD3CoL", "reward", "test"),
+            get_data("2021-11-05-11-44", "TD3CoL", "reward", "test"),
             get_data("2021-10-21-14-23", "TD3CoL", "reward", "test")
             ]
         }, # 3 con 2 en mov
@@ -358,7 +358,7 @@ if __name__ == "__main__":
             get_data("2021-10-19-20-20", "CoL", "success", "test")
             ],
             "TD3CoL": [get_data("2021-10-21-09-33", "TD3CoL", "success", "test"),
-            get_data("2021-10-21-11-13", "TD3CoL", "success", "test"),
+            get_data("2021-11-05-11-44", "TD3CoL", "success", "test"),
             get_data("2021-10-21-14-23", "TD3CoL", "success", "test")
             ]
         }, # 3 con 2 en mov
@@ -373,20 +373,20 @@ if __name__ == "__main__":
     ]
 
 
-    # n_exo_agents = [0, 1, 2, 3, 31, 32]
+    n_exo_agents = [0, 1, 2, 3, 31, 32]
     #
-    # reward_plots(test_reward_data,
-    #             n_exo_agents = n_exo_agents,
-    #             n_situations=len(n_exo_agents),
-    #             title="Recompensa Promedid",
-    #             add_compound_agg=True)
-    # success_plots(test_success_data,
-    #                 n_exo_agents = n_exo_agents,
-    #                 n_situations=len(n_exo_agents),
-    #                 title="Radio de exito",
-    #                 add_compound_agg=True)
+    reward_plots(test_reward_data,
+                n_exo_agents = n_exo_agents,
+                n_situations=len(n_exo_agents),
+                title="Recompensa Promedid",
+                add_compound_agg=True)
+    success_plots(test_success_data,
+                    n_exo_agents = n_exo_agents,
+                    n_situations=len(n_exo_agents),
+                    title="Radio de exito",
+                    add_compound_agg=True)
     # best_choosing(test_success_data, only_goal=False)
 
 
 
-    test_collision_plots(eval_data, ["test"])
+    # test_collision_plots(eval_data, ["test"])

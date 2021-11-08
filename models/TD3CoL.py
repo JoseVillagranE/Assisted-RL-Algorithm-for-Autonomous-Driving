@@ -290,19 +290,32 @@ class TD3CoL:
                 transform = transforms.Compose(
                     [transforms.Resize((80, 160)), transforms.ToTensor()]
                 )
-                choice_form = (config.train.load_rm_choice,)
+                choice_form = config.train.load_rm_choice
                 vae_encode = self.actor.feat_ext
-                self.replay_memory_e.load_rm_folder(
-                    path,
-                    complt_states_idx,
-                    num_roll,
-                    transform,
-                    choice_form,
-                    config.train.load_rm_idxs,
-                    config.train.load_rm_name_c,
-                    vae_encode,
-                )
-
+                if self.q_of_tasks == 1:
+                    self.replay_memory_e.load_rm_folder(
+                        path,
+                        complt_states_idx,
+                        num_roll,
+                        transform,
+                        choice_form,
+                        config.train.load_rm_idxs,
+                        config.train.load_rm_name_c,
+                        vae_encode,
+                    )
+                else:
+                    for i in range(self.q_of_tasks):
+                        if choice_form == "random":
+                            self.B_e[i].load_rm_folder(
+                                path,
+                                complt_states_idx,
+                                num_roll,
+                                transform,
+                                choice_form,
+                                config.train.load_rm_idxs,
+                                config.train.load_rm_name_c,
+                                vae_encode,
+                            )
             print(f"samples of expert rm: {self.replay_memory_e.get_memory_size()}")
 
         self.mse = nn.MSELoss(reduction="mean")
@@ -694,8 +707,8 @@ class TD3CoL:
             0,
         )
 
-    def get_multi_memory(self, is_pretraining):
-        if self.batch_size * self.agent_prop > sum([rb for rb in self.B]):
+    def get_multi_memory(self, is_pretraining, type_rm):
+        if self.batch_size * self.agent_prop > sum([rb.get_memory_size() for rb in self.B]):
             if is_pretraining:
 
                 states = []
@@ -705,8 +718,8 @@ class TD3CoL:
                 dones = []
                 isw = []
                 inter_idxs = []
-                indexs = random.choices(len(self.B_e), k=self.cl_batch_size)
-
+                indexs = random.choices(list(range(len(self.B_e))), k=self.cl_batch_size)
+                print(self.B_e[0].get_memory_size())
                 for i in indexs:
                     state, action, reward, next_state, done, isw_, idx = self.B_e[
                         i

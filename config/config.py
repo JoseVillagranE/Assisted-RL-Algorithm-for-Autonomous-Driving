@@ -175,15 +175,44 @@ config.train.trauma_memory.prop =  0.1
 config.cl_train = edict()
 config.cl_train.q_of_tasks = 1
 config.cl_train.exo_sample = "random"
-config.cl_train.L = 10  # values functions lenght
+config.cl_train.value_function_L = 10  # values functions lenght
 config.cl_train.alpha = 0
 config.cl_train.episodes = 20
 config.cl_train.general_tr_episodes = 200
-config.cl_train.exo_vehs_x = []
-config.cl_train.exo_vehs_y = []
-config.cl_train.exo_vehs_yaw = []
+config.cl_train.V_limit = 300
+config.cl_train.n_exo_agents = 0
+config.cl_train.x_limits = [98, 219]
+config.cl_train.y_limits = [58, 63]
+config.cl_train.yaw_limits = [175, 185]
+config.cl_train.direction = 0
+config.cl_train.n_sample_points = 5 
 
 
+config.cl_train.exo_agents = edict()
+config.cl_train.exo_agents.vehicle = edict()
+config.cl_train.exo_agents.vehicle.wsp_sampling_mode = "fix"
+config.cl_train.exo_agents.vehicle.exo_driving = []
+
+config.cl_train.exo_agents.vehicle.initial_pos = edict()
+config.cl_train.exo_agents.vehicle.initial_pos.x = []
+config.cl_train.exo_agents.vehicle.initial_pos.y = []
+config.cl_train.exo_agents.vehicle.initial_pos.yaw = []
+
+config.cl_train.exo_agents.vehicle.end_pos = edict()
+config.cl_train.exo_agents.vehicle.end_pos.x = []
+config.cl_train.exo_agents.vehicle.end_pos.y = []
+config.cl_train.exo_agents.vehicle.end_pos.yaw = [] 
+
+config.cl_train.exo_agents.peds = edict()
+config.cl_train.exo_agents.peds.initial_pos = edict()
+config.cl_train.exo_agents.peds.initial_pos.x = []
+config.cl_train.exo_agents.peds.initial_pos.y = []
+config.cl_train.exo_agents.peds.initial_pos.yaw = []
+
+config.cl_train.exo_agents.peds.end_pos = edict()
+config.cl_train.exo_agents.peds.end_pos.x = []
+config.cl_train.exo_agents.peds.end_pos.y = []
+config.cl_train.exo_agents.peds.end_pos.yaw = []
 
 # Agent Defaults (Single agent)
 config.agent = edict()

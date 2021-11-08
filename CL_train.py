@@ -18,6 +18,15 @@ from models.init_model import init_model
 from rewards_fns import reward_functions, weighted_rw_fn
 from utils.preprocess import create_encode_state_fn
 from utils.checkpointing import save_checkpoint, load_checkpoint
+from utils.SamplePoints import sample_points
+from utils.utils import distance_bet_points
+
+X_LIMITS = config.cl_train.x_limits
+Y_LIMITS = config.cl_train.y_limits
+YAW_LIMITS = config.cl_train.yaw_limits
+DIRECTION = config.cl_train.direction
+N_SAMPLE_POINTS = config.cl_train.n_sample_points
+
 
 
 def signal_handler(sig, frame):
@@ -36,46 +45,102 @@ def parse_args():
     return args
 
 
-# TODO: With more than one steps you should manage next_latent state dimensions
-    
+def get_wps(pos, epos):
+    # pos -> [[x, y, yaw], [x, y, yaw], [..]] 
+    wps = []
+    for i in range(len(pos)):
+        if len(epos) == 0:
+            wps.append([])
+        else:
+            e = [epos[0][i], epos[1][i]]
+            wps.append(sample_points(pos[i][:2], 
+                            epos[i][:2],
+                            X_LIMITS, 
+                            Y_LIMITS, 
+                            DIRECTION, 
+                            N_SAMPLE_POINTS))
+    return wps
 
+# TODO: With more than one steps you should manage next_latent state dimensions
 def get_tasks():
 
-    tasks = {}
+    tasks = []
     exo_vehs_ipos = []
+    exo_vehs_epos = []
+    exo_driving = []
+    exo_wps = []
+    peds_ipos = []
+    peds_epos = []
+
     if config.cl_train.exo_sample == "random":
 
         for i in range(config.cl_train.n_exo_agents):
-            x_limits = [98, 219]
-            y_limits = [53, 65]
-            yaw_limits = [0, 359]
-            exo_veh_x = random.randint(*x_limits)
-            exo_veh_y = random.randint(*y_limits)
-            exo_veh_yaw = random.randint(*yaw_limits)
+            exo_veh_x = random.randint(*X_LIMITS)
+            exo_veh_y = random.randint(*Y_LIMITS)
+            exo_veh_yaw = random.randint(*YAW_LIMITS)
             pos = [exo_veh_x, exo_veh_y, exo_veh_yaw]
             exo_vehs_ipos.append(pos)
-        tasks["exo_vehs_ipos"] = exo_vehs_ipos
-        tasks["n_vehs"] = len(exo_vehs_ipos)
+            
     elif config.cl_train.exo_sample == "manual":
-        assert (
-            len(config.cl_train.exo_vehs_x)
-            == len(config.cl_train.exo_vehs_y)
-            == len(config.cl_train.exo_vehs_yaw)
-        )
-        for i in range(len(config.cl_train.exo_vehs_x)):
-            pos = [
-                config.cl_train.exo_vehs_x[i],
-                config.cl_train.exo_vehs_y[i],
-                config.cl_train.exo_vehs_yaw[i],
-            ]
+        
+        for i in range(len(config.cl_train.exo_agents.vehicle.initial_pos.x)):
+            pos = list(zip(
+                    *(
+                        config.cl_train.exo_agents.vehicle.initial_pos.x[i],
+                        config.cl_train.exo_agents.vehicle.initial_pos.y[i],
+                        config.cl_train.exo_agents.vehicle.initial_pos.yaw[i]
+                    )
+                ))
+            epos = list(zip(
+                    *(    
+                        config.cl_train.exo_agents.vehicle.end_pos.x[i],
+                        config.cl_train.exo_agents.vehicle.end_pos.y[i],
+                        config.cl_train.exo_agents.vehicle.end_pos.yaw[i]
+                    )
+                ))
             exo_vehs_ipos.append(pos)
-
-        tasks["exo_vehs_ipos"] = exo_vehs_ipos
-        tasks["n_vehs"] = len(exo_vehs_ipos)
+            exo_vehs_epos.append(epos)
+            exo_driving.append(config.cl_train.exo_agents.vehicle.exo_driving[i])
+            if config.cl_train.exo_agents.vehicle.wsp_sampling_mode == "fix":
+                wps = get_wps(pos, epos) # list -> len = n_vehicles per situation
+                exo_wps.append(wps)
+            
+        for i in range(len(config.cl_train.exo_agents.peds.initial_pos.x)):
+            pos = list(zip(
+                    *(
+                        config.cl_train.exo_agents.peds.initial_pos.x[i],
+                        config.cl_train.exo_agents.peds.initial_pos.y[i],
+                        config.cl_train.exo_agents.peds.initial_pos.yaw[i]
+                    )
+                ))
+            epos = list(zip(
+                    *(    
+                        config.cl_train.exo_agents.peds.end_pos.x[i],
+                        config.cl_train.exo_agents.peds.end_pos.y[i],
+                        config.cl_train.exo_agents.peds.end_pos.yaw[i]
+                    )
+                ))
+            peds_ipos.append(pos)
+            peds_epos.append(epos)
+            
+            
     else:
         raise NotImplementedError(
             "Sample " + config.cl_train.exo_sample + "is not implemented"
         )
+    
+        
+    for ev_ipos, ev_epos, ed, p_ipos, p_epos in zip(exo_vehs_ipos, exo_vehs_epos, exo_driving, peds_ipos, peds_epos):
+        task = {
+                "n_vehs": len(ev_ipos),
+                "exo_vehs_ipos": ev_ipos,
+                "exo_vehs_epos": ev_epos,
+                "exo_driving": ed,
+                "exo_wps": exo_wps,
+                "peds_ipos": p_ipos,
+                "peds_epos": p_epos         
+            }
+        tasks.append(task)
     return tasks
 
 
@@ -143,18 +208,10 @@ def cl_train():
     print("Creating Environment..")
 
     n_vehs = 0
-    exo_veh_ipos = list(
-        zip(
-            config.exo_agents.vehicle.initial_position.x,
-            config.exo_agents.vehicle.initial_position.y,
-            config.exo_agents.vehicle.initial_position.yaw,
-        )
-    )  # [[x, y, yaw], ..]
-    exo_driving = False
+    exo_veh_ipos = []  # [[x, y, yaw], ..]
+    exo_driving = []
     n_peds = 0
     peds_ipos = []
-
-    assert len(exo_veh_ipos) == n_vehs
 
     env = NormalizedEnv(
         CarlaEnv(
@@ -194,14 +251,13 @@ def cl_train():
     V = []
     rewards = []
     for i in range(len(tasks)):
-        v = deque(maxlen=config.cl_train.L)
+        v = deque(maxlen=config.cl_train.value_function_L)
         v.append(0)
         V.append(v)
         rewards.append([])
 
     try:
         print("Training in Base Task..")
-        v_win = config.cl_train.v_win
         value = 0
         episode = 0
         while mean(V[0]) < config.cl_train.V_limit:
@@ -238,37 +294,91 @@ def cl_train():
     finally:
         np.save(os.path.join(particular_save_path, "rewards.npy"), np.array(rewards))
         np.save(
+            os.path.join(particular_save_path, "test_rewards.npy"),
+            np.array(test_rewards),
+        )
+        np.save(
             os.path.join(particular_save_path, "info_finals_state.npy"),
             np.array(info_finals_state),
         )
+        np.save(
+            os.path.join(particular_save_path, "test_info_finals_state.npy"),
+            np.array(test_info_finals_state),
+        )
+
+        np.save(
+            os.path.join(particular_save_path, "train_agent_extra_info.npy"),
+            agent_extra_info,
+        )
+        np.save(
+            os.path.join(particular_save_path, "test_agent_extra_info.npy"),
+            test_agent_extra_info,
+        )
+        
+        np.save(
+            os.path.join(particular_save_path, "train_exo_agents_extra_info.npy"),
+            exo_agents_extra_info,
+        )
+        np.save(
+            os.path.join(particular_save_path, "test_exo_agents_extra_info.npy"),
+            test_exo_agents_extra_info,
+        )
+        
+        np.save(
+            os.path.join(particular_save_path, "train_historical_losses.npy"),
+            train_historical_losses,
+        )
+        
+        if config.run_type in ["CoL", "TD3CoL"]:
+            np.save(
+                os.path.join(particular_save_path, "pre_train_historical_losses.npy"),
+                model.pretraining_losses,
+            )
 
         # Last checkpoint to save
-        models_dicts = (
-            model.actor.state_dict(),
-            model.actor_target.state_dict(),
-            model.critic.state_dict(),
-            model.critic_target.state_dict(),
-        )
+        
+        if config.run_type in ["TD3", "TD3CoL"]:
+            models_dicts = (
+                model.actor.state_dict(),
+                model.actor_target.state_dict(),
+                model.critic_1.state_dict(),
+                model.critic_target_1.state_dict(),
+                model.critic_2.state_dict(),
+                model.critic_target_2.state_dict(),
+            )
+        else:
+            models_dicts = (
+                model.actor.state_dict(),
+                model.actor_target.state_dict(),
+                model.critic.state_dict(),
+                model.critic_target.state_dict(),
+            )
         optimizers_dicts = (
             model.actor_optimizer.state_dict(),
             model.critic_optimizer.state_dict(),
         )
 
-        # save_checkpoint(
-        #     models_dicts,
-        #     optimizers_dicts,
-        #     rewards,
-        #     episode,
-        #     exp_name,
-        #     particular_save_path,
-        # )
+        save_checkpoint(
+            models_dicts,
+            optimizers_dicts,
+            rewards,
+            episode,
+            exp_name,
+            particular_save_path,
+        )
         env.close()
 
 
 def train(env, model, rw_weights, logger, episode, task, i):
+    
+    print(task)
 
     state, terminal_state, episode_reward = (
-        env.reset(exo_vehs_ipos=task["exo_veh_ipos"]),
+        env.reset(exo_vehs_ipos=task["exo_vehs_ipos"],
+                  exo_vehs_epos=task["exo_vehs_epos"],
+                  peds_ipos=task["peds_ipos"],
+                  exo_driving=task["exo_driving"],
+                  exo_wps=task["exo_wps"]),
         False,
         [],
     )
@@ -381,7 +491,7 @@ def main():
     assert config.train.checkpoint_every != 0, "checkpoint_every variable cant be zero"
 
     try:
-        train()
+        cl_train()
     except KeyboardInterrupt:
         print("\nCancelled by user. Bye!")
 

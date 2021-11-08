@@ -1,6 +1,6 @@
 run_type: 'TD3CoL'
 run_id: '1'
-seed: 12
+seed: 123
 
 simulation:
     fps: 10
@@ -17,7 +17,7 @@ train:
   optimizer: "Adam"
   type_RM: "prioritized"
   batch_size: 64
-  temporal_mech: True
+  temporal_mech: False
   rnn_nsteps: 1
   hidden_cat: False
   start_to_update: 5
@@ -43,7 +43,7 @@ train:
   load_rm_choice: "random"
   load_rm_name_c: ["3", "g"]
   load_rm_num_rolls: 80
-  load_rm_idxs: [] # compl states [steer, thr, speed, ..]
+  load_rm_idxs: [0, 1] # compl states [steer, thr, speed, ..]
   enable_scheduler_lr: True
   alpha: 1
   beta: 1
@@ -83,7 +83,7 @@ exo_agents:
       y: [58, 58, 63]
       z: [1, 1, 1]
       yaw: [180, 180, 180]
-    exo_driving: [True, False, False]
+    exo_driving: [True, True, False]
 
 model:
   type: "VAE"
