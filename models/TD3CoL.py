@@ -442,15 +442,15 @@ class TD3CoL:
             )
             
         else:
-            for i in set(indexs_a):
-                ith_idx = np.where(np.array(indexs_a) == i)[0]
-                js = np.array(inter_idxs_a)[ith_idx]
-                self.B[i].update_priorities(js, TD[js].abs().detach().cpu().numpy())
-
             for i in set(indexs_e):
                 ith_idx = np.where(np.array(indexs_e) == i)[0]
                 js = np.array(inter_idxs_e)[ith_idx]
-                self.B[i].update_priorities(js, TD[js].abs().detach().cpu().numpy())
+                self.B_e[i].update_priorities(js, TD[js].abs().detach().cpu().numpy())
+            if not is_pretraining:    
+                for i in set(indexs_a):
+                    ith_idx = np.where(np.array(indexs_a) == i)[0]
+                    js = np.array(inter_idxs_a)[ith_idx]
+                    self.B[i].update_priorities(js, TD[js].abs().detach().cpu().numpy())
 
         # Back to cpu
         self.actor = self.actor.cpu().eval()
@@ -710,7 +710,6 @@ class TD3CoL:
     def get_multi_memory(self, is_pretraining, type_rm):
         if self.batch_size * self.agent_prop > sum([rb.get_memory_size() for rb in self.B]):
             if is_pretraining:
-
                 states = []
                 actions = []
                 rewards = []
@@ -719,7 +718,6 @@ class TD3CoL:
                 isw = []
                 inter_idxs = []
                 indexs = random.choices(list(range(len(self.B_e))), k=self.cl_batch_size)
-                print(self.B_e[0].get_memory_size())
                 for i in indexs:
                     state, action, reward, next_state, done, isw_, idx = self.B_e[
                         i
@@ -730,13 +728,15 @@ class TD3CoL:
                     next_states += next_state
                     dones += done
                     isw += isw_
-                    inter_idxs += idx
+                    inter_idxs += idx.tolist()
 
                 states_e = states = np.array(states)
                 actions_e = actions = np.array(actions)
                 rewards = np.array(rewards)
                 next_states = np.array(next_states)
                 dones = np.array(dones)
+                indexs_a = indexs_e = indexs
+                inter_idxs_a = inter_idxs_e = inter_idxs
             else:
                 return
 
@@ -796,6 +796,8 @@ class TD3CoL:
                 np.array(dones_a),
                 np.array(dones_e),
             )
+            
+            isw = (isw_a, isw_e)  
 
         return (
             states,
@@ -805,7 +807,7 @@ class TD3CoL:
             dones,
             states_e,
             actions_e,
-            (isw_a, isw_e),
+            isw, 
             inter_idxs_a,
             inter_idxs_e,
             indexs_a,

@@ -85,8 +85,8 @@ config.train.start_to_update = 0
 config.train.optimization_steps = 1
 config.train.action_space = 2  # [steer, throttle]
 config.train.measurements_to_include = set(
-    ["steer"]
-    + ["throttle"]
+    # ["steer"]
+    # + ["throttle"]
     # + ["speed"]
     # ["orientation"]
 )

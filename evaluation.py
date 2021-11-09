@@ -173,7 +173,8 @@ def multi_evaluation():
             exo_vehs_epos = []
             peds_ipos = []
             exo_wps = []
-            exo_driving = config.eval.exo_driving if config.eval.multi_eval_type == "fix" else random.choices([True, False], k=config.eval.n_exo_vehs)
+            
+            exo_driving = config.eval.exo_driving if config.eval.multi_eval_type == "fix" else random.choices([True, False], k=n)
             for i in range(n):
                 exo_veh_x = random.randint(*x_limits)
                 exo_veh_y = random.randint(*y_limits)
@@ -201,12 +202,10 @@ def multi_evaluation():
                                         direction=0,
                                         n=config.eval.multi_eval_n)
                 exo_wps.append(wps)
-            
-            print(exo_vehs_ipos)
             state = env.reset(exo_vehs_ipos=exo_vehs_ipos,
                               exo_vehs_epos=exo_vehs_epos,
                               peds_ipos=peds_ipos,
-                              exo_driving=config.eval.exo_driving,
+                              exo_driving=exo_driving,
                               exo_wps=exo_wps)
             
             terminal_state = False

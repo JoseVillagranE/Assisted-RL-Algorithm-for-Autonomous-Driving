@@ -71,10 +71,10 @@ def compound_agg(data):
 def test_collision_plots(list_of_data, labels):
 
     prefix_path  = os.path.join(pathlib.Path(__file__).parent.resolve().parent, "models_logs", "VAE", "Eval")
-    bar_width = 0.1
+    bar_width = 0.01
     delta = {"DDPG": -bar_width, "CoL": 0, "TD3CoL": bar_width}
-    colors = {"DDPG": ("red", "pink"),
-                "CoL": ("green", "lightgreen"),
+    colors = {"DDPG": ("red", "lightcoral", "pink"),
+                "CoL": ("green", "lawngreen", "lightgreen"),
                 "TD3CoL": ("blue", "paleturquoise", "aqua")}
 
     for i, data in enumerate(list_of_data):
@@ -90,10 +90,10 @@ def test_collision_plots(list_of_data, labels):
             print(f"n_situation: {i} || alg: {alg} || full length data: {full_data_length}")
             collision_veh_ratio = full_data[full_data == "Collision Veh"].shape[0] /  full_data_length
             collision_other_ratio = full_data[full_data == "Collision Other"].shape[0] /  full_data_length
-            goal_ratio = full_data[full_data == "Goal"].shape[0] /  full_data_length
+            goal_ratio = (full_data[full_data == "Goal"].shape[0] + full_data[full_data == "Cross Finish Line"].shape[0]) /  full_data_length
             plt.bar(i+delta[alg], goal_ratio, width=bar_width, color=colors[alg][0], bottom=0)
             plt.bar(i+delta[alg], collision_veh_ratio, width=bar_width, color=colors[alg][1], bottom=goal_ratio)
-            plt.bar(i+delta[alg], collision_other_ratio, width=bar_width, color=colors[alg][2], bottom=collision_veh_ratio)
+            plt.bar(i+delta[alg], collision_other_ratio, width=bar_width, color=colors[alg][2], bottom=collision_veh_ratio+goal_ratio)
 
     plt.xticks(list(range(len(labels))), labels)
     plt.show()
@@ -367,6 +367,8 @@ if __name__ == "__main__":
     eval_data = [
 
         {
+            "CoL": ["2021-11-08-11-16", "2021-11-08-11-46", "2021-11-08-12-05",
+                    "2021-11-08-12-38", "2021-11-08-16-12"],
             "TD3CoL": ["2021-11-04-08-46", "2021-11-04-08-58"]
         }
 
@@ -375,18 +377,18 @@ if __name__ == "__main__":
 
     n_exo_agents = [0, 1, 2, 3, 31, 32]
     #
-    reward_plots(test_reward_data,
-                n_exo_agents = n_exo_agents,
-                n_situations=len(n_exo_agents),
-                title="Recompensa Promedid",
-                add_compound_agg=True)
-    success_plots(test_success_data,
-                    n_exo_agents = n_exo_agents,
-                    n_situations=len(n_exo_agents),
-                    title="Radio de exito",
-                    add_compound_agg=True)
+    # reward_plots(test_reward_data,
+    #             n_exo_agents = n_exo_agents,
+    #             n_situations=len(n_exo_agents),
+    #             title="Recompensa Promedid",
+    #             add_compound_agg=True)
+    # success_plots(test_success_data,
+    #                 n_exo_agents = n_exo_agents,
+    #                 n_situations=len(n_exo_agents),
+    #                 title="Radio de exito",
+    #                 add_compound_agg=True)
     # best_choosing(test_success_data, only_goal=False)
 
 
 
-    # test_collision_plots(eval_data, ["test"])
+    test_collision_plots(eval_data, ["test"])
