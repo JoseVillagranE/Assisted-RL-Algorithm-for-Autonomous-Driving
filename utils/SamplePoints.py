@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import random
 
 
-def sample_points(start, goal, x_limits, y_limits, direction, n):
+def sample_points(start, goal, x_limits, y_limits, direction, n, behavior="random"):
     """
     start: 2d point
     end: 2d point
@@ -11,12 +11,19 @@ def sample_points(start, goal, x_limits, y_limits, direction, n):
     """
     if direction==0:
         x = np.linspace(start[0], goal[0], n)
-        y = (y_limits[1] - y_limits[0]) * np.random.random_sample(n) + y_limits[0]
-        y[0], y[-1] = start[1], goal[1]
+        if behavior == "random":
+            y = (y_limits[1] - y_limits[0]) * np.random.random_sample(n) + y_limits[0]
+            y[0], y[-1] = start[1], goal[1]
+        else:
+            y = np.array([start[1]]*n)
+            
     else:
-        x = (x_limits[1] - x_limits[0]) * np.random.random_sample(n) + x_limits[0]
-        x[0], x[-1] = start[0], goal[0]
         y = np.linspace(start[1], goal[1], n)
+        if behavior == "random":
+            x = (x_limits[1] - x_limits[0]) * np.random.random_sample(n) + x_limits[0]
+            x[0], x[-1] = start[0], goal[0]
+        else:
+            x = np.array([start[1]]*n)
     waypoints = np.concatenate((x.reshape((-1, 1)), y.reshape((-1, 1))), axis=1)
     return waypoints
 
@@ -41,5 +48,7 @@ if __name__ == "__main__":
                               x_limits,
                               y_limits,
                               direction=direction,
-                              n = n)
+                              n = n,
+                              behavior="straight")
     plt.plot(waypoints[:, 0], waypoints[:, 1], '-o')
+    plt.show()

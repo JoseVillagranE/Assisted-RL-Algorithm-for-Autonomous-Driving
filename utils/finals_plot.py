@@ -44,6 +44,15 @@ def test_compound_agg():
     plt.show()
 
 
+def rollup_agg(roll_ups):
+    for i, roll in enumerate(roll_ups):
+        agg = roll.mean(axis=0)
+        if i == 0:
+            result = agg
+        else:
+            result = np.vstack((result, agg))
+    return result
+
 def compound_agg(data):
     shapes = [d.shape[0] for d in data]
     max_shapes = max(shapes)
@@ -71,7 +80,7 @@ def compound_agg(data):
 def test_collision_plots(list_of_data, labels):
 
     prefix_path  = os.path.join(pathlib.Path(__file__).parent.resolve().parent, "models_logs", "VAE", "Eval")
-    bar_width = 0.01
+    bar_width = 0.1
     delta = {"DDPG": -bar_width, "CoL": 0, "TD3CoL": bar_width}
     colors = {"DDPG": ("red", "lightcoral", "pink"),
                 "CoL": ("green", "lawngreen", "lightgreen"),
@@ -81,11 +90,10 @@ def test_collision_plots(list_of_data, labels):
         for alg, _data in data.items():
             for j, d in enumerate(_data):
                 d = np.load(os.path.join(prefix_path, alg, d, "finish_reasons.npy"), allow_pickle=True)
-                print(d)
                 if j == 0:
                     full_data = d
                 else:
-                    np.append(full_data, d)
+                    full_data = np.append(full_data, d)
             full_data_length = full_data.shape[0]
             print(f"n_situation: {i} || alg: {alg} || full length data: {full_data_length}")
             collision_veh_ratio = full_data[full_data == "Collision Veh"].shape[0] /  full_data_length
@@ -95,11 +103,70 @@ def test_collision_plots(list_of_data, labels):
             plt.bar(i+delta[alg], collision_veh_ratio, width=bar_width, color=colors[alg][1], bottom=goal_ratio)
             plt.bar(i+delta[alg], collision_other_ratio, width=bar_width, color=colors[alg][2], bottom=collision_veh_ratio+goal_ratio)
 
-    plt.xticks(list(range(len(labels))), labels)
+
+
+    plt.xticks(list(range(len(labels))), labels, fontsize=12, fontweight='bold')
+    plt.title("Evaluación de la politica de conducción para distintas configuraciones de exo-agentes", fontsize=12, fontweight="bold")
     plt.show()
 
 
-def success_plots(list_of_data, n_situations, n_exo_agents, title, only_goal=False, smooth=20, add_compound_agg=False):
+def stats_plots(list_of_data, labels):
+
+    prefix_path  = os.path.join(pathlib.Path(__file__).parent.resolve().parent, "models_logs", "VAE", "Eval")
+    colors = {"DDPG": ("red", "lightcoral", "pink"),
+                "CoL": ("green", "lawngreen", "lightgreen"),
+                "TD3CoL": ("blue", "paleturquoise", "aqua")}
+
+    stats_per_situation = []
+    for i, data in enumerate(list_of_data):
+        stats_per_alg = {}
+        for alg, _data in data.items():
+            for j, d in enumerate(_data):
+                d = np.load(os.path.join(prefix_path, alg, d, "train_agent_extra_info.npy"), allow_pickle=True)
+                if j == 0:
+                    full_data = rollup_agg(d)
+                else:
+                    full_data = np.vstack((full_data, rollup_agg(d)))
+            stats_per_alg[alg] = full_data
+        stats_per_situation.append(stats_per_alg)
+
+    situations = []
+    DDPG_rollouts = []
+    CoL_rollouts = []
+    TD3CoL_rollouts = []
+    for i in range(len(stats_per_situation)):
+        situations += [labels[i]]*stats_per_situation[i]["DDPG"].shape[0]
+        if i == 0:
+            DDPG_rollouts = stats_per_situation[i]["DDPG"]
+            CoL_rollouts = stats_per_situation[i]["CoL"]
+            TD3CoL_rollouts = stats_per_situation[i]["TD3CoL"]
+        else:
+            DDPG_rollouts = np.vstack((DDPG_rollouts, stats_per_situation[i]["DDPG"]))
+            CoL_rollouts = np.vstack((CoL_rollouts, stats_per_situation[i]["CoL"]))
+            TD3CoL_rollouts = np.vstack((TD3CoL_rollouts, stats_per_situation[i]["TD3CoL"]))
+
+    print(DDPG_rollouts.shape[0])
+    print(CoL_rollouts.shape[0])
+    print(TD3CoL_rollouts.shape[0])
+    df = pd.DataFrame({'Scenarios':situations,\
+                      'DDPG': DDPG_rollouts[:, 3],
+                      'CoL': CoL_rollouts[:, 3],
+                      'TD3CoL': TD3CoL_rollouts[:, 3]})
+    df = df[['Scenarios','DDPG','CoL', 'TD3CoL']]
+
+    dd=pd.melt(df,id_vars=['Scenarios'],value_vars=['DDPG','CoL', 'TD3CoL'],var_name='Algorithms')
+    sns.boxplot(x='Scenarios',y='value',data=dd,hue='Algorithms')
+    plt.show()
+
+
+def success_plots(list_of_data,
+                n_situations,
+                n_exo_agents,
+                title,
+                subplot_titles,
+                only_goal=False,
+                smooth=20,
+                add_compound_agg=False):
 
     fig, axes = plt.subplots(1 + ((n_situations-1) // 3), 3, figsize=(20, 8))
     axes = axes.flatten()
@@ -130,14 +197,22 @@ def success_plots(list_of_data, n_situations, n_exo_agents, title, only_goal=Fal
             ax.fill_between(episodes, mean + std, mean - std, alpha=0.1, color=COLOR[alg])
 
         ax.set_xlim((0, xlims[i]))
-        ax.set_xlabel("Episodios", fontsize=12, fontweight="bold")
-        ax.set_ylabel(title, fontsize=12, fontweight="bold")
-        ax.set_title(f"N: {n_exo_agents[i]}", fontsize=16, fontweight="bold")
+        # ax.set_xlabel("Episodios", fontsize=12, fontweight="bold")
+        # ax.set_ylabel(title, fontsize=12, fontweight="bold")
+        ax.set_title(subplot_titles[i], fontsize=12, fontweight="bold")
         ax.set_ylim((-0.05, 1.05))
     axes[0].legend(loc="lower left")
+    fig.text(0.5, 0.04, 'Episodios', ha='center', fontsize=12, fontweight="bold")
+    fig.text(0.08, 0.5, 'Radio de éxito', va='center', rotation='vertical', fontsize=12, fontweight="bold")
     plt.show()
 
-def reward_plots(list_of_data, n_situations, n_exo_agents, title, smooth=20, add_compound_agg=False):
+def reward_plots(list_of_data,
+                n_situations,
+                n_exo_agents,
+                title,
+                subplot_titles,
+                smooth=20,
+                add_compound_agg=False):
 
     try:
         fig, axes = plt.subplots(1 + ((n_situations-1) // 3), 3, figsize=(20, 8))
@@ -161,11 +236,13 @@ def reward_plots(list_of_data, n_situations, n_exo_agents, title, smooth=20, add
                 ax.plot(episodes, mean, "-", color=COLOR[alg], label=alg)
                 ax.fill_between(episodes, mean + std, mean - std, alpha=0.1, color=COLOR[alg])
             ax.set_xlim((0, xlims[i]))
-            ax.set_xlabel("Episodios", fontsize=12, fontweight="bold")
-            ax.set_ylabel(title, fontsize=12, fontweight="bold")
-            ax.set_title(f"N: {n_exo_agents[i]}", fontsize=16, fontweight="bold")
+            # ax.set_xlabel("Episodios", fontsize=12, fontweight="bold")
+            # ax.set_ylabel(title, fontsize=12, fontweight="bold")
+            ax.set_title(subplot_titles[i], fontsize=12, fontweight="bold")
             ax.set_ylim((-1000, 1000))
         axes[0].legend(loc="lower left")
+        fig.text(0.5, 0.04, 'Episodios', ha='center', fontsize=12, fontweight="bold")
+        fig.text(0.08, 0.5, 'Recompensa promedio', va='center', rotation='vertical', fontsize=12, fontweight="bold")
         plt.show()
     except ValueError as error:
         print(error)
@@ -367,28 +444,47 @@ if __name__ == "__main__":
     eval_data = [
 
         {
-            "CoL": ["2021-11-08-11-16", "2021-11-08-11-46", "2021-11-08-12-05",
-                    "2021-11-08-12-38", "2021-11-08-16-12"],
-            "TD3CoL": ["2021-11-04-08-46", "2021-11-04-08-58"]
+            "DDPG": ["2021-11-16-17-34"],
+            "CoL": ["2021-11-16-13-44"],
+            "TD3CoL": ["2021-11-16-16-06"]
+        },
+        {
+            "DDPG": ["2021-11-12-21-30"],
+            "CoL": ["2021-11-16-23-47"],
+            "TD3CoL": ["2021-11-16-22-44"]
+        },
+        {
+            "DDPG": ["2021-11-17-15-48"],
+            "CoL": ["2021-11-17-09-08"],
+            "TD3CoL": ["2021-11-14-16-26"]
         }
 
     ]
 
 
     n_exo_agents = [0, 1, 2, 3, 31, 32]
-    #
+    titles = ["Sin Exo-vehiculo",
+            "1 exo vehiculo",
+            "2 exo-vehiculos",
+            "3 exo-vehiculos",
+            "3 exo-vehiculos con 1 en movimiento",
+            "3 exo-vehiculos con 2 en movimiento"]
+
     # reward_plots(test_reward_data,
     #             n_exo_agents = n_exo_agents,
     #             n_situations=len(n_exo_agents),
     #             title="Recompensa Promedid",
+    #             subplot_titles = titles,
     #             add_compound_agg=True)
     # success_plots(test_success_data,
     #                 n_exo_agents = n_exo_agents,
     #                 n_situations=len(n_exo_agents),
     #                 title="Radio de exito",
+    #                 subplot_titles = titles,
     #                 add_compound_agg=True)
     # best_choosing(test_success_data, only_goal=False)
 
 
 
-    test_collision_plots(eval_data, ["test"])
+    # test_collision_plots(eval_data, ["(a)", "(b)", "(c)"])
+    stats_plots(eval_data, ["(a)", "(b)", "(c)"])

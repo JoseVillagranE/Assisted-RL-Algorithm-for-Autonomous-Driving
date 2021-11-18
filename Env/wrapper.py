@@ -62,10 +62,9 @@ class CarlaActorBase(object):
         if self.destroyed:
             raise Exception("Actor already destroyed.")
         else:
-            print("Destroying ", self, "...")
-            self.actor.destroy()
             self.world.actor_list.remove(self)
             self.destroyed = True
+            self.actor.destroy()
 
     def get_carla_actor(self):
         return self.actor
@@ -330,8 +329,7 @@ class Vehicle(CarlaActorBase):
             return self.waypoint_buffer[0]
         else:
             # The established route end, so we set autopilot
-            self.actor.set_autopilot(True)
-            self.autopilot_mode = True
+            self.enable_autopilot_mode()
             return 1  # dont care
 
     def tick(self):
@@ -367,6 +365,14 @@ class Vehicle(CarlaActorBase):
     def is_autopilot_mode(self):
         # TODO implement the option of set back to waypoints drive
         return self.set_autopilot
+    
+    def enable_autopilot_mode(self):
+        self.actor.set_autopilot(True)
+        self.autopilot_mode = True
+        
+    def disable_autopilot_mode(self):
+        self.actor.set_autopilot(False)
+        self.autopilot_mode = False
 
 
 class Pedestrian(CarlaActorBase):

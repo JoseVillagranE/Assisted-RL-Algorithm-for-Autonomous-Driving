@@ -186,6 +186,7 @@ config.cl_train.y_limits = [58, 63]
 config.cl_train.yaw_limits = [175, 185]
 config.cl_train.direction = 0
 config.cl_train.n_sample_points = 5 
+config.cl_batch_idxs_sampling = "random"
 
 
 config.cl_train.exo_agents = edict()
@@ -347,7 +348,7 @@ config.eval.n_exo_vehs = 2
 config.eval.multi_eval_n = 5 # sample point in exo_driving
 config.eval.ego_x_prep_area = 4
 config.eval.time_out_steps = 1000
-config.eval.beh = "normal"
+config.eval.exo_behavior = "straight"
 
 
 # Visualisation Defaults

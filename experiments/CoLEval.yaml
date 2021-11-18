@@ -7,12 +7,13 @@ simulation:
 
 eval:
   weights_path: ""
-  exo_driving: [False, False]
+  exo_driving: [True, True, True, True]
   rollouts: 300
-  multi_eval_type: "variable"
-  n_exo_vehs: 5
+  multi_eval_type: "fix"
+  n_exo_vehs: 4
   multi_eval_n: 5 # sample point in exo_driving
   ego_x_prep_area: 5 # area to dont put a exo-agent
+  exo_behavior: "random"
 
 train:
   checkpoint_every: 100000

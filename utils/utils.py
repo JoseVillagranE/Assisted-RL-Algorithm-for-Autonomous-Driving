@@ -9,6 +9,7 @@ except IndexError:
 
 import carla
 import numpy as np
+import random
 from agents.navigation.controller import VehiclePIDController
 
 # https://github.com/bitsauce/Carla-ppo
@@ -105,6 +106,16 @@ def PID_assign(actor, kp, kd, ki, dt):
                                       args_lateral=args_lateral_dict,
                                       args_longitudinal=args_longitudinal_dict)
     return controller
+
+
+def weighted_random(limits, n_partitions, weights=None):
+    
+    if weights:
+        idx = np.random.choice(np.arange(n_partitions), 1, p=weights)
+        increment = (limits[1] - limits[0]) // n_partitions
+        limits = [limits[0] + increment*idx, limits[0] + increment*(idx+1)]
+    sample = random.randint(*limits)
+    return sample
 
 if __name__ == "__main__":
 

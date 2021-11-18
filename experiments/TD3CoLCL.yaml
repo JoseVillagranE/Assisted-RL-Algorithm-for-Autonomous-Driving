@@ -6,7 +6,7 @@ simulation:
     fps: 10
     
 cl_train:    
-    q_of_tasks: 4
+    q_of_tasks: 2
     exo_sample: "manual"
     value_function_L: 10
     alpha: 0.2
@@ -14,15 +14,15 @@ cl_train:
     general_tr_episodes: 200
     exo_agents:
         vehicle:
-            exo_driving: [[], [False], [False, False], [False, False, False]]
+            exo_driving: [[], [False]] #[[], [False], [False, False], [False, False, False]]
             initial_pos: 
-                x: [[], [149], [149, 170], [149, 170, 190]] # 1st is empty road
-                y: [[], [63], [63, 58], [63, 58, 63]]
-                yaw: [[], [180], [180, 180], [180, 180, 180]]
+                x: [[], [149]] #[[], [149], [149, 170], [149, 170, 190]] # 1st is empty road
+                y: [[], [63]] #[[], [63], [63, 58], [63, 58, 63]]
+                yaw: [[], [180]] #[[], [180], [180, 180], [180, 180, 180]]
             end_pos:
-                x: [[], [], [], []]
-                y: [[], [], [], []]
-                yaw: [[], [], [], []]
+                x: [[], []] # [[], [], [], []]
+                y: [[], []] #[[], [], [], []]
+                yaw: [[], []] #[[], [], [], []]
         peds:
             initial_pos:
                 x: [[], [], [], []] # 1st is empty road

@@ -17,7 +17,7 @@ from rewards_fns import reward_functions, weighted_rw_fn
 from utils.preprocess import create_encode_state_fn
 from utils.checkpointing import save_checkpoint, load_checkpoint
 from utils.SamplePoints import sample_points
-from utils.utils import distance_bet_points
+from utils.utils import distance_bet_points, weighted_random
 
 def signal_handler(sig, frame):
     print('You pressed Ctrl+C!')
@@ -42,7 +42,7 @@ def cat_extra_exo_agents_info(old_info, new_info):
 def get_weight_path(model, eval_type, n_exo_vehs, exo_driving):
     
     prefix = os.path.join("models_logs", "VAE", model)
-    if eval_type == "fix" and n_exo_vehs < 5:
+    if eval_type == "fix" and n_exo_vehs < 5 and False:
         n_exo_vehs = str(n_exo_vehs)
         if sum(exo_driving) > 0:
             n_exo_vehs += "-" + str(sum(exo_driving))
@@ -144,7 +144,7 @@ def multi_evaluation():
             exo_vehs_ipos=exo_veh_ipos,
             n_peds=n_peds,
             peds_ipos=peds_ipos,
-            exo_driving=config.eval.exo_driving,
+            exo_driving=exo_driving,
         )
     )
 
@@ -182,26 +182,43 @@ def multi_evaluation():
                     while check_collision(exo_veh_x, exo_veh_y, exo_vehs_ipos):
                         exo_veh_x = random.randint(*x_limits)
                         exo_veh_y = random.randint(*y_limits)
-                exo_veh_yaw = random.randint(*yaw_limits)
+                
+                if config.eval.exo_behavior == "straight":
+                    exo_veh_yaw = 180
+                    exo_veh_y = weighted_random(y_limits, 2, [0.2, 0.8])
+                elif config.eval.exo_behavior == "lead":
+                    exo_veh_x = random.randint(x_limits[0], x_limits[0] + (x_limits[1] - x_limits[0]) // 4)
+                    exo_veh_yaw = 0
+                    exo_veh_y = random.randint(y_limits[0] + (y_limits[1] - y_limits[0]) // 2, y_limits[1])
+                else:
+                    exo_veh_yaw = random.randint(*yaw_limits)
                 ipos = [exo_veh_x, exo_veh_y, exo_veh_yaw]
                 exo_vehs_ipos.append(ipos)
+                
+                if config.eval.exo_behavior == "straight":
+                    exo_veh_x = 100
+                    exo_veh_yaw = 180
+                elif config.eval.exo_behavior == "lead":
+                    exo_veh_x = 219
+                    exo_veh_yaw = 0
+                else:
+                    exo_veh_x = random.randint(*x_limits)
+                    exo_veh_yaw = random.randint(*yaw_limits)
+                   
                 exo_veh_y = random.randint(*y_limits)
-                exo_veh_x = random.randint(*x_limits)
-                exo_veh_yaw = random.randint(*yaw_limits)
                 epos = [exo_veh_x, exo_veh_y, exo_veh_yaw]
                 exo_vehs_epos.append(epos)
                 wps = []
                 if exo_driving[i]:
-                    if config.eval.beh == "normal":          
-                        exo_veh_x = 110 # verificar
-                        exo_veh_yaw = 0
                     wps = sample_points(ipos[:2],
                                         epos[:2],
                                         x_limits,
                                         y_limits,
                                         direction=0,
-                                        n=config.eval.multi_eval_n)
+                                        n=config.eval.multi_eval_n,
+                                        behavior=config.eval.exo_behavior)
                 exo_wps.append(wps)
+                
             state = env.reset(exo_vehs_ipos=exo_vehs_ipos,
                               exo_vehs_epos=exo_vehs_epos,
                               peds_ipos=peds_ipos,

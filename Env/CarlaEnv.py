@@ -242,13 +242,17 @@ class CarlaEnv(gym.Env):
 
                 self.exo_vehs_initial_transforms.append(exo_veh_initial_transform)
                 self.exo_vehs.append(self.exo_vehicle)
-                self.exo_vehs_controller.append(PID_assign(
-                        self.exo_vehicle,
-                        config.exo_agents.vehicle.PID.lateral_Kp,
-                        config.exo_agents.vehicle.PID.lateral_Kd,
-                        config.exo_agents.vehicle.PID.lateral_Ki,
-                        self._dt,
-                    ))
+                
+                if exo_driving[i]:
+                    self.exo_vehs_controller.append(PID_assign(
+                            self.exo_vehicle,
+                            config.exo_agents.vehicle.PID.lateral_Kp,
+                            config.exo_agents.vehicle.PID.lateral_Kd,
+                            config.exo_agents.vehicle.PID.lateral_Ki,
+                            self._dt,
+                        ))
+                else:
+                    self.exo_vehs_controller.append(False)
 
                 if ed:
                     self.exo_vehicle.set_automatic_wp()
@@ -411,16 +415,18 @@ class CarlaEnv(gym.Env):
         self.agent.set_simulate_physics(False)  # freeze the vehicle
         self.world.tick()
         self.agent.set_simulate_physics(True)
+        self.exo_driving = exo_driving
 
         diff = len(self.exo_vehs_initial_transforms) - len(exo_vehs_ipos)
         if diff > 0:
             # delete some exo-vehicles
             for i in range(diff):
+                # exo_veh.disable_autopilot_mode()
                 self.exo_vehs[i].destroy()
             del self.exo_vehs[:diff]
             del self.exo_vehs_initial_transforms[:diff]
+            del self.exo_driving[:diff]
             del self.exo_vehs_controller[:diff]
-
         elif diff < 0:
             # add exo_veh
             for i in range(abs(diff)):
@@ -442,7 +448,10 @@ class CarlaEnv(gym.Env):
                     target_speed=config.exo_agents.vehicle.target_speed,
                     vehicle_type=config.exo_agents.vehicle.vehicle_type,
                 )
+                
                 if exo_driving[i]:
+                    
+                    # exo_veh.enable_autopilot_mode()
                     self.exo_vehs_controller.append(PID_assign(
                         exo_veh,
                         config.exo_agents.vehicle.PID.lateral_Kp,
@@ -450,10 +459,12 @@ class CarlaEnv(gym.Env):
                         config.exo_agents.vehicle.PID.lateral_Ki,
                         self._dt,
                     ))
+                else:
+                    self.exo_vehs_controller.append(False)
+                        
 
                 self.exo_vehs.append(exo_veh)
                 self.exo_vehs_initial_transforms.append(transform)
-                self.exo_driving.append(exo_driving[i])
 
         for i, (exo_veh, exo_veh_ipos) in enumerate(zip(self.exo_vehs, exo_vehs_ipos)):
             exo_veh_location = carla.Location(x=exo_veh_ipos[0], y=exo_veh_ipos[1], z=1)

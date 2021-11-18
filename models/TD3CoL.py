@@ -161,6 +161,7 @@ class TD3CoL:
             self.B_e = []
             batch_size = 1
             self.cl_batch_size = config.train.batch_size
+            self.cl_batch_idxs_sampling = config.cl_batch_idxs_sampling
             
         rm_prop = 1
         if self.enable_trauma_memory:
@@ -182,7 +183,8 @@ class TD3CoL:
                 )
             rm_prop = 1 - config.train.trauma_memory.prop    
         
-
+        a_batch_size = (config.train.batch_size * self.agent_prop*rm_prop) // self.q_of_tasks
+        e_batch_size = config.train.batch_size // self.q_of_tasks
         for i in range(self.q_of_tasks):
             if self.type_RM == "sequential":
                 self.replay_memory = SequentialDequeMemory(rw_weights)
@@ -191,14 +193,14 @@ class TD3CoL:
                 self.replay_memory = RandomDequeMemory(
                     queue_capacity=config.train.max_memory_size,
                     rw_weights=rw_weights,
-                    batch_size=round(config.train.batch_size * self.agent_prop*rm_prop),
+                    batch_size=a_batch_size,
                     temporal=self.temporal_mech,
                     win=config.train.rnn_nsteps,
                 )
                 self.replay_memory_e = RandomDequeMemory(
                     queue_capacity=config.train.max_memory_size,
                     rw_weights=rw_weights,
-                    batch_size=round(config.train.batch_size),
+                    batch_size=e_batch_size,
                     temporal=self.temporal_mech,
                     win=config.train.rnn_nsteps,
                 )
@@ -211,7 +213,7 @@ class TD3CoL:
                     rw_weights=rw_weights,
                     temporal=self.temporal_mech,
                     win=config.train.rnn_nsteps,
-                    batch_size=round(config.train.batch_size*self.agent_prop*rm_prop),
+                    batch_size=a_batch_size,
                 )
                 self.replay_memory_e = PrioritizedDequeMemory(
                     queue_capacity=config.train.max_memory_size,
@@ -220,7 +222,7 @@ class TD3CoL:
                     rw_weights=rw_weights,
                     temporal=self.temporal_mech,
                     win=config.train.rnn_nsteps,
-                    batch_size=round(config.train.batch_size),
+                    batch_size=e_batch_size,
                 )
 
             if self.q_of_tasks > 1:
@@ -443,9 +445,11 @@ class TD3CoL:
             
         else:
             for i in set(indexs_e):
-                ith_idx = np.where(np.array(indexs_e) == i)[0]
+                ith_idx = np.where(np.array(indexs_e) == i)
                 js = np.array(inter_idxs_e)[ith_idx]
-                self.B_e[i].update_priorities(js, TD[js].abs().detach().cpu().numpy())
+                print(ith_idx)
+                print(js)
+                self.B_e[i].update_priorities(js, TD[ith_idx].abs().detach().cpu().numpy())
             if not is_pretraining:    
                 for i in set(indexs_a):
                     ith_idx = np.where(np.array(indexs_a) == i)[0]
@@ -717,7 +721,10 @@ class TD3CoL:
                 dones = []
                 isw = []
                 inter_idxs = []
-                indexs = random.choices(list(range(len(self.B_e))), k=self.cl_batch_size)
+                if self.cl_batch_idxs_sampling == "random":
+                    indexs = random.choices(list(range(len(self.B_e))), k=self.q_of_tasks)
+                else:
+                    indexs = range(self.q_of_tasks)
                 for i in indexs:
                     state, action, reward, next_state, done, isw_, idx = self.B_e[
                         i

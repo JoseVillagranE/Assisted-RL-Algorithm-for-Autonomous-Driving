@@ -55,6 +55,7 @@ class VAE_Actor(nn.Module):
         self.z_dim = z_dim
         self.stats_encoder = stats_encoder
         self.hidden_cat = hidden_cat
+        self.device = rnn_config["device"]
 
         self.lstm = None
         if temporal_mech:
@@ -113,7 +114,7 @@ class VAE_Actor(nn.Module):
 
         if len(VAE_weights_path) > 0:
             print("Loading VAE weights..")
-            self.vae.load_state_dict(torch.load(VAE_weights_path))
+            self.vae.load_state_dict(torch.load(VAE_weights_path, map_location=self.device))
             if is_freeze_params:
                 print("Freezing VAE")
                 freeze_params(self.vae)
@@ -121,7 +122,7 @@ class VAE_Actor(nn.Module):
         if self.lstm is not None:
             print("Loading RNN weights..")
             self.lstm.load_state_dict(
-                torch.load(rnn_config["weights_path"]), strict=False
+                torch.load(rnn_config["weights_path"], map_location=self.device), strict=False
             )
             if is_freeze_params:
                 print("Freezing RNN")
@@ -221,6 +222,7 @@ class VAE_Critic(nn.Module):  # No needed temporal mechanism
         self.layers = nn.ModuleList()
         self.lstm = None
         self.hidden_cat = hidden_cat
+        self.device = rnn_config["device"]
         
         if temporal_mech:
             if rnn_config["rnn_type"] == "lstm":
@@ -249,7 +251,7 @@ class VAE_Critic(nn.Module):  # No needed temporal mechanism
         if self.lstm is not None:
             print("Loading RNN weights..")
             self.lstm.load_state_dict(
-                torch.load(rnn_config["weights_path"]), strict=False
+                torch.load(rnn_config["weights_path"], map_location=self.device), strict=False
             )
             if is_freeze_params:
                 print("Freezing RNN")
