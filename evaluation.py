@@ -186,7 +186,7 @@ def multi_evaluation():
                 if config.eval.exo_behavior == "straight":
                     exo_veh_yaw = 180
                     exo_veh_y = weighted_random(y_limits, 2, [0.2, 0.8])
-                elif config.eval.exo_behavior == "lead":
+                elif config.eval.exo_behavior == "lead" and exo_driving[i]:
                     exo_veh_x = random.randint(x_limits[0], x_limits[0] + (x_limits[1] - x_limits[0]) // 4)
                     exo_veh_yaw = 0
                     exo_veh_y = random.randint(y_limits[0] + (y_limits[1] - y_limits[0]) // 2, y_limits[1])

@@ -26,7 +26,7 @@ Y_LIMITS = config.cl_train.y_limits
 YAW_LIMITS = config.cl_train.yaw_limits
 DIRECTION = config.cl_train.direction
 N_SAMPLE_POINTS = config.cl_train.n_sample_points
-
+EXPERIMENT_PATH = ""
 
 
 def signal_handler(sig, frame):
@@ -44,15 +44,24 @@ def parse_args():
 
     return args
 
+def save_stats(filename, file, filetype="numpy"):
+    file = np.array(file) if filetype=="numpy" else file
+    np.save(os.path.join(EXPERIMENT_PATH, filename), file)
+    
+def cat_extra_exo_agents_info(old_info, new_info):
+    
+    info = []
+    for old_exo_info, new_exo_info in zip(old_info, new_info):
+        info.append(np.vstack((old_exo_info, new_exo_info)))
+    return info
 
 def get_wps(pos, epos):
     # pos -> [[x, y, yaw], [x, y, yaw], [..]] 
     wps = []
     for i in range(len(pos)):
-        if len(epos) == 0:
+        if len(epos[i]) == 0:
             wps.append([])
         else:
-            e = [epos[0][i], epos[1][i]]
             wps.append(sample_points(pos[i][:2], 
                             epos[i][:2],
                             X_LIMITS, 
@@ -170,8 +179,10 @@ def cl_train():
     os.makedirs(os.path.join(save_path, exp_name), exist_ok=True)
 
     # set a new particular save path
+    global EXPERIMENT_PATH
     particular_save_path = os.path.join(save_path, exp_name)
-
+    EXPERIMENT_PATH = particular_save_path
+    
     # Setup the logger
     logger = init_logger(particular_save_path, exp_name)
     logger.info(f"training config: {pprint.pformat(config)}")
@@ -235,6 +246,14 @@ def cl_train():
     test_rewards = []
     info_finals_state = []
     test_info_finals_state = []
+    agent_extra_info = []
+    test_agent_extra_info = []
+    exo_agents_extra_info = []
+    test_exo_agents_extra_info = []
+    train_historical_losses = []
+    V_stats = []
+    P_stats = []
+    I_stats = []
 
     # load checkpoint if is necessary
     model_dicts, optimizers_dicts, rewards, start_episode = load_checkpoint(
@@ -257,83 +276,76 @@ def cl_train():
         rewards.append([])
 
     try:
-        print("Training in Base Task..")
+        print("Training on a Base Task..")
         value = 0
         episode = 0
         while mean(V[0]) < config.cl_train.V_limit:
-            r, B = train(env, model, rw_weights, logger, episode, tasks[0], 0)
+            r, stats = train(env, model, rw_weights, logger, episode, tasks[0], 0)
             V[0].append(
                 config.cl_train.alpha * r + (1 - config.cl_train.alpha) * V[0][-1]
             )
             rewards[0].append(r)
             episode += 1
+            print(f"Mean_V: {mean(V[0])}")
+            info_finals_state.append(stats["info_finals_state"])
+            agent_extra_info.append(stats["agent_extra_info"])
+            exo_agents_extra_info.append(stats["exo_agents_extra_info"])
+            train_historical_losses.append(stats["losses"])
 
-        # Cuanto ruido debería inducir ??
+        print("Categorizing Tasks..")
         for i, task in enumerate(tasks):
+            print(f"task = {task}")
             for e in range(config.cl_train.episodes):
-                r, B = train(env, model, rw_weights, logger, e, task, i)
+                r, stats = train(env, model, rw_weights, logger, e, task, i)
                 V[i].append(
                     config.cl_train.alpha * r + (1 - config.cl_train.alpha) * V[i][-1]
                 )
                 rewards[i].append(r)
+                info_finals_state.append(stats["info_finals_state"])
+                agent_extra_info.append(stats["agent_extra_info"])
+                exo_agents_extra_info.append(stats["exo_agents_extra_info"])
+                train_historical_losses.append(stats["losses"])
 
-        for k in config.cl_train.general_tr_episodes:
+        print("General training..")
+        for k in range(config.cl_train.general_tr_episodes):
+            V_stats.append(V)
             G = np.array([np.exp(-mean(V[i])) for i in range(len(tasks))])
             P = G / G.sum()
             I = np.random.choice(len(tasks), p=P)
             for e in range(config.cl_train.episodes):
-                r, B = train(env, model, rw_weights, logger, e, task[I], I)
+                r, stats = train(env, model, rw_weights, logger, e, tasks[I], I)
                 V[I].append(
                     config.cl_train.alpha * r + (1 - config.cl_train.alpha) * V[I][-1]
                 )
                 rewards[I].append(r)
+                info_finals_state.append(stats["info_finals_state"])
+                agent_extra_info.append(stats["agent_extra_info"])
+                exo_agents_extra_info.append(stats["exo_agents_extra_info"])
+                train_historical_losses.append(stats["losses"])
+                
+            P_stats.append(P)
+            I_stats.append(I)
 
     except KeyboardInterrupt:
         pass
 
     finally:
-        np.save(os.path.join(particular_save_path, "rewards.npy"), np.array(rewards))
-        np.save(
-            os.path.join(particular_save_path, "test_rewards.npy"),
-            np.array(test_rewards),
-        )
-        np.save(
-            os.path.join(particular_save_path, "info_finals_state.npy"),
-            np.array(info_finals_state),
-        )
-        np.save(
-            os.path.join(particular_save_path, "test_info_finals_state.npy"),
-            np.array(test_info_finals_state),
-        )
-
-        np.save(
-            os.path.join(particular_save_path, "train_agent_extra_info.npy"),
-            agent_extra_info,
-        )
-        np.save(
-            os.path.join(particular_save_path, "test_agent_extra_info.npy"),
-            test_agent_extra_info,
-        )
+        save_stats("rewards.npy", rewards, filetype="numpy")
+        save_stats("test_rewards.npy", test_rewards, filetype="numpy")
+        save_stats("info_finals_state.npy", info_finals_state, filetype="numpy")
+        save_stats("test_info_finals_state.npy", test_info_finals_state, filetype="numpy")
+        save_stats("train_agent_extra_info.npy", agent_extra_info)
+        save_stats("test_agent_extra_info.npy", test_agent_extra_info)
+        save_stats("train_exo_agents_extra_info.npy", exo_agents_extra_info)
+        save_stats("test_exo_agents_extra_info.npy", test_exo_agents_extra_info)
+        save_stats("train_historical_losses.npy", train_historical_losses)
+        save_stats("V_stats.npy", V_stats)
+        save_stats("P_stats.npy", P_stats)
+        save_stats("I_stats.npy", I_stats)
         
-        np.save(
-            os.path.join(particular_save_path, "train_exo_agents_extra_info.npy"),
-            exo_agents_extra_info,
-        )
-        np.save(
-            os.path.join(particular_save_path, "test_exo_agents_extra_info.npy"),
-            test_exo_agents_extra_info,
-        )
-        
-        np.save(
-            os.path.join(particular_save_path, "train_historical_losses.npy"),
-            train_historical_losses,
-        )
         
         if config.run_type in ["CoL", "TD3CoL"]:
-            np.save(
-                os.path.join(particular_save_path, "pre_train_historical_losses.npy"),
-                model.pretraining_losses,
-            )
+            save_stats("pre_train_historical_losses.npy", model.pretraining_losses)
 
         # Last checkpoint to save
         
@@ -370,8 +382,6 @@ def cl_train():
 
 
 def train(env, model, rw_weights, logger, episode, task, i):
-    
-    print(task)
 
     state, terminal_state, episode_reward = (
         env.reset(exo_vehs_ipos=task["exo_vehs_ipos"],
@@ -385,10 +395,8 @@ def train(env, model, rw_weights, logger, episode, task, i):
     terminal_state_info = ""
     states_deque = deque(maxlen=config.train.rnn_nsteps)
     next_states_deque = deque(maxlen=config.train.rnn_nsteps)
-
-    terminal_state = False
-    states_deque = deque(maxlen=1)
-    next_states_deque = deque(maxlen=1)
+    agent_stats = env.get_agent_extra_info()
+    exo_agents_stats = env.get_exo_agent_extra_info()
     while not terminal_state:
         for step in range(config.train.steps):
             if env.controller.parse_events():
@@ -420,7 +428,7 @@ def train(env, model, rw_weights, logger, episode, task, i):
             if not config.reward_fn.normalize:
                 reward = weighted_rw  # rw is only a scalar value
             # Because exist manual and straight control also
-            if config.run_type in ["DDPG", "CoL"]:
+            if config.run_type in ["DDPG", "CoL", "TD3CoL"]:
                 if config.train.temporal_mech:
                     model.B[i].add_to_memory(
                         (
@@ -444,6 +452,10 @@ def train(env, model, rw_weights, logger, episode, task, i):
 
             episode_reward.append(reward)
             state = next_state
+            agent_stats = np.vstack((agent_stats, env.get_agent_extra_info()))
+            if len(task["exo_vehs_ipos"]) > 0:
+                exo_agents_stats = cat_extra_exo_agents_info(exo_agents_stats,
+                                                             env.get_exo_agent_extra_info())
 
             if config.vis.render:
                 env.render()
@@ -469,8 +481,15 @@ def train(env, model, rw_weights, logger, episode, task, i):
                     )
                 break
 
-    model.update()
-    return sum(episode_reward)
+    losses = model.update()
+    stats = {
+            "agent_extra_info": agent_stats,
+            "exo_agents_extra_info": exo_agents_stats,
+            "info_finals_state": (episode, terminal_state_info),
+            "losses": losses
+        }  
+    
+    return episode_reward, stats
 
 
 def main():

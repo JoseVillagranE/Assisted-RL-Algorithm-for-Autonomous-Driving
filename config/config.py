@@ -85,8 +85,8 @@ config.train.start_to_update = 0
 config.train.optimization_steps = 1
 config.train.action_space = 2  # [steer, throttle]
 config.train.measurements_to_include = set(
-    # ["steer"]
-    # + ["throttle"]
+    ["steer"]
+    + ["throttle"]
     # + ["speed"]
     # ["orientation"]
 )
@@ -361,7 +361,7 @@ config.vis.live_plotting = False
 def update_config(config_file):
     print(config_file)
     with open(config_file) as f:
-        exp_config = edict(yaml.load(f))
+        exp_config = edict(yaml.load(f, Loader=yaml.FullLoader))
         recursive_update(exp_config, c=config)
 
 

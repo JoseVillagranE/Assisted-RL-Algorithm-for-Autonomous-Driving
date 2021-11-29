@@ -6,7 +6,6 @@ import json
 import os
 import numpy as np
 
-
 def plot_data(data, x_axis, value, is_test=False, condition=None, smooth=1, **kwargs):
 
     if smooth > 1:
@@ -89,18 +88,38 @@ def plot_extra_info(data, exo_data, finals_states=None):
     if finals_states is not None:
         assert finals_states.shape[0] == data.shape[0]
 
+    labels = {"Collision Veh": "Collision Veh", "Goal": "Goal", "Collision Other": "Collision Other"}
+
     for episode, d in enumerate(data):
         color = (episode / len(data), 0, 0)
+        label = "Collision Veh"
         if finals_states is not None:
             if finals_states[episode, 1] in ["Goal", "Cross Finish Line"]:
                 color = (0, 0, episode / len(data))
+                label = "Goal"
             elif  finals_states[episode, 1] == "Collision Other":
                 color = (0, episode / len(data), 0)
-        axes[0].plot(d[:, 0], d[:, 1], color=color) # pos
-        axes[1].plot(d[:, 3], color=color)
+                label = "Collision Other"
 
+        if (episode > len(data) - 300 and label in labels):
+            axes[0].plot(d[:, 0], d[:, 1], color=color, label=label) # pos
+            del labels[label]
+        else:
+            axes[0].plot(d[:, 0], d[:, 1], color=color) # pos
+            axes[1].plot(d[:, 3], color=color)
+
+    fig.suptitle("Estadisticas del agente a lo largo de los episodios", fontweight='bold')
+    axes[0].set_title("Posición")
+    axes[1].set_title("Velocidad")
     axes[0].set_xlim([100, 220])
     axes[0].set_ylim([40, 80])
+    axes[1].set_xlabel("Step")
+    axes[1].set_ylabel("Speed[Km/Hr]")
+    axes[0].legend(loc='upper right', handlelength=1, borderpad=0.2, labelspacing=0.2)
+    leg = axes[0].get_legend()
+    leg.legendHandles[0].set_color('green')
+    leg.legendHandles[1].set_color('red')
+    leg.legendHandles[2].set_color('blue')
     plt.show()
 
 def plot_losses(data, method):
@@ -126,9 +145,9 @@ if __name__ == "__main__":
     import pathlib
     prefix_path  = os.path.join(pathlib.Path(__file__).parent.resolve().parent, "models_logs")
     vision = "VAE"
-    learn_alg = "CoL"
+    learn_alg = "TD3CoL"
     alg = os.path.join(vision, learn_alg)
-    date = "2021-10-19-11-54"
+    date = "2021-10-30-23-18"
     path = os.path.join(prefix_path, alg, date)
 
     info_final_states = np.load(os.path.join(path, "info_finals_state.npy"))

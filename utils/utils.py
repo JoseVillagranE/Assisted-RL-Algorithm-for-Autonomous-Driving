@@ -10,6 +10,7 @@ except IndexError:
 import carla
 import numpy as np
 import random
+sys.path.append(os.path.join(config.carla_dir, "PythonAPI", "carla"))
 from agents.navigation.controller import VehiclePIDController
 
 # https://github.com/bitsauce/Carla-ppo
@@ -20,7 +21,7 @@ def print_transform(transform):
 
 def get_actor_display_type(actor):
     name = actor.type_id.replace("_", ".").split(".")[0]
-    return name 
+    return name
 
 def get_actor_display_name(actor, truncate=250):
     name = " ".join(actor.type_id.replace("_", ".").title().split(".")[1:])
@@ -52,7 +53,7 @@ def angle_diff(v0, v1):
 def distance_bet_points(A, B):
     distance = np.linalg.norm(B-A)
     return distance
-    
+
 def distance_to_lane(A, B, p):
     num = np.linalg.norm(np.cross(B-A, A-p))
     den = np.linalg.norm(B-A)
@@ -98,7 +99,7 @@ def write_file_w_wp(list_wp, file):
         f.write(f"{wp.x} {wp.y} {wp.z}\n")
 
     f.close()
-    
+
 def PID_assign(actor, kp, kd, ki, dt):
     args_lateral_dict = {'K_P': kp, 'K_D': kd, 'K_I': ki, 'dt': dt}
     args_longitudinal_dict = {'K_P': kp, 'K_D': kd, 'K_I': ki, 'dt': dt}
@@ -109,7 +110,7 @@ def PID_assign(actor, kp, kd, ki, dt):
 
 
 def weighted_random(limits, n_partitions, weights=None):
-    
+
     if weights:
         idx = np.random.choice(np.arange(n_partitions), 1, p=weights)
         increment = (limits[1] - limits[0]) // n_partitions
@@ -117,11 +118,16 @@ def weighted_random(limits, n_partitions, weights=None):
     sample = random.randint(*limits)
     return sample
 
+def weights_sample(rb_list, threshold):
+    return [1 if rb.get_memory_size() > threshold else 0 for rb in rb_list]
+
 if __name__ == "__main__":
 
     # list_wp = [carla.Location(x=100+i, y=20, z =1.0) for i in range(10)]
     # write_file_w_wp(list_wp, "test.txt")
 
-    wp_list = read_wp_from_file("test.txt")
-    for wp in wp_list:
-        print(f"(x, y, z) = {wp.x}, {wp.y}, {wp.z}")
+    # wp_list = read_wp_from_file("test.txt")
+    # for wp in wp_list:
+    #     print(f"(x, y, z) = {wp.x}, {wp.y}, {wp.z}")
+    weights = weights_sample([[1, 2, 3], [1]], 2)
+    print(weights)

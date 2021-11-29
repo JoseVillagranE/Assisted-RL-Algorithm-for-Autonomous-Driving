@@ -15,6 +15,7 @@ from ExperienceReplayMemory import (
 from ConvVAE import VAE_Actor, VAE_Critic
 from Conv_Actor_Critic import Conv_Actor, Conv_Critic
 from utils.Network_utils import OUNoise
+from utils.utils import weights_sample
 
 from LSTM import MDN_RNN, LSTM
 
@@ -162,6 +163,8 @@ class TD3CoL:
             batch_size = 1
             self.cl_batch_size = config.train.batch_size
             self.cl_batch_idxs_sampling = config.cl_batch_idxs_sampling
+            self.B_indexs_enables_get_samples = []
+            self.B_indexs_disables_get_samples = []
             
         rm_prop = 1
         if self.enable_trauma_memory:
@@ -183,8 +186,9 @@ class TD3CoL:
                 )
             rm_prop = 1 - config.train.trauma_memory.prop    
         
-        a_batch_size = (config.train.batch_size * self.agent_prop*rm_prop) // self.q_of_tasks
-        e_batch_size = config.train.batch_size // self.q_of_tasks
+        self.a_batch_size = int((config.train.batch_size * self.agent_prop*rm_prop) // self.q_of_tasks)
+        print(self.a_batch_size)
+        self.e_batch_size = int(config.train.batch_size // self.q_of_tasks)
         for i in range(self.q_of_tasks):
             if self.type_RM == "sequential":
                 self.replay_memory = SequentialDequeMemory(rw_weights)
@@ -193,14 +197,14 @@ class TD3CoL:
                 self.replay_memory = RandomDequeMemory(
                     queue_capacity=config.train.max_memory_size,
                     rw_weights=rw_weights,
-                    batch_size=a_batch_size,
+                    batch_size=self.a_batch_size,
                     temporal=self.temporal_mech,
                     win=config.train.rnn_nsteps,
                 )
                 self.replay_memory_e = RandomDequeMemory(
                     queue_capacity=config.train.max_memory_size,
                     rw_weights=rw_weights,
-                    batch_size=e_batch_size,
+                    batch_size=self.e_batch_size,
                     temporal=self.temporal_mech,
                     win=config.train.rnn_nsteps,
                 )
@@ -213,7 +217,7 @@ class TD3CoL:
                     rw_weights=rw_weights,
                     temporal=self.temporal_mech,
                     win=config.train.rnn_nsteps,
-                    batch_size=a_batch_size,
+                    batch_size=self.a_batch_size,
                 )
                 self.replay_memory_e = PrioritizedDequeMemory(
                     queue_capacity=config.train.max_memory_size,
@@ -222,7 +226,7 @@ class TD3CoL:
                     rw_weights=rw_weights,
                     temporal=self.temporal_mech,
                     win=config.train.rnn_nsteps,
-                    batch_size=e_batch_size,
+                    batch_size=self.e_batch_size,
                 )
 
             if self.q_of_tasks > 1:
@@ -318,7 +322,12 @@ class TD3CoL:
                                 config.train.load_rm_name_c,
                                 vae_encode,
                             )
-            print(f"samples of expert rm: {self.replay_memory_e.get_memory_size()}")
+                            
+            if self.q_of_tasks == 1:
+                print(f"samples of expert rm: {self.replay_memory_e.get_memory_size()}")
+            else:
+                expert_samples_size = sum([self.B_e[i].get_memory_size() for i in range(len(self.B_e))])
+                print(f"samples of expert rm: {expert_samples_size}")
 
         self.mse = nn.MSELoss(reduction="mean")
         if self.type_RM == "random":
@@ -485,6 +494,7 @@ class TD3CoL:
         actions = Variable(torch.from_numpy(actions).float())
         rewards = Variable(torch.from_numpy(rewards).float())
         next_states = Variable(torch.from_numpy(next_states).float())
+        dones = Variable(torch.from_numpy(dones))
 
         states_e = Variable(torch.from_numpy(np.array(states_e)).float())
         actions_e = Variable(torch.from_numpy(np.array(actions_e)).float())
@@ -712,40 +722,38 @@ class TD3CoL:
         )
 
     def get_multi_memory(self, is_pretraining, type_rm):
-        if self.batch_size * self.agent_prop > sum([rb.get_memory_size() for rb in self.B]):
-            if is_pretraining:
-                states = []
-                actions = []
-                rewards = []
-                next_states = []
-                dones = []
-                isw = []
-                inter_idxs = []
-                if self.cl_batch_idxs_sampling == "random":
-                    indexs = random.choices(list(range(len(self.B_e))), k=self.q_of_tasks)
-                else:
-                    indexs = range(self.q_of_tasks)
-                for i in indexs:
-                    state, action, reward, next_state, done, isw_, idx = self.B_e[
-                        i
-                    ].get_batch_for_replay()
-                    states += state
-                    actions += action
-                    rewards += reward
-                    next_states += next_state
-                    dones += done
+        if is_pretraining or self.batch_size > sum([rb.get_memory_size() for rb in self.B]):
+            states = []
+            actions = []
+            rewards = []
+            next_states = []
+            dones = []
+            isw = []
+            inter_idxs = []
+            if self.cl_batch_idxs_sampling == "random":
+                indexs = random.choices(list(range(len(self.B_e))), k=self.q_of_tasks)
+            else:
+                indexs = range(self.q_of_tasks)
+            for i in indexs:
+                if type_rm == "random":
+                    state, action, reward, next_state, done = self.B_e[i].get_batch_for_replay()
+                elif type_rm == "prioritized":
+                    state, action, reward, next_state, done, isw_, idx = self.B_e[i].get_batch_for_replay()
                     isw += isw_
                     inter_idxs += idx.tolist()
+                states += state
+                actions += action
+                rewards += reward
+                next_states += next_state
+                dones += done
 
-                states_e = states = np.array(states)
-                actions_e = actions = np.array(actions)
-                rewards = np.array(rewards)
-                next_states = np.array(next_states)
-                dones = np.array(dones)
-                indexs_a = indexs_e = indexs
-                inter_idxs_a = inter_idxs_e = inter_idxs
-            else:
-                return
+            states_e = states = np.array(states)
+            actions_e = actions = np.array(actions)
+            rewards = np.array(rewards)
+            next_states = np.array(next_states)
+            dones = np.array(dones)
+            indexs_a = indexs_e = indexs
+            inter_idxs_a = inter_idxs_e = inter_idxs
 
         else:
 
@@ -756,19 +764,25 @@ class TD3CoL:
             dones_a = []
             isw_a = []
             inter_idxs_a = []
-            indexs_a = random.choices(len(self.B), k=self.cl_batch_size)
-
-            for i in indexs:
-                state, action, reward, next_state, done, isw_, idx = self.B[
-                    i
-                ].get_batch_for_replay()
+            indexs_a = random.choices(list(range(len(self.B))), 
+                                      weights=weights_sample(self.B, threshold=self.a_batch_size),
+                                      k=self.q_of_tasks)
+            for i in indexs_a:
+                if type_rm == "random":
+                    state, action, reward, next_state, done = self.B[
+                        i
+                        ].get_batch_for_replay()
+                elif type_rm == "prioritized":
+                    state, action, reward, next_state, done, isw_, idx = self.B[
+                        i
+                        ].get_batch_for_replay()
+                    isw_a += isw_
+                    inter_idxs_a += idx
                 states_a += state
                 actions_a += action
                 rewards_a += reward
                 next_states_a += next_state
                 dones_a += done
-                isw_a += isw_
-                inter_idxs_a += idx
 
             states_e = []
             actions_e = []
@@ -777,19 +791,26 @@ class TD3CoL:
             dones_e = []
             isw_e = []
             inter_idxs_e = []
-            indexs_e = random.choices(len(self.B_e), k=self.cl_batch_size)
+            indexs_e = random.choices(list(range(len(self.B_e))),
+                                      weights=weights_sample(self.B_e, threshold=self.e_batch_size),
+                                      k=self.q_of_tasks)
 
             for i in indexs_e:
-                state, action, reward, next_state, done, isw_, idx = self.B[
-                    i
-                ].get_batch_for_replay()
+                if type_rm == "random":
+                    state, action, reward, next_state, done = self.B_e[
+                        i
+                    ].get_batch_for_replay()
+                elif type_rm == "prioritized":
+                    state, action, reward, next_state, done, isw_, idx = self.B_e[
+                        i
+                    ].get_batch_for_replay()
+                    isw_e += isw_
+                    inter_idxs_e += idx
                 states_e += state
                 actions_e += action
                 rewards_e += reward
                 next_states_e += next_state
                 dones_e += done
-                isw_e += isw_
-                inter_idxs_e += idx
 
             states, actions, rewards, next_states, dones = cat_experience_tuple(
                 np.array(states_a),
@@ -804,7 +825,12 @@ class TD3CoL:
                 np.array(dones_e),
             )
             
-            isw = (isw_a, isw_e)  
+            actions = actions.squeeze()
+            rewards = rewards.squeeze()
+            dones = dones.squeeze()
+            states_e = np.array(states_e)
+            actions_e = np.array(actions_e)
+            isw = (isw_a, isw_e)
 
         return (
             states,
@@ -821,6 +847,9 @@ class TD3CoL:
             indexs_e,
         )
     
+    
+    def b_indexes_get_samples_update(self):
+        pass
     
     def soft_update(self, local_model, target_model):
         for target_param, param in zip(
