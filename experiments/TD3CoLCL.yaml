@@ -12,6 +12,8 @@ cl_train:
     alpha: 0.2
     episodes: 10
     general_tr_episodes: 200
+    testing_frequency: 1
+    n_scenarios_testing: 5
     exo_agents:
         vehicle:
             exo_driving: [[], [False]] #[[], [False], [False, False], [False, False, False]]

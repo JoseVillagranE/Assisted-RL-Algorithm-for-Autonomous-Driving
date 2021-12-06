@@ -70,8 +70,15 @@ def get_wps(pos, epos):
                             N_SAMPLE_POINTS))
     return wps
 
+def check_collision(exo_veh_x, exo_veh_y, exo_vehs_ipos, tol=20):
+    A = np.array([exo_veh_x, exo_veh_y])
+    for exo_pos in exo_vehs_ipos:
+        if distance_bet_points(A, np.array(exo_pos[:2])) < tol:
+            return True
+    return False
+
 # TODO: With more than one steps you should manage next_latent state dimensions
-def get_tasks():
+def get_tasks(exo_agents_sample_method, n_exo_agents=0):
 
     tasks = []
     exo_vehs_ipos = []
@@ -81,16 +88,52 @@ def get_tasks():
     peds_ipos = []
     peds_epos = []
 
-    if config.cl_train.exo_sample == "random":
-
-        for i in range(config.cl_train.n_exo_agents):
-            exo_veh_x = random.randint(*X_LIMITS)
-            exo_veh_y = random.randint(*Y_LIMITS)
-            exo_veh_yaw = random.randint(*YAW_LIMITS)
-            pos = [exo_veh_x, exo_veh_y, exo_veh_yaw]
-            exo_vehs_ipos.append(pos)
+    if exo_agents_sample_method == "random":
+        # only exo-vehicles at the moment
+        _exo_driving = random.choices([False], k=n_exo_agents)
+        ipos = []
+        epos = []
+        wps = []
+        for i in range(n_exo_agents):
+            exo_veh_x = [random.randint(*X_LIMITS) for i in range(2)]
+            exo_veh_y = [random.randint(*Y_LIMITS) for i in range(2)]
+            exo_veh_yaw = [random.randint(*YAW_LIMITS) for i in range(2)]
+            if i > 0:
+                while check_collision(exo_veh_x[0], exo_veh_y[0], ipos):
+                    exo_veh_x[0] = random.randint(*X_LIMITS)
+                    exo_veh_y[0] = random.randint(*Y_LIMITS)
             
-    elif config.cl_train.exo_sample == "manual":
+            _ipos = [exo_veh_x[0], exo_veh_y[0], exo_veh_yaw[0]]
+            _epos = [exo_veh_x[1], exo_veh_y[1], exo_veh_yaw[1]]
+            if _exo_driving[i]:
+                driving_type = random.choice(["lead", "straight", "random"])
+                if driving_type == "straight":
+                    exo_veh_x[1] = 100
+                    exo_veh_yaw[1] = 180
+                elif driving_type == "lead":
+                    exo_veh_x[1] = 219
+                    exo_veh_yaw[1] = 0
+                _epos = [exo_veh_x[1], exo_veh_y[1], exo_veh_yaw[1]]
+                _wps = sample_points(_ipos[:2],
+                                    _epos[:2],
+                                    X_LIMITS,
+                                    Y_LIMITS,
+                                    direction=0,
+                                    n=config.eval.multi_eval_n,
+                                    behavior=driving_type)
+                
+            else:
+                _wps = []
+            ipos.append(_ipos)
+            epos.append(_epos)
+            wps.append(_wps)
+        exo_vehs_ipos.append(ipos)
+        exo_vehs_epos.append(epos)
+        exo_wps.append(wps)
+        peds_ipos.append([])
+        peds_epos.append([])
+        exo_driving.append(_exo_driving)
+    elif exo_agents_sample_method == "manual":
         
         for i in range(len(config.cl_train.exo_agents.vehicle.initial_pos.x)):
             pos = list(zip(
@@ -135,17 +178,17 @@ def get_tasks():
             
     else:
         raise NotImplementedError(
-            "Sample " + config.cl_train.exo_sample + "is not implemented"
+            "Exo-Sample " + exo_agents_sample_method + " method is not implemented"
         )
     
         
-    for ev_ipos, ev_epos, ed, p_ipos, p_epos in zip(exo_vehs_ipos, exo_vehs_epos, exo_driving, peds_ipos, peds_epos):
+    for ev_ipos, ev_epos, ed, ew, p_ipos, p_epos in zip(exo_vehs_ipos, exo_vehs_epos, exo_driving, exo_wps, peds_ipos, peds_epos):
         task = {
                 "n_vehs": len(ev_ipos),
                 "exo_vehs_ipos": ev_ipos,
                 "exo_vehs_epos": ev_epos,
                 "exo_driving": ed,
-                "exo_wps": exo_wps,
+                "exo_wps": ew,
                 "peds_ipos": p_ipos,
                 "peds_epos": p_epos         
             }
@@ -266,7 +309,7 @@ def cl_train():
     episode_test = 0
 
     print("Creating Tasks..")
-    tasks = get_tasks()  # dict
+    tasks = get_tasks(config.cl_train.exo_sample)  # dict
     V = []
     rewards = []
     for i in range(len(tasks)):
@@ -292,6 +335,9 @@ def cl_train():
             exo_agents_extra_info.append(stats["exo_agents_extra_info"])
             train_historical_losses.append(stats["losses"])
 
+        print(f"The algoritmh took {episode} episodes to complete in a succesful way the base task")
+        logger.info(f"The algoritmh took {episode} episodes to complete in a succesful way the base task")
+
         print("Categorizing Tasks..")
         for i, task in enumerate(tasks):
             print(f"task = {task}")
@@ -307,7 +353,7 @@ def cl_train():
                 train_historical_losses.append(stats["losses"])
 
         print("General training..")
-        for k in range(config.cl_train.general_tr_episodes):
+        for general_e in range(config.cl_train.general_tr_episodes):
             V_stats.append(V)
             G = np.array([np.exp(-mean(V[i])) for i in range(len(tasks))])
             P = G / G.sum()
@@ -322,9 +368,15 @@ def cl_train():
                 agent_extra_info.append(stats["agent_extra_info"])
                 exo_agents_extra_info.append(stats["exo_agents_extra_info"])
                 train_historical_losses.append(stats["losses"])
-                
             P_stats.append(P)
             I_stats.append(I)
+            if general_e % config.cl_train.testing_frequency == 0:
+                "testing.."
+                testing_stats = testing(env, model, rw_weights, logger, n_scenarios=config.cl_train.n_scenarios_testing)
+                test_info_finals_state.extend([testing_stats[i]["info_finals_state"] for i in range(len(testing_stats))])
+                test_agent_extra_info.extend([testing_stats[i]["agent_extra_info"] for i in range(len(testing_stats))])
+                test_exo_agents_extra_info.extend([testing_stats[i]["exo_agents_extra_info"] for i in range(len(testing_stats))])
+                test_rewards.extend([testing_stats[i]["reward"] for i in range(len(testing_stats))])
 
     except KeyboardInterrupt:
         pass
@@ -490,6 +542,107 @@ def train(env, model, rw_weights, logger, episode, task, i):
         }  
     
     return episode_reward, stats
+
+# random testing
+def testing(env, model, rw_weights, logger, n_scenarios=1):
+    
+    stats_list = []
+    for i in range(n_scenarios):
+        n_exo_agents = random.randint(0, 6) 
+        task = get_tasks("random", n_exo_agents)[0]
+        
+        exo_vehs_ipos = task["exo_vehs_ipos"]
+        exo_vehs_epos = task["exo_vehs_epos"]
+        peds_ipos = task["peds_ipos"]
+        exo_driving = task["exo_driving"]
+        exo_wps = task["exo_wps"]
+        
+        print(f"testing escenario {i} || task: {task}")
+        logger.info(f"testing escenario {i} || task: {task}")
+        
+        state, terminal_state, episode_reward = (
+            env.reset(exo_vehs_ipos=exo_vehs_ipos,
+                      exo_vehs_epos=exo_vehs_epos,
+                      peds_ipos=peds_ipos,
+                      exo_driving=exo_driving,
+                      exo_wps=exo_wps),
+            False,
+            [],
+        )
+        terminal_state_info = ""
+        states_deque = deque(maxlen=config.train.rnn_nsteps)
+        next_states_deque = deque(maxlen=config.train.rnn_nsteps)
+        agent_stats = env.get_agent_extra_info()
+        exo_agents_stats = env.get_exo_agent_extra_info()
+        while not terminal_state:
+            for step in range(config.train.steps):
+                if env.controller.parse_events():
+                    return
+    
+                if config.train.temporal_mech:
+                    if step == 0:
+                        # begin with a deque of initial states
+                        states_deque.extend([state] * states_deque.maxlen)
+                    else:
+                        states_deque.append(state)
+                    state = np.array(states_deque)  # (S, Z_dim+Compl)
+    
+                action = model.predict(state, step, mode="testing")  # return a np. action
+                next_state, reward, terminal_state, info = env.step(action)
+    
+                if config.train.temporal_mech:
+                    if step == 0:
+                        # begin with a deque of initial states
+                        next_states_deque.extend([next_state] * next_states_deque.maxlen)
+                    else:
+                        next_states_deque.append(next_state)
+                    next_state_ = np.array(next_states_deque)  # (S, Z_dim+Compl)
+    
+                if info["closed"] == True:
+                    exit(0)
+    
+                weighted_rw = weighted_rw_fn(reward, rw_weights)
+                if not config.reward_fn.normalize:
+                    reward = weighted_rw  # rw is only a scalar value
+    
+                episode_reward.append(reward)
+                state = next_state
+                agent_stats = np.vstack((agent_stats, env.get_agent_extra_info()))
+                if len(exo_vehs_ipos) > 0:
+                    exo_agents_stats = cat_extra_exo_agents_info(exo_agents_stats,
+                                                                 env.get_exo_agent_extra_info())
+    
+                if config.vis.render:
+                    env.render()
+    
+                if terminal_state or step == config.train.steps - 1:
+                    episode_reward = sum(episode_reward)
+                    terminal_state = True
+                    if len(env.extra_info) > 0:
+                        terminal_state_info = env.extra_info[-1]
+                        print(
+                            f"testing steps: {step} || reward: {np.round(episode_reward, decimals=2)} || terminal reason: {env.extra_info[-1]}"
+                        )  # print the most recent terminal reason
+                        logger.info(
+                            f"testing steps: {step} || reward: {np.round(episode_reward, decimals=2)}, terminal reason: {env.extra_info[-1]}"
+                        )
+                    else:
+                        terminal_state_info = "Time Out"
+                        print(
+                            f"testing steps: {step} || reward: {np.round(episode_reward, decimals=2)} || terminal reason: TimeOut"
+                        )
+                        logger.info(
+                            f"testing steps: {step} || reward: {np.round(episode_reward, decimals=2)}, terminal reason: TimeOut"
+                        )
+                    break
+        stats = {
+                "agent_extra_info": agent_stats,
+                "exo_agents_extra_info": exo_agents_stats,
+                "info_finals_state": (step, terminal_state_info),
+                "reward": episode_reward
+            }
+        stats_list.append(stats)
+    return stats_list
 
 
 def main():

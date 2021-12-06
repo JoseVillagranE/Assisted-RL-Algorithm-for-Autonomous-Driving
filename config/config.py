@@ -181,13 +181,14 @@ config.cl_train.episodes = 20
 config.cl_train.general_tr_episodes = 200
 config.cl_train.V_limit = 300
 config.cl_train.n_exo_agents = 0
-config.cl_train.x_limits = [98, 219]
+config.cl_train.x_limits = [105, 219]
 config.cl_train.y_limits = [58, 63]
-config.cl_train.yaw_limits = [175, 185]
+config.cl_train.yaw_limits = [0, 359]
 config.cl_train.direction = 0
 config.cl_train.n_sample_points = 5 
 config.cl_batch_idxs_sampling = "random"
-
+config.cl_train.testing_frequency = 5
+config.cl_train.n_scenarios_testing = 5
 
 config.cl_train.exo_agents = edict()
 config.cl_train.exo_agents.vehicle = edict()

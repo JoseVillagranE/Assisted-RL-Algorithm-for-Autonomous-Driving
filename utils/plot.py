@@ -70,7 +70,7 @@ def plot_info_finals_state(data, x_axis, value, only_goal=True, is_test=False, c
     if xscale:
         plt.ticklabel_format(style='sci', axis='x', scilimits=(0,0))
 
-def plot_extra_info(data, exo_data, finals_states=None):
+def plot_extra_info(data, exo_data, suptitle, finals_states=None):
 
     fig, axes = plt.subplots(1, 2, figsize=(16, 6))
     axes = axes.flatten()
@@ -81,7 +81,7 @@ def plot_extra_info(data, exo_data, finals_states=None):
         for exo_pos, exo_vol in zip(exo_veh_pos, exo_veh_extent):
             x = exo_pos[0, 0] - exo_vol[0]
             y = exo_pos[0, 1] - exo_vol[1]
-            rect = Rectangle((x, y), exo_vol[0]*2, exo_vol[1]*2, linewidth=2, edgecolor="r", facecolor='blue')
+            rect = Rectangle((x, y), exo_vol[0]*2, exo_vol[1]*2, linewidth=2, edgecolor="r", facecolor='purple')
             axes[0].add_patch(rect)
         break
 
@@ -108,13 +108,15 @@ def plot_extra_info(data, exo_data, finals_states=None):
             axes[0].plot(d[:, 0], d[:, 1], color=color) # pos
             axes[1].plot(d[:, 3], color=color)
 
-    fig.suptitle("Estadisticas del agente a lo largo de los episodios", fontweight='bold')
+    fig.suptitle(suptitle, fontweight='bold')
     axes[0].set_title("Posición")
     axes[1].set_title("Velocidad")
     axes[0].set_xlim([100, 220])
     axes[0].set_ylim([40, 80])
+    axes[0].set_xlabel("X")
     axes[1].set_xlabel("Step")
-    axes[1].set_ylabel("Speed[Km/Hr]")
+    axes[0].set_ylabel("Y")
+    axes[1].set_ylabel("Speed[km/h]")
     axes[0].legend(loc='upper right', handlelength=1, borderpad=0.2, labelspacing=0.2)
     leg = axes[0].get_legend()
     leg.legendHandles[0].set_color('green')
@@ -147,7 +149,7 @@ if __name__ == "__main__":
     vision = "VAE"
     learn_alg = "TD3CoL"
     alg = os.path.join(vision, learn_alg)
-    date = "2021-10-30-23-18"
+    date = "2021-10-31-13-56"
     path = os.path.join(prefix_path, alg, date)
 
     info_final_states = np.load(os.path.join(path, "info_finals_state.npy"))
@@ -171,11 +173,13 @@ if __name__ == "__main__":
 
     data = np.load(os.path.join(path, "train_agent_extra_info.npy"), allow_pickle=True)
     exo_data = np.load(os.path.join(path, "train_exo_agents_extra_info.npy"), allow_pickle=True)
-    plot_extra_info(data, exo_data, info_final_states)
+    suptitle = "Estadisticas del agente a lo largo de los episodios de entrenamiento"
+    plot_extra_info(data, exo_data, suptitle, info_final_states)
 
     data = np.load(os.path.join(path, "test_agent_extra_info.npy"), allow_pickle=True)
     exo_data = np.load(os.path.join(path, "test_exo_agents_extra_info.npy"), allow_pickle=True)
-    plot_extra_info(data, exo_data, test_info_final_states)
+    suptitle = "Estadisticas del agente a lo largo de los episodios de prueba"
+    plot_extra_info(data, exo_data, suptitle, test_info_final_states)
 
     losses = np.load(os.path.join(path, "train_historical_losses.npy"), allow_pickle=True)
     plot_losses(losses, learn_alg)
