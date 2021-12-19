@@ -51,9 +51,9 @@ config.simulation.obs_res = (640, 480)
 config.simulation.fps = 10
 config.simulation.host = "localhost"
 config.simulation.port = 2000  # Default of world-port CARLA
-config.simulation.x_limits = [98, 219]
-config.simulation.y_limits = [53, 65]
-config.simulation.yaw_limits = [0, 359]
+config.simulation.x_limits = [105, 219]
+config.simulation.y_limits = [58, 63]
+config.simulation.yaw_limits = [175, 185]
 
 
 # Train Defaults
@@ -84,9 +84,10 @@ config.train.episode_loading = 0
 config.train.start_to_update = 0
 config.train.optimization_steps = 1
 config.train.action_space = 2  # [steer, throttle]
+config.train.ramdomly_training = False
 config.train.measurements_to_include = set(
-    ["steer"]
-    + ["throttle"]
+    # ["steer"]
+    # + ["throttle"]
     # + ["speed"]
     # ["orientation"]
 )

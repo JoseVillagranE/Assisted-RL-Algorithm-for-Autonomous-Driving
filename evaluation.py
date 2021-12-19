@@ -17,7 +17,7 @@ from rewards_fns import reward_functions, weighted_rw_fn
 from utils.preprocess import create_encode_state_fn
 from utils.checkpointing import save_checkpoint, load_checkpoint
 from utils.SamplePoints import sample_points
-from utils.utils import distance_bet_points, weighted_random
+from utils.utils import check_collision, weighted_random
 
 def signal_handler(sig, frame):
     print('You pressed Ctrl+C!')
@@ -53,15 +53,6 @@ def get_weight_path(model, eval_type, n_exo_vehs, exo_driving):
     weights_path = os.path.join(prefix, postfix)
     return weights_path
     
-def check_collision(exo_veh_x, exo_veh_y, exo_vehs_ipos, tol=10):
-    A = np.array([exo_veh_x, exo_veh_y])
-    for exo_pos in exo_vehs_ipos:
-        if distance_bet_points(A, np.array(exo_pos[:2])) < tol:
-            return True
-    return False
-    
-
-
 def multi_evaluation():
     
     if isinstance(config.seed, int):

@@ -187,7 +187,6 @@ class TD3CoL:
             rm_prop = 1 - config.train.trauma_memory.prop    
         
         self.a_batch_size = int((config.train.batch_size * self.agent_prop*rm_prop) // self.q_of_tasks)
-        print(self.a_batch_size)
         self.e_batch_size = int(config.train.batch_size // self.q_of_tasks)
         for i in range(self.q_of_tasks):
             if self.type_RM == "sequential":
@@ -433,15 +432,14 @@ class TD3CoL:
             nn.utils.clip_grad_norm_(self.actor.parameters(), self.actor_grad_clip)
             self.actor_optimizer.step()
             self.soft_update(self.actor, self.actor_target)
+            self.soft_update(self.critic_1, self.critic_target_1)
+            self.soft_update(self.critic_2, self.critic_target_2)
         
 
         if not is_pretraining and self.enable_scheduler_lr:
             if self.actor_scheduler.get_last_lr()[0] > self.min_lr:
                 self.actor_scheduler.step()
                 self.critic_scheduler.step()
-
-        self.soft_update(self.critic_1, self.critic_target_1)
-        self.soft_update(self.critic_2, self.critic_target_2)
 
         if self.q_of_tasks == 1:
             self.replay_memory_e.update_priorities(
@@ -456,8 +454,6 @@ class TD3CoL:
             for i in set(indexs_e):
                 ith_idx = np.where(np.array(indexs_e) == i)
                 js = np.array(inter_idxs_e)[ith_idx]
-                print(ith_idx)
-                print(js)
                 self.B_e[i].update_priorities(js, TD[ith_idx].abs().detach().cpu().numpy())
             if not is_pretraining:    
                 for i in set(indexs_a):

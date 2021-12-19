@@ -6,41 +6,41 @@ simulation:
     fps: 10
     
 cl_train:    
-    q_of_tasks: 2
+    q_of_tasks: 6
     exo_sample: "manual"
     value_function_L: 10
-    alpha: 0.2
-    episodes: 10
-    general_tr_episodes: 200
+    alpha: 0.1 # value function ponderation
+    episodes: 5
+    general_tr_episodes: 100
     testing_frequency: 1
     n_scenarios_testing: 5
     exo_agents:
         vehicle:
-            exo_driving: [[], [False]] #[[], [False], [False, False], [False, False, False]]
+            exo_driving: [[], [False], [False, False], [False, False, False], [True, False, False], [True, True, False]]
             initial_pos: 
-                x: [[], [149]] #[[], [149], [149, 170], [149, 170, 190]] # 1st is empty road
-                y: [[], [63]] #[[], [63], [63, 58], [63, 58, 63]]
-                yaw: [[], [180]] #[[], [180], [180, 180], [180, 180, 180]]
+                x: [[], [149], [149, 170], [149, 170, 190], [149, 170, 190], [149, 170, 190]] # 1st is empty road
+                y: [[], [63], [63, 58], [63, 58, 63], [63, 58, 63], [63, 58, 63]]
+                yaw: [[], [180], [180, 180], [180, 180, 180], [180, 180, 180], [180, 180, 180]]
             end_pos:
-                x: [[], [149]] # [[], [], [], []]
-                y: [[], [63]] #[[], [], [], []]
-                yaw: [[], [180]] #[[], [], [], []]
+                x: [[], [149], [149, 170], [149, 170, 190], [95, 95, 95], [95, 95, 95]] # 1st is empty road
+                y: [[], [63], [63, 58], [63, 58, 63], [63, 58, 63], [63, 58, 63]]
+                yaw: [[], [180], [180, 180], [180, 180, 180], [180, 180, 180], [180, 180, 180]]
         peds:
             initial_pos:
-                x: [[], [], [], []] # 1st is empty road
-                y: [[], [], [], []]
-                yaw: [[], [], [], []]
+                x: [[], [], [], [], [], []] # 1st is empty road
+                y: [[], [], [], [], [], []]
+                yaw: [[], [], [], [], [], []]
             end_pos:
-                x: [[], [], [], []]
-                y: [[], [], [], []]
-                yaw: [[], [], [], []]
+                x: [[], [], [], [], [], []]
+                y: [[], [], [], [], [], []]
+                yaw: [[], [], [], [], [], []]
 
 
 train:
     policy_freq: 2
     checkpoint_every: 100000
     episodes: 1000
-    device: "cuda:0"
+    device: "cpu"
     actor_agent_lr: 0.0001
     critic_agent_lr: 0.001
     actor_expert_lr: 0.001
@@ -51,30 +51,30 @@ train:
     temporal_mech: False
     rnn_nsteps: 1
     hidden_cat: False
-    start_to_update: 5
-    optimization_steps: 1
-    lambdas: [0.1, 0.9, 1]
+    start_to_update: 1
+    optimization_steps: 1 # no sirve aca
+    lambdas: [0.5, 0.5, 1]
     expert_prop: 0.25
     agent_prop: 0.75
     ou_noise_mu: 0.0
     ou_noise_theta: 0.0
     ou_noise_max_sigma: 0.0
     ou_noise_min_sigma: 0.005
-    ou_noise_decay_period: 500 # episode
+    ou_noise_decay_period: 200 # episode
     pretraining_steps: 10000
     tau: 0.0001
     gamma: 0.99
     wp_encode: False
     wp_encoder_size: 64
     rm_filename: "" # folder's name for load many experiences tuples
-    scheduler_step_size: 350
-    max_memory_size: 20000
+    scheduler_step_size: 200
+    max_memory_size: 5000
     scheduler_min_lr : 0.0000001 # 10-7
-    scheduler_gamma: 0.01
+    scheduler_gamma: 0.1
     load_rm_choice: "random"
     load_rm_name_c: ["3", "g"]
     load_rm_num_rolls: 80
-    load_rm_idxs: [0,1] # compl states [steer, thr, speed, ..]
+    load_rm_idxs: [0, 1] # compl states [steer, thr, speed, ..]
     enable_scheduler_lr: True
     alpha: 1
     beta: 1

@@ -5,6 +5,7 @@ import glob
 import sys
 import pathlib
 import copy
+import random
 from config.config import config
 
 try:
@@ -243,7 +244,7 @@ class CarlaEnv(gym.Env):
                 self.exo_vehs_initial_transforms.append(exo_veh_initial_transform)
                 self.exo_vehs.append(self.exo_vehicle)
                 
-                if exo_driving[i]:
+                if ed:
                     self.exo_vehs_controller.append(PID_assign(
                             self.exo_vehicle,
                             config.exo_agents.vehicle.PID.lateral_Kp,
@@ -416,33 +417,30 @@ class CarlaEnv(gym.Env):
         self.world.tick()
         self.agent.set_simulate_physics(True)
         self.exo_driving = exo_driving
+        del self.exo_vehs_controller
         self.exo_vehs_controller = []
 
         diff = len(self.exo_vehs_initial_transforms) - len(exo_vehs_ipos)
         if diff > 0:
             # delete some exo-vehicles
-            for i in range(diff):
+            for i in range(diff-1, -1, -1):
                 # exo_veh.disable_autopilot_mode()
                 print(f"destroy vehicle: {i}")
-                self.exo_vehs[i].destroy()
-            del self.exo_vehs[:diff]
-            del self.exo_vehs_initial_transforms[:diff]
+                exo_veh = self.exo_vehs.pop(i)
+                self.exo_vehs_initial_transforms.pop(i)
+                exo_veh.destroy()
+            # del self.exo_vehs[:diff]
+            # del self.exo_vehs_initial_transforms[:diff]
             # del self.exo_driving[:diff]
             # del self.exo_vehs_controller[:diff]
         elif diff < 0:
             # add exo_veh
             for i in range(abs(diff)):
-                location = carla.Location(
-                    x=exo_vehs_ipos[i][0], y=exo_vehs_ipos[i][1], z=1
-                )
-                rotation = carla.Rotation(yaw=exo_vehs_ipos[i][2])
-
-                transform = carla.Transform(location, rotation)
-                
                 end_location = carla.Location(
-                    x=exo_vehs_epos[i][0], y=exo_vehs_epos[i][1], z=1
+                    x=exo_vehs_epos[-1-i][0], y=exo_vehs_epos[-1-i][1], z=1
                 )
                 
+                transform = self.world.get_map().get_spawn_points()[i]
                 exo_veh = Vehicle(
                     self.world,
                     transform=transform,
@@ -478,7 +476,6 @@ class CarlaEnv(gym.Env):
             else:
                 self.exo_vehs_controller.append(False)
             
-
             # set wps if it's neccesary
             if len(exo_wps[i]) > 0:
                 exo_veh.set_wps(exo_wps[i])

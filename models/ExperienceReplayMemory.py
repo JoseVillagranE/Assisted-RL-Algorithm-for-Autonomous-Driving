@@ -341,9 +341,7 @@ class PrioritizedDequeMemory(ExperienceReplayMemory):
 
     def update_priorities(self, idxs, priorities):
         
-        print(f"memoey_size: {self.get_memory_size()}")
         for idx, priority in zip(idxs, priorities):
-            print(idx)
             self.priority[idx] = priority
             
     def load_rm_folder(

@@ -19,7 +19,7 @@ from rewards_fns import reward_functions, weighted_rw_fn
 from utils.preprocess import create_encode_state_fn
 from utils.checkpointing import save_checkpoint, load_checkpoint
 from utils.SamplePoints import sample_points
-
+from utils.utils import check_collision
 
 def signal_handler(sig, frame):
     print("You pressed Ctrl+C!")
@@ -44,8 +44,30 @@ def cat_extra_exo_agents_info(old_info, new_info):
         info.append(np.vstack((old_exo_info, new_exo_info)))
     return info
 
-# TODO: With more than one steps you should manage next_latent state dimensions
+def get_random_positions():
+    # Sample Positions
+    n = random.randint(0, 3)
+    exo_vehs_ipos = []
+    xl = config.simulation.x_limits
+    yl = config.simulation.y_limits
+    yawl = config.simulation.yaw_limits
+    for i in range(n):
+        exo_veh_x = random.randint(*xl)
+        if random.random() < 0.75:
+            exo_veh_y = random.randint(yl[0] + round((yl[1]-yl[0])/2), yl[1])
+        else:
+            exo_veh_y = random.randint(*yl)
+        exo_veh_yaw = random.randint(*yawl)
+        if i > 0:
+            while check_collision(exo_veh_x, exo_veh_y, exo_vehs_ipos, tol=10):
+                exo_veh_x = random.randint(*xl)
+                exo_veh_y = random.randint(*yl)
+        ipos = [exo_veh_x, exo_veh_y, exo_veh_yaw]
+        exo_vehs_ipos.append(ipos)
+    exo_driving = [False]*len(exo_vehs_ipos)
+    return exo_vehs_ipos, exo_driving
 
+# TODO: With more than one steps you should manage next_latent state dimensions
 def train():
 
     if isinstance(config.seed, int):
@@ -176,18 +198,21 @@ def train():
         for episode in range(start_episode, config.train.episodes):
             
             exo_wps = []
-            for i, ed in enumerate(exo_driving):
-                ewp = []
-                if ed:
-                    n = config.exo_agents.vehicle.exo_driving_n
-                    direction = config.exo_agents.vehicle.exo_driving_direction
-                    start = exo_veh_ipos[i][:2]
-                    goal = exo_veh_epos[i][:2]
-                    x_limits = config.simulation.x_limits
-                    y_limits = config.simulation.y_limits
-                    ewp=sample_points(start, goal, x_limits, y_limits, direction, n)
-                exo_wps.append(ewp)
-            
+            if not config.train.ramdomly_training:
+                for i, ed in enumerate(exo_driving):
+                    ewp = []
+                    if ed:
+                        n = config.exo_agents.vehicle.exo_driving_n
+                        direction = config.exo_agents.vehicle.exo_driving_direction
+                        start = exo_veh_ipos[i][:2]
+                        goal = exo_veh_epos[i][:2]
+                        x_limits = config.simulation.x_limits
+                        y_limits = config.simulation.y_limits
+                        ewp=sample_points(start, goal, x_limits, y_limits, direction, n)
+                    exo_wps.append(ewp)
+            else:
+                exo_veh_ipos, exo_driving = get_random_positions()
+                exo_wps = [[] for i in range(len(exo_driving))]
             state, terminal_state, episode_reward = (   
                 env.reset(exo_vehs_ipos=exo_veh_ipos,
                           exo_vehs_epos=exo_veh_epos,
@@ -310,6 +335,23 @@ def train():
                 model.replay_memory.delete_memory()
 
             if episode % config.test.every == 0 and episode > 0:
+                
+                if not config.train.ramdomly_training:
+                    for i, ed in enumerate(exo_driving):
+                        ewp = []
+                        if ed:
+                            n = config.exo_agents.vehicle.exo_driving_n
+                            direction = config.exo_agents.vehicle.exo_driving_direction
+                            start = exo_veh_ipos[i][:2]
+                            goal = exo_veh_epos[i][:2]
+                            x_limits = config.simulation.x_limits
+                            y_limits = config.simulation.y_limits
+                            ewp=sample_points(start, goal, x_limits, y_limits, direction, n)
+                        exo_wps.append(ewp)
+                else:
+                    exo_veh_ipos, exo_driving = get_random_positions()
+                    exo_wps = [[] for i in range(len(exo_driving))]
+                
                 state, terminal_state, episode_reward_test = (
                     env.reset(exo_vehs_ipos=exo_veh_ipos,
                               exo_vehs_epos=exo_veh_epos,

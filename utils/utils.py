@@ -121,6 +121,13 @@ def weighted_random(limits, n_partitions, weights=None):
 def weights_sample(rb_list, threshold):
     return [1 if rb.get_memory_size() > threshold else 0 for rb in rb_list]
 
+def check_collision(exo_veh_x, exo_veh_y, exo_vehs_ipos, tol=10):
+    A = np.array([exo_veh_x, exo_veh_y])
+    for exo_pos in exo_vehs_ipos:
+        if distance_bet_points(A, np.array(exo_pos[:2])) < tol:
+            return True
+    return False
+
 if __name__ == "__main__":
 
     # list_wp = [carla.Location(x=100+i, y=20, z =1.0) for i in range(10)]

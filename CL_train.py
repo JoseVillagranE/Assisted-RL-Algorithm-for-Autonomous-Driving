@@ -183,6 +183,7 @@ def get_tasks(exo_agents_sample_method, n_exo_agents=0):
     
         
     for ev_ipos, ev_epos, ed, ew, p_ipos, p_epos in zip(exo_vehs_ipos, exo_vehs_epos, exo_driving, exo_wps, peds_ipos, peds_epos):
+        
         task = {
                 "n_vehs": len(ev_ipos),
                 "exo_vehs_ipos": ev_ipos,
@@ -193,6 +194,8 @@ def get_tasks(exo_agents_sample_method, n_exo_agents=0):
                 "peds_epos": p_epos         
             }
         tasks.append(task)
+        
+    print(f"number of tasks: {len(tasks)}")
     return tasks
 
 
@@ -353,11 +356,15 @@ def cl_train():
                 train_historical_losses.append(stats["losses"])
 
         print("General training..")
+        cl_episode = 0
         for general_e in range(config.cl_train.general_tr_episodes):
             V_stats.append(V)
             G = np.array([np.exp(-mean(V[i])) for i in range(len(tasks))])
             P = G / G.sum()
-            I = np.random.choice(len(tasks), p=P)
+            try:
+                I = np.random.choice(len(tasks), p=P)
+            except ValueError:
+                I = np.random.choice(len(tasks))
             for e in range(config.cl_train.episodes):
                 r, stats = train(env, model, rw_weights, logger, e, tasks[I], I)
                 V[I].append(
@@ -368,15 +375,17 @@ def cl_train():
                 agent_extra_info.append(stats["agent_extra_info"])
                 exo_agents_extra_info.append(stats["exo_agents_extra_info"])
                 train_historical_losses.append(stats["losses"])
+                cl_episode += 1
             P_stats.append(P)
             I_stats.append(I)
-            if general_e % config.cl_train.testing_frequency == 0:
-                "testing.."
-                testing_stats = testing(env, model, rw_weights, logger, n_scenarios=config.cl_train.n_scenarios_testing)
-                test_info_finals_state.extend([testing_stats[i]["info_finals_state"] for i in range(len(testing_stats))])
-                test_agent_extra_info.extend([testing_stats[i]["agent_extra_info"] for i in range(len(testing_stats))])
-                test_exo_agents_extra_info.extend([testing_stats[i]["exo_agents_extra_info"] for i in range(len(testing_stats))])
-                test_rewards.extend([testing_stats[i]["reward"] for i in range(len(testing_stats))])
+            print(f"general episode: {general_e} || total episodes: {cl_episode} || task: {I}")
+            # if general_e % config.cl_train.testing_frequency == 0:
+            #     print("testing..")
+            #     testing_stats = testing(env, model, rw_weights, logger, n_scenarios=config.cl_train.n_scenarios_testing)
+            #     test_info_finals_state.extend([testing_stats[i]["info_finals_state"] for i in range(len(testing_stats))])
+            #     test_agent_extra_info.extend([testing_stats[i]["agent_extra_info"] for i in range(len(testing_stats))])
+            #     test_exo_agents_extra_info.extend([testing_stats[i]["exo_agents_extra_info"] for i in range(len(testing_stats))])
+            #     test_rewards.extend([testing_stats[i]["reward"] for i in range(len(testing_stats))])
 
     except KeyboardInterrupt:
         pass

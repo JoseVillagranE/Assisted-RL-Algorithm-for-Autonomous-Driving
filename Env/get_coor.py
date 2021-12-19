@@ -151,7 +151,12 @@ def main():
         box = carla.BoundingBox(end_location, vector)
         rotation = carla.Rotation(pitch=0.0, yaw=0.0, roll=0.0) 
         world.debug.draw_box(box, rotation, thickness=0.5, life_time=240.0)
-
+        
+        for i in range(10):
+            world.debug.draw_string(world.get_map().get_spawn_points()[i].location, 'O', draw_shadow=False,
+                                color=carla.Color(r=255, g=0, b=0), life_time=120.0,
+                                persistent_lines=True)
+        
 
         # for w in waypoints:
         #     world.debug.draw_string(w.transform.location, 'O', draw_shadow=False,

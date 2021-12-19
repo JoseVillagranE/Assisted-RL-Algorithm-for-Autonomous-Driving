@@ -9,14 +9,14 @@ import pathlib
 import pandas as pd
 from scipy.interpolate import interp1d
 import copy
-plt.style.use("ggplot")
+# plt.style.use("ggplot")
 
 COLOR = {"DDPG": "red", "CoL": "green", "TD3CoL": "blue"}
 
 import matplotlib.legend as mlegend
 
 BASE_TRAINING_EPISODES = 6
-TRAINING_EPISODES = 10
+TRAINING_EPISODES = 5
 
 
 def get_cmap(n, name='Paired'):
@@ -25,11 +25,12 @@ def get_cmap(n, name='Paired'):
 def plot_cl_reward(rewards, gt_tasks_indexs):
 
     n_tasks = len(rewards)
+    print(f"n_tasks: {n_tasks}")
     tasks_indexes = [0]*n_tasks
     cmap = get_cmap(n_tasks)
 
     fig, ax = plt.subplots(figsize=(16, 6))
-    sns.set(style="darkgrid", font_scale=1.5)
+    # sns.set(style="darkgrid", font_scale=1.5)
     base_training_reward = np.array(rewards[0][:BASE_TRAINING_EPISODES])
     plot_data(base_training_reward,
             np.arange(BASE_TRAINING_EPISODES),
@@ -96,7 +97,7 @@ if __name__ == "__main__":
     vision = "VAE"
     learn_alg = "TD3CoL"
     alg = os.path.join("CL", vision, learn_alg)
-    date = "2021-12-04-23-57"
+    date = "2021-12-10-18-20"
     path = os.path.join(prefix_path, alg, date)
 
     info_final_states = np.load(os.path.join(path, "info_finals_state.npy"))
